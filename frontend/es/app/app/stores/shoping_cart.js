@@ -1,5 +1,12 @@
 import { defineStore } from 'pinia'
 
+/** ✅ Soporta respuestas tipo: { data: [coupon] } o coupon directo */
+function normalizeCoupon(c) {
+  if (!c) return null
+  if (Array.isArray(c.data)) return c.data[0] || null
+  return c
+}
+
 export const usecartStore = defineStore('salchi_supegwseasr_cart_web443', {
   persist: {
     key: 'salchi_surep34er_gsacaret_web4eddf43ssv',
@@ -9,18 +16,21 @@ export const usecartStore = defineStore('salchi_supegwseasr_cart_web443', {
       'menu',
       'address_details',
       'applied_coupon',
-      'coupon_ui',     // ✅ NUEVO: persiste switch + draft code
-      'order_notes'    // ✅ opcional: para que no pierdas notas al recargar
+      'coupon_ui',
+      'order_notes'
     ],
 
     afterRestore: (ctx) => {
-      // Asegurar estructura por si vienes de versiones viejas
+      // ✅ Asegurar estructura por si vienes de versiones viejas
       if (!ctx.store.coupon_ui) {
         ctx.store.coupon_ui = { enabled: false, draft_code: '' }
       }
 
-      // Recalcular descuentos si hay cupón y carrito
-      if (ctx.store.applied_coupon && ctx.store.cart.length > 0) {
+      // ✅ Normaliza cupón persistido si venía envuelto en {data:[...]}
+      ctx.store.applied_coupon = normalizeCoupon(ctx.store.applied_coupon)
+
+      // ✅ Recalcular descuentos si hay cupón y carrito
+      if (ctx.store.applied_coupon && Array.isArray(ctx.store.cart) && ctx.store.cart.length > 0) {
         ctx.store.applyCoupon(ctx.store.applied_coupon)
       }
     }
@@ -35,7 +45,7 @@ export const usecartStore = defineStore('salchi_supegwseasr_cart_web443', {
 
     applied_coupon: null,
 
-    // ✅ NUEVO: estado de UI del cupón (persistente)
+    // ✅ UI de cupón persistente (switch + draft)
     coupon_ui: {
       enabled: false,
       draft_code: ''
@@ -59,24 +69,16 @@ export const usecartStore = defineStore('salchi_supegwseasr_cart_web443', {
   getters: {
     totalItems(state) {
       if (!Array.isArray(state.cart) || state.cart.length === 0) return 0
-      return state.cart.reduce(
-        (acc, p) => acc + (Number(p.pedido_cantidad) || 0),
-        0,
-      )
+      return state.cart.reduce((acc, p) => acc + (Number(p.pedido_cantidad) || 0), 0)
     },
 
     cartTotal(state) {
       if (!Array.isArray(state.cart) || state.cart.length === 0) return 0
-      return state.cart.reduce(
-        (total, product) => total + this.calculateTotalProduct(product),
-        0,
-      )
+      return state.cart.reduce((total, product) => total + this.calculateTotalProduct(product), 0)
     },
 
     isProductInCart: (state) => (productId) => {
-      return state.cart.some(
-        (item) => item.pedido_productoid === productId,
-      )
+      return state.cart.some((item) => item.pedido_productoid === productId)
     },
 
     getProductTotal() {
@@ -84,14 +86,10 @@ export const usecartStore = defineStore('salchi_supegwseasr_cart_web443', {
         const productBasePrice = this.getProductPrice(product)
         let total = productBasePrice
 
-        if (
-          product.modificadorseleccionList &&
-          product.modificadorseleccionList.length > 0
-        ) {
+        if (product.modificadorseleccionList && product.modificadorseleccionList.length > 0) {
           product.modificadorseleccionList.forEach((ad) => {
             const adPrice = parseInt(ad.pedido_precio) || 0
-            const adQuantity =
-              parseInt(ad.modificadorseleccion_cantidad) || 1
+            const adQuantity = parseInt(ad.modificadorseleccion_cantidad) || 1
             total += adPrice * adQuantity
           })
         }
@@ -102,7 +100,6 @@ export const usecartStore = defineStore('salchi_supegwseasr_cart_web443', {
 
     cartTotalDiscount(state) {
       if (!Array.isArray(state.cart) || state.cart.length === 0) return 0
-
       return state.cart.reduce((acc, p) => {
         const qty = Number(p.pedido_cantidad) || 1
         const disc = Number(p.pedido_descuento) || 0
@@ -112,63 +109,71 @@ export const usecartStore = defineStore('salchi_supegwseasr_cart_web443', {
 
     cartSubtotal(state) {
       if (!Array.isArray(state.cart) || state.cart.length === 0) return 0
-      return state.cart.reduce(
-        (total, product) => total + this.calculateSubtotalProduct(product),
-        0,
-      )
+      return state.cart.reduce((total, product) => total + this.calculateSubtotalProduct(product), 0)
     },
   },
 
   actions: {
-    // ✅ NUEVO: setter “seguro” para UI de cupón (persistencia)
+    // ✅ Setter seguro (persistente)
     setCouponUi(patch) {
       if (!this.coupon_ui) this.coupon_ui = { enabled: false, draft_code: '' }
-      this.coupon_ui = {
-        ...this.coupon_ui,
-        ...patch
-      }
+      this.coupon_ui = { ...this.coupon_ui, ...patch }
     },
 
     // ===== LÓGICA DE CUPONES =====
     applyCoupon(coupon) {
+      coupon = normalizeCoupon(coupon)
+      if (!coupon) return
+
       this.applied_coupon = coupon
 
-      // Al aplicar cupón, mantenemos el switch ON y sincronizamos el draft
+      // ✅ Al aplicar cupón, switch ON y sincroniza draft_code
       this.setCouponUi({
         enabled: true,
         draft_code: coupon?.code || this.coupon_ui?.draft_code || ''
       })
 
-      if (!this.cart || !this.cart.length) return
+      if (!Array.isArray(this.cart) || this.cart.length === 0) return
 
-      // Porcentaje
-      if (coupon.percent) {
+      // 🔥 IMPORTANTÍSIMO: si amount es muy pequeño y lo divides entre muchas unidades,
+      // puede quedar 0 por unidad. Por eso añadimos un mínimo opcional de 1 si quieres.
+      // Si NO quieres mínimo, deja Math.floor tal cual (como está).
+      const clampNonNegativeInt = (n) => {
+        n = Number.isFinite(n) ? Math.floor(n) : 0
+        return n < 0 ? 0 : n
+      }
+
+      // Porcentaje (descuento por unidad basado en base_price)
+      if (coupon.percent != null) {
         const decimal = Number(coupon.percent) / 100
-        this.cart.forEach(item => {
+        this.cart.forEach((item) => {
           const basePrice = Number(item.pedido_base_price) || 0
-          item.pedido_descuento = Math.floor(basePrice * decimal)
+          item.pedido_descuento = clampNonNegativeInt(basePrice * decimal)
         })
       }
       // Monto fijo (dividido entre unidades)
-      else if (coupon.amount) {
+      else if (coupon.amount != null) {
         const totalUnits = this.totalItems
-        if (totalUnits === 0) return
-        const discountPerUnit = Math.floor(Number(coupon.amount) / totalUnits)
-        this.cart.forEach(item => {
+        if (!totalUnits) return
+
+        const discountPerUnit = clampNonNegativeInt(Number(coupon.amount) / totalUnits)
+
+        this.cart.forEach((item) => {
           item.pedido_descuento = discountPerUnit
         })
       }
+      // Si no trae percent ni amount, no hace nada (pero queda aplicado para UI)
     },
 
     removeCoupon() {
       this.applied_coupon = null
 
-      // Mantén la UI como estaba (enabled/draft_code) para que el usuario no “pierda” lo que escribió
-      // Si quieres limpiar draft al quitar cupón, descomenta:
-      // this.setCouponUi({ draft_code: '' })
+      // ✅ No toco enabled/draft para que el usuario no pierda lo escrito.
+      // Si quieres apagar el switch al quitar cupón, descomenta:
+      // this.setCouponUi({ enabled: false })
 
-      if (this.cart && this.cart.length > 0) {
-        this.cart.forEach(item => {
+      if (Array.isArray(this.cart) && this.cart.length > 0) {
+        this.cart.forEach((item) => {
           item.pedido_descuento = 0
         })
       }
@@ -240,17 +245,17 @@ export const usecartStore = defineStore('salchi_supegwseasr_cart_web443', {
 
     // ===== Identificadores / base price =====
     getProductId(product) {
-      if (product.lista_presentacion && product.lista_presentacion.length > 0) {
+      if (product?.lista_presentacion && product.lista_presentacion.length > 0) {
         return product.lista_presentacion[0].producto_id
-      } else if (product.producto_id) {
+      } else if (product?.producto_id) {
         return product.producto_id
       }
     },
 
     getProductPrice(product) {
-      if (product.productogeneral_precio) {
+      if (product?.productogeneral_precio) {
         return Number(product.productogeneral_precio) || 0
-      } else if (product.lista_presentacion && product.lista_presentacion.length > 0) {
+      } else if (product?.lista_presentacion && product.lista_presentacion.length > 0) {
         return Number(product.lista_presentacion[0].producto_precio) || 0
       }
       return 0
@@ -298,10 +303,7 @@ export const usecartStore = defineStore('salchi_supegwseasr_cart_web443', {
         productogeneral_urlimagen: product.productogeneral_urlimagen,
       }
 
-      const signature = this.buildSignature(
-        newProduct.pedido_productoid,
-        newProduct.modificadorseleccionList,
-      )
+      const signature = this.buildSignature(newProduct.pedido_productoid, newProduct.modificadorseleccionList)
       newProduct.signature = signature
 
       const existIndex = this.cart.findIndex((p) => p.signature === signature)
@@ -313,6 +315,7 @@ export const usecartStore = defineStore('salchi_supegwseasr_cart_web443', {
         this.cart.push(newProduct)
       }
 
+      // ✅ Si hay cupón aplicado, recalcula descuentos
       if (this.applied_coupon) {
         this.applyCoupon(this.applied_coupon)
       }
@@ -351,12 +354,8 @@ export const usecartStore = defineStore('salchi_supegwseasr_cart_web443', {
       const existIndex = this.cart.findIndex((p) => p.signature === signature)
       if (existIndex !== -1) {
         const existingProduct = this.cart[existIndex]
-        const aditional = existingProduct.modificadorseleccionList.find(
-          (a) => a === additionalItem,
-        )
-        if (aditional) {
-          aditional.modificadorseleccion_cantidad++
-        }
+        const aditional = existingProduct.modificadorseleccionList.find((a) => a === additionalItem)
+        if (aditional) aditional.modificadorseleccion_cantidad++
       }
     },
 
@@ -364,9 +363,7 @@ export const usecartStore = defineStore('salchi_supegwseasr_cart_web443', {
       const existIndex = this.cart.findIndex((p) => p.signature === signature)
       if (existIndex !== -1) {
         const existingProduct = this.cart[existIndex]
-        const aditionalIndex = existingProduct.modificadorseleccionList.findIndex(
-          (a) => a === additionalItem,
-        )
+        const aditionalIndex = existingProduct.modificadorseleccionList.findIndex((a) => a === additionalItem)
 
         if (aditionalIndex !== -1) {
           const target = existingProduct.modificadorseleccionList[aditionalIndex]

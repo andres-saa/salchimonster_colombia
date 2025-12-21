@@ -15,113 +15,96 @@
       </div>
     </Transition>
 
-    <!-- ================== DIALOG GOOGLE (PrimeVue) ================== -->
-    <Dialog
-      v-model:visible="see_sites"
-      modal
-      :closable="false"
-      :dismissableMask="true"
-      :style="{ width: '32rem', maxWidth: '95vw' }"
-      @hide="closeModal"
-      class="pv-google-dialog"
-    >
-      <template #header>
-        <div class="modal-header">
-          <h3 class="modal-title">{{ t('site_selector') }}</h3>
-          <Button class="btn-icon-close" text rounded @click="closeModal">
-            <Icon name="mdi:close" size="20" />
-          </Button>
-        </div>
-      </template>
+    <!-- ================== MODAL DIRECCIÓN (NATIVO) ================== -->
+    <Transition name="modal-fade">
+      <div v-if="see_sites" class="modal-backdrop" @click.self="closeModal">
+        <div class="modal-container">
+          <header class="modal-header">
+            <h3>{{ t('site_selector') }}</h3>
+            <button class="btn-icon-close" @click="closeModal">
+              <Icon name="mdi:close" size="20" />
+            </button>
+          </header>
 
-      <div class="modal-body">
-        <div class="search-box" :class="{ 'is-focused': !!addressQuery }">
-          <Icon name="mdi:magnify" class="search-icon" />
-
-          <InputText
-            ref="addressInputRef"
-            v-model="addressQuery"
-            :placeholder="t('address_placeholder')"
-            autocomplete="off"
-            class="search-input"
-            @input="onSearchInput"
-          />
-
-          <Button v-if="addressQuery" class="btn-clear" text rounded @click="clearSearch">
-            <Icon name="mdi:close-circle" />
-          </Button>
-        </div>
-
-        <ul
-          v-if="showAddressSuggestions && dir_options.length > 0 && !tempSiteData?.site_id"
-          class="suggestions-list"
-        >
-          <li v-for="item in dir_options" :key="item.place_id" @click="onAddressSelect(item)">
-            <div class="suggestion-icon"><Icon name="mdi:map-marker-outline" /></div>
-            <div class="suggestion-content">
-              <span class="main">{{ item.structured_formatting?.main_text || item.description }}</span>
-              <span class="sub">{{ item.structured_formatting?.secondary_text }}</span>
+          <div class="modal-body">
+            <div class="search-box" :class="{ 'is-focused': !!addressQuery }">
+              <Icon name="mdi:magnify" class="search-icon" />
+              <input
+                type="text"
+                v-model="addressQuery"
+                :placeholder="t('address_placeholder')"
+                @input="onSearchInput"
+                autocomplete="off"
+                ref="addressInputRef"
+              />
+              <button v-if="addressQuery" @click="clearSearch" class="btn-clear">
+                <Icon name="mdi:close-circle" />
+              </button>
             </div>
-          </li>
-        </ul>
 
-        <div v-if="isValidating" class="loading-state">
-          <ProgressSpinner style="width: 32px; height: 32px" />
-          <span>Verificando cobertura...</span>
-        </div>
+            <ul
+              v-if="showAddressSuggestions && dir_options.length > 0 && !tempSiteData?.site_id"
+              class="suggestions-list"
+            >
+              <li v-for="item in dir_options" :key="item.place_id" @click="onAddressSelect(item)">
+                <div class="suggestion-icon"><Icon name="mdi:map-marker-outline" /></div>
+                <div class="suggestion-content">
+                  <span class="main">{{ item.structured_formatting?.main_text || item.description }}</span>
+                  <span class="sub">{{ item.structured_formatting?.secondary_text }}</span>
+                </div>
+              </li>
+            </ul>
 
-        <div
-          v-if="tempSiteData?.status === 'checked' && !isValidating"
-          class="result-card"
-          :class="tempSiteData.in_coverage ? 'is-success' : 'is-error'"
-        >
-          <div class="result-header">
-            <div class="status-icon">
-              <Icon :name="tempSiteData.in_coverage ? 'mdi:check-bold' : 'mdi:map-marker-off'" />
+            <div v-if="isValidating" class="loading-state">
+              <Icon name="svg-spinners:90-ring-with-bg" size="32" />
+              <span>Verificando cobertura...</span>
             </div>
-            <div class="status-text">
-              <h4>{{ tempSiteData.in_coverage ? t('in_coverage') : t('not_in_coverage') }}</h4>
-              <p>{{ tempSiteData.formatted_address }}</p>
-            </div>
-          </div>
 
-          <div v-if="tempSiteData.in_coverage" class="result-details">
-            <div class="detail-row">
-              <span>{{ t('delivery_price') }}</span>
-              <strong>{{ formatCOP(tempSiteData.delivery_cost_cop) }}</strong>
-            </div>
-            <div class="detail-row">
-              <span>{{ t('distance') }}</span>
-              <strong>{{ tempSiteData.distance_miles }} {{ t('km') }}</strong>
-            </div>
-            <div class="detail-row full">
-              <span>{{ t('ships_from_site') }}</span>
-              <strong>{{ tempSiteData.nearest?.site?.site_name }}</strong>
+            <div
+              v-if="tempSiteData?.status === 'checked' && !isValidating"
+              class="result-card"
+              :class="tempSiteData.in_coverage ? 'is-success' : 'is-error'"
+            >
+              <div class="result-header">
+                <div class="status-icon">
+                  <Icon :name="tempSiteData.in_coverage ? 'mdi:check-bold' : 'mdi:map-marker-off'" />
+                </div>
+                <div class="status-text">
+                  <h4>{{ tempSiteData.in_coverage ? t('in_coverage') : t('not_in_coverage') }}</h4>
+                  <p>{{ tempSiteData.formatted_address }}</p>
+                </div>
+              </div>
+
+              <div v-if="tempSiteData.in_coverage" class="result-details">
+                <div class="detail-row">
+                  <span>{{ t('delivery_price') }}</span>
+                  <strong>{{ formatCOP(tempSiteData.delivery_cost_cop) }}</strong>
+                </div>
+                <div class="detail-row">
+                  <span>{{ t('distance') }}</span>
+                  <strong>{{ tempSiteData.distance_miles }} {{ t('km') }}</strong>
+                </div>
+                <div class="detail-row full">
+                  <span>{{ t('ships_from_site') }}</span>
+                  <strong>{{ tempSiteData.nearest?.site?.site_name }}</strong>
+                </div>
+              </div>
+
+              <div v-else class="error-message">
+                <p>{{ lang === 'en' ? tempSiteData.error?.message_en : tempSiteData.error?.message_es }}</p>
+              </div>
             </div>
           </div>
 
-          <div v-else class="error-message">
-            <p>{{ lang === 'en' ? tempSiteData.error?.message_en : tempSiteData.error?.message_es }}</p>
-          </div>
+          <footer class="modal-footer">
+            <button class="btn btn-secondary" @click="closeModal">{{ t('cancel') }}</button>
+            <button class="btn btn-primary" @click="confirmSelection" :disabled="!tempSiteData?.in_coverage || isRedirecting">
+              {{ t('save') }}
+            </button>
+          </footer>
         </div>
       </div>
-
-      <template #footer>
-        <div class="modal-footer">
-          <Button class="btn btn-secondary" outlined @click="closeModal">
-            {{ t('cancel') }}
-          </Button>
-
-          <Button
-            class="btn btn-primary"
-            @click="confirmSelection"
-            :disabled="!tempSiteData?.in_coverage || isRedirecting"
-          >
-            {{ t('save') }}
-          </Button>
-        </div>
-      </template>
-    </Dialog>
+    </Transition>
 
     <!-- ================== PAGE ================== -->
     <div class="checkout-layout">
@@ -147,9 +130,7 @@
                   v-model="orderTypeIdStr"
                   class="hidden-radio"
                 />
-                <span class="tab-label">
-                  {{ opt.name }}
-                </span>
+                <span class="tab-label">{{ opt.name }}</span>
               </label>
             </div>
           </div>
@@ -164,7 +145,7 @@
             <div class="form-row">
               <div class="form-group full">
                 <label>{{ t('name') }}</label>
-                <InputText class="input-modern" v-model="user.user.name" :placeholder="t('name')" />
+                <InputText type="text" class="input-modern" v-model="user.user.name" :placeholder="t('name')" />
               </div>
             </div>
 
@@ -173,31 +154,29 @@
                 <label>{{ t('phone') }}</label>
 
                 <div class="phone-control">
-                  <div class="country-select">
-                    <Select
-                      v-model="user.user.phone_code"
-                      :options="countries"
-                      optionLabel="name"
-                      :placeholder="lang === 'en' ? '+1' : '+57'"
-                      filter
-                      :filterPlaceholder="t('search_country_or_code')"
-                      class="pv-select pv-select-country"
-                    >
-                      <template #value="{ value, placeholder }">
-                        <div class="pv-country-value" style="display:flex; gap:.35rem; align-items:center;">
-                          <img v-if="value?.flag" :src="value.flag" alt="flag" class="flag-mini" />
-                          <span class="pv-country-dial">{{ value?.dialCode || placeholder }}</span>
-                        </div>
-                      </template>
+                  <div class="country-select" v-click-outside="() => (showCountryDropdown = false)">
+                    <button type="button" class="country-trigger" @click="toggleCountryDropdown">
+                      <img v-if="user.user.phone_code?.flag" :src="user.user.phone_code.flag" alt="flag" />
+                      <span>{{ user.user.phone_code?.dialCode || '+57' }}</span>
+                      <Icon name="mdi:chevron-down" size="14" />
+                    </button>
 
-                      <template #option="{ option }">
-                        <div class="pv-country-option" style="display:flex; gap:.35rem; align-items:center;">
-                          <img :src="option.flag" class="flag-mini" alt="flag" />
-                          <span class="pv-country-name">{{ option.name }}</span>
-                          <small class="pv-country-code"> ({{ option.dialCode }})</small>
-                        </div>
-                      </template>
-                    </Select>
+                    <div v-if="showCountryDropdown" class="country-dropdown">
+                      <InputText
+                        type="text"
+                        class="search-mini"
+                        v-model="countryQuery"
+                        :placeholder="t('search_country_or_code')"
+                        ref="countryInputRef"
+                        @input="onCountryInput"
+                      />
+                      <ul>
+                        <li v-for="c in countrySuggestions" :key="c.code" @click="selectCountry(c)">
+                          <img :src="c.flag" class="flag-mini" />
+                          {{ c.name }} <small>({{ c.dialCode }})</small>
+                        </li>
+                      </ul>
+                    </div>
                   </div>
 
                   <InputText
@@ -222,7 +201,11 @@
           <!-- ================== DIRECCIÓN / PICKUP ================== -->
           <section class="card form-section">
             <h2 class="section-title">
-              {{ [2, 6].includes(user.user.order_type?.id) ? (user.user.order_type?.id === 6 ? 'En el Local' : t('site_recoger')) : t('address') }}
+              {{
+                [2, 6].includes(user.user.order_type?.id)
+                  ? (user.user.order_type?.id === 6 ? 'En el Local' : t('site_recoger'))
+                  : t('address')
+              }}
             </h2>
 
             <!-- DELIVERY -->
@@ -276,7 +259,7 @@
                 class="form-group mt-3"
               >
                 <label>{{ t('vehicle_plate') }}</label>
-                <InputText class="input-modern" v-model="user.user.placa" placeholder="ABC-123" />
+                <input type="text" class="input-modern" v-model="user.user.placa" placeholder="ABC-123" />
               </div>
             </div>
           </section>
@@ -285,98 +268,90 @@
           <section class="card form-section">
             <h2 class="section-title">Pago & Detalles</h2>
 
-            <!-- ================== CUPONES (FIX) ================== -->
+            <!-- ✅ CUPONES (NO se valida por cada caracter; SOLO con "Aplicar") -->
             <div class="coupon-wrapper">
-              <div class="coupon-toggle" @click="toggleCouponBox()">
+              <div class="coupon-toggle" @click="toggleCouponUi">
                 <div class="coupon-left">
                   <Icon name="mdi:ticket-percent-outline" size="20" />
                   <span>{{ t('code') }}</span>
                 </div>
-
-                <!-- ✅ Switch ya NO se traba -->
-                <div class="switch" :class="{ 'on': couponEnabled }">
+                <div class="switch" :class="{ 'on': have_discount }">
                   <div class="knob"></div>
                 </div>
               </div>
 
-              <div v-if="couponEnabled" class="coupon-content">
+              <div v-if="have_discount" class="coupon-content">
                 <div class="coupon-input-row">
-                  <InputText
-                    v-model="couponDraft"
+                  <input
+                    type="text"
+                    v-model="temp_discount"
                     :placeholder="t('code_placeholder')"
-                    :disabled="couponIsApplied"
-                    class="coupon-input"
-                    @keyup.enter="onApplyCoupon"
+                    :disabled="temp_code?.status === 'active'"
                   />
 
-                  <Button
-                    v-if="couponIsApplied"
+                  <button
+                    v-if="temp_code?.status === 'active'"
                     class="btn-coupon remove"
-                    @click="onRemoveCoupon"
-                    severity="danger"
-                    outlined
+                    @click="clearCoupon"
+                    type="button"
                   >
                     <Icon name="mdi:trash-can-outline" />
-                  </Button>
+                  </button>
 
-                  <Button
+                  <button
                     v-else
                     class="btn-coupon apply"
-                    @click="onApplyCoupon"
-                    :disabled="!couponDraftTrim || couponLoading"
+                    @click="validateDiscount(temp_discount, { silent: false })"
+                    :disabled="!temp_discount || isApplyingCoupon"
+                    type="button"
                   >
-                    {{ couponLoading ? (lang === 'en' ? 'Checking...' : 'Verificando...') : (lang === 'en' ? 'Apply' : 'Aplicar') }}
-                  </Button>
+                    {{ isApplyingCoupon ? (lang === 'en' ? 'Applying...' : 'Aplicando...') : (lang === 'en' ? 'Apply' : 'Aplicar') }}
+                  </button>
                 </div>
 
-                <!-- ✅ Mensajes SOLO después de intentar aplicar -->
+                <!-- ✅ Feedback (incluye error backend {"detail":"..."}) -->
                 <div
-                  v-if="couponTried && couponFeedback?.status"
+                  v-if="temp_code?.status"
                   class="coupon-feedback"
-                  :class="couponFeedback.status === 'active' ? 'positive' : 'negative'"
+                  :class="temp_code.status === 'active' ? 'positive' : 'negative'"
                 >
-                  <Icon :name="couponFeedback.status === 'active' ? 'mdi:check-circle' : 'mdi:alert-circle'" size="18" />
+                  <Icon :name="temp_code.status === 'active' ? 'mdi:check-circle' : 'mdi:alert-circle'" size="18" />
+                  <div class="feedback-info">
+                    <template v-if="temp_code.status === 'active'">
+                      <span class="discount-title">{{ temp_code.discount_name }}</span>
+                      <span class="discount-amount" v-if="temp_code.amount">
+                        Ahorras: <strong>{{ formatCOP(temp_code.amount) }}</strong>
+                      </span>
+                      <span class="discount-amount" v-else-if="temp_code.percent">
+                        Ahorras: <strong>{{ temp_code.percent }}%</strong>
+                      </span>
+                    </template>
 
-                  <div v-if="couponFeedback.status === 'active'" class="feedback-info">
-                    <span class="discount-title">{{ couponFeedback.discount_name }}</span>
-                    <span class="discount-amount" v-if="couponFeedback.amount">
-                      Ahorras: <strong>{{ formatCOP(couponFeedback.amount) }}</strong>
-                    </span>
-                    <span class="discount-amount" v-else-if="couponFeedback.percent">
-                      Ahorras: <strong>{{ couponFeedback.percent }}%</strong>
-                    </span>
-                  </div>
-
-                  <div v-else class="feedback-info">
-                    <span>
-                      {{
-                        couponFeedback.status === 'invalid_site'
-                          ? (lang === 'en' ? 'Not valid for this location' : 'No válido en esta sede')
-                          : couponFeedback.status === 'invalid'
-                            ? (lang === 'en' ? 'Invalid code' : 'Código no válido')
-                            : (lang === 'en' ? 'Error validating coupon' : 'Error validando el cupón')
-                      }}
-                    </span>
+                    <template v-else>
+                      <span>
+                        {{
+                          temp_code.status === 'invalid_site'
+                            ? (lang === 'en' ? 'Not valid for this site' : 'No válido en esta sede')
+                            : (temp_code.detail || (lang === 'en' ? 'Invalid code' : 'Código no válido'))
+                        }}
+                      </span>
+                    </template>
                   </div>
                 </div>
               </div>
             </div>
 
-            <!-- ✅ PrimeVue Select método de pago -->
+            <!-- PAGO -->
             <div class="form-group" v-if="computedPaymentOptions.length > 0">
-              <label>{{ t('payment_method') }}</label>
-
-              <div class="select-wrapper">
-                <Icon name="mdi:credit-card-outline" class="select-icon" />
-
-                <Select
-                  v-model="user.user.payment_method_option"
-                  :options="computedPaymentOptions"
-                  optionLabel="name"
-                  :placeholder="lang === 'en' ? 'Select an option' : 'Selecciona una opción'"
-                  class="pv-select pv-select-payment input-modern with-icon"
-                />
-              </div>
+                            <label>{{ t('payment_method') }}</label>
+            
+              <Select
+              v-model="user.user.payment_method_option"
+              :options="computedPaymentOptions"
+              optionLabel="name"
+              placeholder="Selecciona una opción"
+              class="pv-select pv-select-payment input-modern with-icon"
+            />
             </div>
 
             <div class="form-group" style="margin-top: 1rem;">
@@ -386,14 +361,14 @@
                 rows="3"
                 v-model="store.order_notes"
                 :placeholder="t('additional_notes')"
-              />
+              ></Textarea>
             </div>
           </section>
         </div>
 
-        <div class="summary-column">
+        
           <resumen />
-        </div>
+ 
       </div>
     </div>
   </div>
@@ -407,18 +382,24 @@ import { URI } from '~/service/conection'
 import { buildCountryOptions } from '~/service/utils/countries'
 import { parsePhoneNumberFromString } from 'libphonenumber-js/min'
 
-// PrimeVue 4
-import Dialog from 'primevue/dialog'
-import Button from 'primevue/button'
-import InputText from 'primevue/inputtext'
-import Textarea from 'primevue/textarea'
-import Select from 'primevue/select'
-import ProgressSpinner from 'primevue/progressspinner'
-
 /* ================= STORES ================= */
 const user = useUserStore()
 const siteStore = useSitesStore()
 const store = usecartStore()
+
+/* ================= v-click-outside (local) ================= */
+const vClickOutside = {
+  mounted(el, binding) {
+    el.__clickOutsideHandler__ = (evt) => {
+      if (!el.contains(evt.target)) binding.value?.(evt)
+    }
+    document.addEventListener('click', el.__clickOutsideHandler__, true)
+  },
+  unmounted(el) {
+    document.removeEventListener('click', el.__clickOutsideHandler__, true)
+    el.__clickOutsideHandler__ = null
+  }
+}
 
 /* ================= Helpers ================= */
 const generateUUID = () => {
@@ -431,6 +412,21 @@ const generateUUID = () => {
 }
 
 const apiFetch = async (url) => (await fetch(url)).json()
+
+const pickCoupon = (payload) => {
+  if (!payload) return null
+  if (Array.isArray(payload.data)) return payload.data[0] || null
+  if (payload.code) return payload
+  return null
+}
+
+const getErrorDetail = (payload) => {
+  if (!payload) return null
+  if (typeof payload.detail === 'string') return payload.detail
+  if (payload.detail && typeof payload.detail === 'object') return JSON.stringify(payload.detail)
+  if (typeof payload.message === 'string') return payload.message
+  return null
+}
 
 /* ================= Config ================= */
 const uri_api_google = 'https://api.locations.salchimonster.com'
@@ -502,14 +498,14 @@ const t = (key) => DICT[lang.value]?.[key] || DICT.es[key] || key
 
 const formatCOP = (v) =>
   v === 0
-    ? (lang.value === 'en' ? 'Free' : 'Gratis')
+    ? 'Gratis'
     : new Intl.NumberFormat(lang.value === 'en' ? 'en-CO' : 'es-CO', {
         style: 'currency',
         currency: 'COP',
         maximumFractionDigits: 0
       }).format(v)
 
-/* ================= Modal Google (Prime Dialog) ================= */
+/* ================= Modal Google ================= */
 const see_sites = ref(false)
 const addressQuery = ref('')
 const dir_options = ref([])
@@ -619,6 +615,7 @@ const applySiteSelection = (data) => {
   user.user.lng = data.lng
   user.user.place_id = data.place_id
 
+  // sitio real
   siteStore.location.site = data.nearest?.site || siteStore.location.site
   store.address_details = data
 
@@ -680,9 +677,16 @@ const handleSiteChange = async (newData) => {
   }
 }
 
-/* ================= Teléfono (Prime Select) ================= */
+/* ================= Teléfono ================= */
 const phoneError = ref('')
+const countrySuggestions = ref([])
 const countries = ref([])
+const showCountryDropdown = ref(false)
+const countryQuery = ref('')
+const countryInputRef = ref(null)
+
+const norm = (s) => (s || '').toString().trim().toLowerCase()
+const onlyDigits = (s) => (s || '').replace(/\D+/g, '')
 
 const initCountries = () => {
   countries.value = buildCountryOptions(lang.value).map((c) => ({
@@ -690,6 +694,36 @@ const initCountries = () => {
     dialDigits: (c.dialCode || '').replace(/\D+/g, ''),
     flag: `https://flagcdn.com/h20/${c.code.toLowerCase()}.png`
   }))
+  countrySuggestions.value = countries.value.slice(0, 50)
+}
+
+const onCountryInput = () => {
+  const q = norm(countryQuery.value)
+  const qDigits = onlyDigits(countryQuery.value)
+
+  if (!q) {
+    countrySuggestions.value = countries.value.slice(0, 50)
+    return
+  }
+
+  countrySuggestions.value = countries.value
+    .filter((c) => {
+      if (norm(c.name).includes(q) || norm(c.code).includes(q)) return true
+      if (qDigits && c.dialDigits.startsWith(qDigits)) return true
+      return false
+    })
+    .slice(0, 50)
+}
+
+const toggleCountryDropdown = () => {
+  showCountryDropdown.value = !showCountryDropdown.value
+  if (showCountryDropdown.value) countrySuggestions.value = countries.value.slice(0, 50)
+}
+
+const selectCountry = (c) => {
+  user.user.phone_code = c
+  showCountryDropdown.value = false
+  countryQuery.value = ''
 }
 
 const formatPhoneOnBlur = () => {
@@ -769,149 +803,131 @@ watch(
   }
 )
 
-/* ================= CUPONES (FIX: sin trabarse / sin validar por tecla) ================= */
-const couponEnabled = ref(false)
-const couponDraft = ref('')
-const couponTried = ref(false)
-const couponLoading = ref(false)
-const couponFeedback = ref({}) // {status:'active'|'invalid'|'invalid_site'|'error', amount, percent, discount_name...}
+/* ================= CUPONES (FIX) =================
+   ✅ Switch YA NO se traba:
+   - Ahora el switch depende SOLO de store.coupon_ui.enabled
+   - Si el usuario lo apaga: removeCoupon + enabled=false
+   ✅ Validación SOLO con botón "Aplicar" (no por cada tecla)
+   ✅ Muestra error backend: {"detail":"..."} en el feedback
+*/
+const have_discount = computed({
+  get: () => !!store.coupon_ui?.enabled,
+  set: (v) => store.setCouponUi({ enabled: !!v })
+})
 
-const couponDraftTrim = computed(() => (couponDraft.value || '').toString().trim())
-const couponIsApplied = computed(() => !!store.applied_coupon?.code)
+const temp_discount = computed({
+  get: () => store.applied_coupon?.code || store.coupon_ui?.draft_code || '',
+  set: (v) => store.setCouponUi({ draft_code: (v || '').toString() })
+})
 
-const toggleCouponBox = () => {
-  const next = !couponEnabled.value
-  couponEnabled.value = next
+const temp_code = ref({})
+const isApplyingCoupon = ref(false)
 
-  // ✅ Si apagas el switch: limpias todo
+const toggleCouponUi = () => {
+  const next = !have_discount.value
+
   if (!next) {
-    onRemoveCoupon({ silent: true })
-    couponDraft.value = ''
-    couponFeedback.value = {}
-    couponTried.value = false
+    // apagar
+    have_discount.value = false
+    temp_code.value = {}
+    store.removeCoupon()
+    // opcional: limpiar lo escrito al apagar
+    // store.setCouponUi({ draft_code: '' })
+  } else {
+    // encender
+    have_discount.value = true
   }
 }
 
-const onRemoveCoupon = (opts = { silent: false }) => {
-  couponFeedback.value = {}
-  couponTried.value = false
-  couponLoading.value = false
-  store.removeCoupon?.()
-  store.setCouponUi?.({ enabled: couponEnabled.value, draft_code: couponDraft.value })
-  if (!opts?.silent) {
-    // opcional: no alert para no ser molesto
-  }
-}
-
-const validateDiscount = async (code, opts = { silent: false }) => {
-  const silent = !!opts?.silent
-
-  const site = siteStore.location?.site
-  if (!site) {
-    if (!silent) alert(lang.value === 'en' ? 'Select a location first' : 'Selecciona una sede primero')
-    return { status: 'error' }
-  }
-
-  const finalCode = (code || '').toString().trim()
-  if (!finalCode) return { status: 'invalid' }
-
-  try {
-    const res = await (await fetch(`${URI}/discount/get-discount-by-code/${encodeURIComponent(finalCode)}`)).json()
-
-    if (res) {
-      if (Array.isArray(res.sites) && !res.sites.some((s) => String(s.site_id) === String(site.site_id))) {
-        if (store.applied_coupon?.code) store.removeCoupon()
-        return { status: 'invalid_site' }
-      }
-
-      store.applyCoupon(res)
-      return {
-        ...res,
-        status: 'active',
-        discount_name: res.discount_name || res.name || 'Descuento'
-      }
-    }
-
-    if (store.applied_coupon?.code) store.removeCoupon()
-    return { status: 'invalid' }
-  } catch (e) {
-    console.error(e)
-    if (!silent) alert(lang.value === 'en' ? 'Error validating coupon.' : 'Error validando el cupón.')
-    return { status: 'error' }
-  }
-}
-
-// ✅ SOLO al click en “Aplicar”
-const onApplyCoupon = async () => {
-  if (!couponDraftTrim.value) return
-  couponTried.value = true
-  couponLoading.value = true
-
-  const result = await validateDiscount(couponDraftTrim.value, { silent: true })
-  couponFeedback.value = result || { status: 'error' }
-
-  // Si quedó activo, congela input y guarda UI
-  if (couponFeedback.value?.status === 'active') {
-    couponEnabled.value = true
-    couponDraft.value = couponFeedback.value.code || couponDraftTrim.value
-  }
-
-  couponLoading.value = false
-}
-
-// Persistir UI (sin disparar validación)
-watch(
-  couponEnabled,
-  (v) => {
-    store.setCouponUi?.({ enabled: !!v, draft_code: couponDraft.value })
-  },
-  { immediate: true }
-)
-
-watch(
-  couponDraft,
-  (v) => {
-    store.setCouponUi?.({ enabled: couponEnabled.value, draft_code: (v || '').toString() })
-  }
-)
-
-// Sincronizar desde store cuando ya hay cupón aplicado (por ejemplo, recarga)
+// Mantén UI coherente cuando se aplica/quita cupón desde otros lugares
 watch(
   () => store.applied_coupon,
   (newCoupon) => {
-    if (newCoupon?.code) {
-      couponEnabled.value = true
-      couponDraft.value = String(newCoupon.code)
-      couponFeedback.value = {
+    if (newCoupon && newCoupon.code) {
+      store.setCouponUi({ enabled: true, draft_code: newCoupon.code })
+      temp_code.value = {
         ...newCoupon,
         status: 'active',
         discount_name: newCoupon.discount_name || newCoupon.name || 'Descuento'
       }
-      // Nota: NO marcamos couponTried aquí, para que no muestre mensaje sin que el usuario toque nada
     } else {
-      couponFeedback.value = {}
-      // dejamos draft como está por si el usuario lo estaba escribiendo
+      temp_code.value = {}
     }
   },
   { immediate: true, deep: true }
 )
 
-// Cuando cambias de sede: si había cupón aplicado, revalidarlo en silencio (sin spam)
+// Si cambias de sede y ya hay cupón aplicado, revalida silencioso (opcional)
 watch(
   () => siteStore.location?.site?.site_id,
   async () => {
-    if (!store.applied_coupon?.code) return
-    const result = await validateDiscount(store.applied_coupon.code, { silent: true })
-    if (result?.status !== 'active') {
-      // se volvió inválido en esta sede
-      store.removeCoupon?.()
-      couponFeedback.value = result || { status: 'invalid_site' }
-      couponEnabled.value = true
-      // no forzamos couponTried -> no “regaña” al usuario sin interacción
+    if (store.applied_coupon?.code) {
+      await validateDiscount(store.applied_coupon.code, { silent: true })
     }
-  },
-  { immediate: true }
+  }
 )
+
+const validateDiscount = async (code, opts = { silent: false }) => {
+  const silent = !!opts?.silent
+  const site = siteStore.location?.site
+
+  if (!site) {
+    temp_code.value = { status: 'error', detail: lang.value === 'en' ? 'Select a site first' : 'Selecciona una sede primero' }
+    return
+  }
+
+  const finalCode = (code || '').toString().trim()
+  if (!finalCode) return
+
+  isApplyingCoupon.value = true
+  try {
+    const r = await fetch(`${URI}/discount/get-discount-by-code/${encodeURIComponent(finalCode)}`)
+    const payload = await r.json().catch(() => null)
+
+    const backendDetail = getErrorDetail(payload)
+    if (!r.ok || backendDetail) {
+      temp_code.value = { status: 'invalid', detail: backendDetail || (lang.value === 'en' ? 'Invalid code' : 'Código no válido') }
+      store.removeCoupon()
+      return
+    }
+
+    const coupon = pickCoupon(payload)
+    if (!coupon) {
+      temp_code.value = { status: 'invalid', detail: lang.value === 'en' ? 'Invalid code' : 'Código no válido' }
+      store.removeCoupon()
+      return
+    }
+
+    if (Array.isArray(coupon.sites) && !coupon.sites.some((s) => String(s.site_id) === String(site.site_id))) {
+      temp_code.value = { status: 'invalid_site', detail: lang.value === 'en' ? 'Not valid for this site' : 'No válido en esta sede' }
+      store.removeCoupon()
+      return
+    }
+
+    store.applyCoupon(coupon)
+    temp_code.value = {
+      ...coupon,
+      status: 'active',
+      discount_name: coupon.discount_name || coupon.name || 'Descuento'
+    }
+
+    // asegura switch ON si aplicó bien
+    store.setCouponUi({ enabled: true, draft_code: coupon.code || finalCode })
+  } catch (e) {
+    console.error(e)
+    temp_code.value = { status: 'error', detail: lang.value === 'en' ? 'Connection error' : 'Error de conexión' }
+    if (!silent) store.removeCoupon()
+  } finally {
+    isApplyingCoupon.value = false
+  }
+}
+
+const clearCoupon = () => {
+  temp_code.value = {}
+  store.removeCoupon()
+  // deja switch prendido y el input editable (UX)
+  store.setCouponUi({ enabled: true, draft_code: '' })
+}
 
 /* ================= Mount ================= */
 onMounted(async () => {
@@ -920,10 +936,6 @@ onMounted(async () => {
     const defaultCode = lang.value === 'en' ? 'US' : 'CO'
     user.user.phone_code = countries.value.find((c) => c.code === defaultCode)
   }
-
-  // inicializa cupón UI desde store
-  couponEnabled.value = !!store.coupon_ui?.enabled || !!store.applied_coupon?.code
-  couponDraft.value = store.applied_coupon?.code || store.coupon_ui?.draft_code || ''
 
   try {
     const spData = await apiFetch(`${URI}/site-payments-complete`)
@@ -938,8 +950,6 @@ watch(lang, initCountries)
 </script>
 
 <style scoped>
-/* (Tu mismo CSS; no lo toqué salvo que quieras mejorar mensajes) */
-
 /* =========================================
    VARIABLES & TEMA
    ========================================= */
@@ -993,22 +1003,42 @@ watch(lang, initCountries)
 .fade-enter-active, .fade-leave-active { transition: opacity 0.3s; }
 .fade-enter-from, .fade-leave-to { opacity: 0; }
 
-/* LAYOUT */
+/* =========================================
+   LAYOUT PRINCIPAL
+   ========================================= */
 .checkout-layout { max-width: 1100px; margin: 0 auto; padding: 2rem .5rem; }
 .page-header { text-align: center; margin-bottom: 2.5rem; }
 .page-header h1 { font-weight: 800; font-size: 2rem; letter-spacing: -0.03em; margin: 0; }
-.checkout-grid { display: grid; grid-template-columns: 1fr; gap: 0rem; }
-@media (min-width: 992px) { .checkout-grid { grid-template-columns: 1.4fr 1fr; align-items: start;gap: 2rem; } }
 
-/* CARDS */
+.checkout-grid { display: grid; grid-template-columns: 1fr;gap: 0;  }
+@media (min-width: 992px) {
+  .checkout-grid { grid-template-columns: 1.4fr 1fr;gap: 2rem; align-items: start; }
+}
+
+/* =========================================
+   TARJETAS Y SECCIONES
+   ========================================= */
 .card {
-  background: var(--bg-card); border-radius: var(--radius); border: 1px solid var(--border);
-  padding: 1.5rem; margin-bottom: 1.5rem; box-shadow: var(--shadow-card);
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+  box-shadow: var(--shadow-card);
   transition: transform 0.2s, box-shadow 0.2s;
 }
-.section-title { font-size: 1.1rem; font-weight: 700; margin-bottom: 1.25rem; padding-bottom: 0.75rem; border-bottom: 1px solid var(--border); color: #111; }
+.section-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin-bottom: 1.25rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border);
+  color: #111;
+}
 
-/* TABS */
+/* =========================================
+   TABS (Tipo de Orden)
+   ========================================= */
 .card-tabs { padding: 0; background: #f1f5f9; border: none; }
 .tabs-container { display: flex; background: #ffffff; border-radius: var(--radius-sm); }
 .tab-item {
@@ -1018,39 +1048,77 @@ watch(lang, initCountries)
 .tab-item.is-active { background: #000000; color: #ffffff; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
 .hidden-radio { position: absolute; opacity: 0; width: 0; height: 0; }
 
-/* FORM */
+/* =========================================
+   FORMULARIOS
+   ========================================= */
 .form-row { margin-bottom: 1rem; }
 .form-row.split { display: grid; grid-template-columns: 1fr; gap: 1rem; }
 @media(min-width: 600px) { .form-row.split { grid-template-columns: 1fr 1fr; } }
+
 label { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.5rem; color: #374151; }
 
-.input-modern { width: 100%; }
-
-/* PrimeVue inputs full width */
-:deep(.p-inputtext),
-:deep(.p-textarea),
-:deep(.p-select) {
+.input-modern {
   width: 100%;
+ 
 }
+.input-modern:focus { border-color: var(--border-focus); box-shadow: 0 0 0 3px rgba(0,0,0,0.05); }
+textarea.input-modern { resize: vertical; min-height: 80px; }
 
-/* TELÉFONO */
+/* Selector Teléfono */
 .phone-control { display: flex; gap: 0.5rem; }
-.country-select { min-width: 120px; }
-.flag-mini { width: 18px; border-radius: 2px; }
+.country-select { position: relative; }
+.country-trigger {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0 0.8rem;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  min-width: 90px;
+}
+.country-trigger img { width: 20px; border-radius: 2px; }
+.country-dropdown {
+  position: absolute; top: 110%; left: 0; z-index: 50;
+  background: #fff; border: 1px solid var(--border);
+  border-radius: var(--radius-sm); width: 240px;
+  box-shadow: var(--shadow-hover); padding: 0.5rem;
+}
+.search-mini {
+  width: 100%; padding: 0.4rem; margin-bottom: 0.5rem;
+  border: 1px solid #eee; border-radius: 4px; font-size: 0.85rem;
+}
+.country-dropdown ul { list-style: none; padding: 0; margin: 0; max-height: 200px; overflow-y: auto; }
+.country-dropdown li {
+  padding: 0.5rem; display: flex; align-items: center; gap: 0.5rem;
+  cursor: pointer; font-size: 0.9rem; border-radius: 4px;
+}
+.country-dropdown li:hover { background: #f3f4f6; }
+.flag-mini { width: 18px; }
 .field-error { font-size: 0.8rem; color: var(--error); margin-top: 4px; display: block; }
 
-/* ADDRESS CARD */
+/* =========================================
+   SELECTOR DIRECCIÓN (CARD)
+   ========================================= */
+.address-selector { margin-bottom: 1rem; }
 .address-card {
-  display: flex; align-items: center; gap: 1rem; padding: 1rem; border: 1px solid var(--border);
-  border-radius: var(--radius-sm); cursor: pointer; transition: all 0.2s; background: #fff;
+  display: flex; align-items: center; gap: 1rem; padding: 1rem;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  cursor: pointer; transition: all 0.2s; background: #fff;
 }
 .address-card:hover { border-color: #000; box-shadow: var(--shadow-card); }
 .address-card.no-address { border-style: dashed; background: #f9fafb; }
+
 .icon-box-addr {
-  width: 40px; height: 40px; background: #f3f4f6; border-radius: 50%;
-  display: flex; align-items: center; justify-content: center; font-size: 1.2rem; color: #666;
+  width: 40px; height: 40px; background: #f3f4f6;
+  border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  font-size: 1.2rem; color: #666;
 }
-.has-address .icon-box-addr, .pickup .icon-box-addr { background: #000; color: #fff; }
+.has-address .icon-box-addr { background: #000; color: #fff; }
+.pickup .icon-box-addr { background: #000; color: #fff; }
+
 .addr-info { flex: 1; display: flex; flex-direction: column; }
 .addr-title { font-weight: 600; font-size: 0.95rem; }
 .addr-placeholder { color: var(--text-light); }
@@ -1060,80 +1128,117 @@ label { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.5
 .action-arrow { color: #9ca3af; }
 .mt-3 { margin-top: 1rem; }
 
-/* CUPONES */
+/* =========================================
+   CUPONES & SELECTS
+   ========================================= */
 .coupon-wrapper { border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; margin-bottom: 1.5rem; }
 .coupon-toggle { display: flex; justify-content: space-between; align-items: center; padding: 0.8rem 1rem; background: #f9fafb; cursor: pointer; }
 .coupon-left { display: flex; gap: 0.5rem; align-items: center; font-weight: 600; font-size: 0.9rem; }
+
 .switch { width: 36px; height: 20px; background: #d1d5db; border-radius: 20px; position: relative; transition: 0.3s; }
 .switch.on { background: #000; }
 .knob { width: 16px; height: 16px; background: #fff; border-radius: 50%; position: absolute; top: 2px; left: 2px; transition: 0.3s; }
 .switch.on .knob { transform: translateX(16px); }
+
 .coupon-content { padding: 1rem; border-top: 1px solid var(--border); }
-.coupon-input-row { display: flex; gap: 0.5rem; align-items: center; }
-.coupon-input { flex: 1; }
-.btn-coupon { font-weight: 700; border-radius: 8px; }
-.coupon-feedback { margin-top: 0.8rem; font-size: 0.85rem; display: flex; gap: 0.6rem; align-items: flex-start; font-weight: 500; padding: 0.6rem; border-radius: 6px; }
+.coupon-input-row { display: flex; gap: 0.5rem; }
+.coupon-input-row input { flex: 1; padding: 0.5rem; border: 1px solid var(--border); border-radius: 6px; outline: none; }
+.btn-coupon { padding: 0 1rem; border-radius: 6px; border: none; font-weight: 600; cursor: pointer; font-size: 0.9rem; }
+.apply { background: #000; color: #fff; }
+.remove { background: #fee2e2; color: #ef4444; }
+
+.coupon-feedback {
+  margin-top: 0.8rem; font-size: 0.85rem; display: flex; gap: 0.6rem;
+  align-items: flex-start; font-weight: 500; padding: 0.6rem; border-radius: 6px;
+}
 .coupon-feedback.positive { color: var(--success); background: #ecfdf5; }
 .coupon-feedback.negative { color: var(--error); background: #fef2f2; }
 .feedback-info { display: flex; flex-direction: column; }
 .discount-title { font-weight: 700; color: #065f46; font-size: 0.9rem; text-transform: uppercase; }
 .discount-amount { font-size: 0.85rem; color: #047857; margin-top: 2px; }
 
-/* Payment select icon overlay */
 .select-wrapper { position: relative; }
-.with-icon { padding-left: 2.6rem; }
-.select-icon { position: absolute; left: 0.8rem; top: 50%; transform: translateY(-50%); color: #6b7280; pointer-events: none; z-index: 2; }
+ 
+.select-icon { position: absolute; left: 0.8rem; top: 50%; transform: translateY(-50%); color: #6b7280; pointer-events: none; }
+.select-arrow { position: absolute; right: 0.8rem; top: 50%; transform: translateY(-50%); pointer-events: none; font-size: 1.2rem; }
 
-/* ================== Dialog styles ================== */
-.modal-header { display:flex; align-items:center; justify-content:space-between; width:100%; gap: 1rem; }
-.modal-title { margin: 0; font-size: 1.1rem; font-weight: 800; }
-.btn-icon-close { color: #666; }
-
-.modal-body { padding-top: .5rem; }
+/* =========================================
+   MODAL DE DIRECCIÓN
+   ========================================= */
+.modal-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(5px);
+  z-index: 1000;
+  display: flex; justify-content: center; align-items: center;
+  padding: 1rem;
+}
+.modal-container {
+  background: #fff;
+  width: 100%; max-width: 500px;
+  border-radius: 16px;
+  box-shadow: 0 20px 50px rgba(0,0,0,0.2);
+  display: flex; flex-direction: column;
+  max-height: 85vh; overflow: hidden;
+}
+.modal-header {
+  padding: 1rem 1.5rem; border-bottom: 1px solid #f3f4f6;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.modal-header h3 { margin: 0; font-size: 1.1rem; font-weight: 700; }
+.btn-icon-close { background: none; border: none; cursor: pointer; color: #999; }
+.modal-body { padding: 1.5rem; overflow-y: auto; flex: 1; }
 
 .search-box {
   display: flex; align-items: center; gap: 0.5rem;
-  background: #f3f4f6; border-radius: 10px; padding: 0 0.75rem;
+  background: #f3f4f6; border-radius: 10px; padding: 0 1rem;
   margin-bottom: 1rem; border: 1px solid transparent; transition: 0.2s;
 }
 .search-box.is-focused { background: #fff; border-color: #000; box-shadow: 0 0 0 3px rgba(0,0,0,0.05); }
-.search-icon { color: #666; }
-.search-input { flex: 1; border: none !important; box-shadow: none !important; background: transparent !important; padding: 0.9rem 0.2rem !important; }
-.btn-clear { color: #777; }
+.search-box input { border: none; background: transparent; width: 100%; padding: 1rem 0; font-size: 1rem; outline: none; }
+.btn-clear { background: none; border: none; cursor: pointer; color: #999; }
 
 .suggestions-list { list-style: none; padding: 0; margin: 0; border: 1px solid #eee; border-radius: 8px; overflow: hidden; }
-.suggestions-list li { padding: 0.8rem 1rem; border-bottom: 1px solid #f9f9f9; display: flex; gap: 0.8rem; cursor: pointer; align-items: flex-start; }
+.suggestions-list li {
+  padding: 0.8rem 1rem; border-bottom: 1px solid #f9f9f9;
+  display: flex; gap: 0.8rem; cursor: pointer; align-items: flex-start;
+}
 .suggestions-list li:hover { background: #f9fafb; }
 .suggestion-icon { margin-top: 2px; color: #666; }
 .suggestion-content { display: flex; flex-direction: column; }
-.suggestion-content .main { font-weight: 700; font-size: 0.9rem; }
+.suggestion-content .main { font-weight: 600; font-size: 0.9rem; }
 .suggestion-content .sub { font-size: 0.8rem; color: #888; }
 
-.loading-state { text-align: center; padding: 1.25rem 0.25rem; color: #666; display: flex; flex-direction: column; align-items: center; gap: 0.6rem; }
+.loading-state { text-align: center; padding: 2rem; color: #666; display: flex; flex-direction: column; align-items: center; gap: 0.5rem; }
 
 .result-card { border: 1px solid #eee; border-radius: 10px; overflow: hidden; }
 .result-card.is-success { border-color: #d1fae5; }
 .result-card.is-error { border-color: #fee2e2; }
+
 .result-header { padding: 1rem; display: flex; gap: 1rem; align-items: center; background: #f9fafb; }
 .is-success .result-header { background: #ecfdf5; }
 .is-error .result-header { background: #fef2f2; }
+
 .status-icon { width: 32px; height: 32px; border-radius: 50%; background: #fff; display: flex; align-items: center; justify-content: center; }
 .is-success .status-icon { color: #10b981; }
 .is-error .status-icon { color: #ef4444; }
 .status-text h4 { margin: 0; font-size: 1rem; }
-.status-text p { margin: 0; font-size: 0.85rem; opacity: 0.85; }
+.status-text p { margin: 0; font-size: 0.85rem; opacity: 0.8; }
+
 .result-details { padding: 1rem; background: #fff; }
 .detail-row { display: flex; justify-content: space-between; margin-bottom: 0.5rem; font-size: 0.95rem; }
 .detail-row.full { margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px dashed #eee; display: block; }
 .error-message { padding: 1rem; color: #b91c1c; font-size: 0.9rem; background: #fff; }
 
-.modal-footer { display:flex; justify-content:flex-end; gap: .75rem; width: 100%; }
-.btn-primary { background: #000 !important; border-color: #000 !important; }
-.btn-secondary { border-color: #d1d5db !important; color: #374151 !important; }
+.modal-footer {
+  padding: 1rem 1.5rem; border-top: 1px solid #f3f4f6;
+  display: flex; justify-content: flex-end; gap: 1rem;
+}
+.btn { padding: 0.8rem 1.5rem; border-radius: 8px; font-weight: 600; cursor: pointer; border: none; font-size: 0.95rem; }
+.btn-primary { background: #000; color: #fff; }
+.btn-primary:disabled { background: #ccc; cursor: not-allowed; }
+.btn-secondary { background: transparent; color: #666; }
 
-/* PrimeVue dialog padding tweak */
-:deep(.p-dialog-content) { padding-top: 0.5rem; }
-:deep(.p-dialog-header) { padding: 1rem 1.25rem; }
-:deep(.p-dialog-content) { padding: 1rem 1.25rem; }
-:deep(.p-dialog-footer) { padding: 1rem 1.25rem; }
+.modal-fade-enter-active, .modal-fade-leave-active { transition: opacity 0.2s ease; }
+.modal-fade-enter-from, .modal-fade-leave-to { opacity: 0; }
 </style>
