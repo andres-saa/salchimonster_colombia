@@ -84,23 +84,7 @@
                 </div>
               </div>
 
-              <div v-if="tempGoogleSite.in_coverage" class="result-details">
-                <div class="detail-row">
-                  <span>Domicilio</span>
-                  <strong>${{ formatPrice(tempGoogleSite.delivery_cost_cop) }}</strong>
-                </div>
-
-                <div class="detail-row full" v-if="tempGoogleSite.nearest?.site?.site_name">
-                  <span>Te enviamos desde</span>
-                  <strong>{{ tempGoogleSite.nearest.site.site_name }}</strong>
-                </div>
-              </div>
-
-              <div v-else class="error-message">
-                <p style="margin:0;">
-                  {{ tempGoogleSite.error?.message_es || 'Fuera de cobertura' }}
-                </p>
-              </div>
+            
             </div>
           </div>
 
@@ -230,7 +214,10 @@ const cityOptions = computed(() => {
 })
 
 const isGoogleMapsCity = computed(() => {
-return true
+  const city_id = currenCity.value?.city_id
+  if (!city_id) return false
+  const status = city_disponibilidad.value?.find(s => Number(s.city_id) === Number(city_id))
+  return status ? !!status.user_google_map_status : false
 })
 
 const canSave = computed(() => {
@@ -488,17 +475,7 @@ watch(currenNeigborhood, async (newVal) => {
 
 /* PrimeVue Select look (igual que ya lo tienes) */
 .custom-select :deep(.p-select) {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0.8rem 1rem;
-  font-size: 0.95rem;
-  background: #f9fafb;
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
-  cursor: pointer;
-  transition: all 0.2s;
-  color: #1f2937;
+ 
   width: 100%;
 }
 

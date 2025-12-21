@@ -233,7 +233,7 @@
 
             </div>
 
-            <div class="form-group">
+            <div class="form-group" style="margin-top: 1rem;">
               <label>{{ t('notes') }}</label>
               <Textarea
                 class="input-modern"
@@ -718,8 +718,8 @@ watch(lang, initCountries)
 .checkout-layout { max-width: 1100px; margin: 0 auto; padding: 2rem .5rem; }
 .page-header { text-align: center; margin-bottom: 2.5rem; }
 .page-header h1 { font-weight: 800; font-size: 2rem; letter-spacing: -0.03em; margin: 0; }
-.checkout-grid { display: grid; grid-template-columns: 1fr; gap: 2rem; }
-@media (min-width: 992px) { .checkout-grid { grid-template-columns: 1.4fr 1fr; align-items: start; } }
+.checkout-grid { display: grid; grid-template-columns: 1fr; gap: 0rem; }
+@media (min-width: 992px) { .checkout-grid { grid-template-columns: 1.4fr 1fr; align-items: start;gap: 2rem; } }
 
 /* CARDS & SECTIONS */
 .card {

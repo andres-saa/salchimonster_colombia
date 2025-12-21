@@ -553,10 +553,11 @@ const payWithEpayco = (id) => {
     top: 0;
     box-shadow: none;
     border: none;
-    background-color: transparent;
-    padding: 0;
+ box-shadow: var(--shadow);
+    padding: 1rem;
   }
   .summary-wrapper { padding: 0; margin-top: 2rem; }
   .final-total { font-size: 1.1rem; }
+   
 }
 </style>

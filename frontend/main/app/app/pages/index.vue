@@ -35,6 +35,7 @@
               optionValue="city_id"
               placeholder="Todas las ciudades"
               filter
+              style="width: 100%;"
               showClear
               class="w-full"
               @update:modelValue="onCityChange"
@@ -80,6 +81,7 @@
                 :placeholder="loadingNeighborhoods ? 'Cargando barrios...' : (neighborhoods.length ? 'Escribe para buscar...' : 'No hay barrios')"
                 @complete="onNeighborhoodComplete"
                 dropdown
+                style="width: 100%;"
                 forceSelection
               >
                 <template #item="{ item }">
@@ -93,7 +95,7 @@
 
             <div class="form-group" style="margin-top:.7rem;">
               <label class="city-label">Dirección exacta</label>
-              <InputText
+              <InputText style="width: 100%;"
                 v-model="paramExactAddress"
                 class="w-full"
                 placeholder="Ej: Calle 123 # 45 - 67..."
@@ -279,13 +281,14 @@
             <div v-if="isGoogleCity">
               <h3 class="modal-title">¿Dónde estás?</h3>
 
-              <AutoComplete
+              <AutoComplete 
                 v-model="modalAddressQuery"
                 :suggestions="modalSuggestions"
                 optionLabel="description"
                 placeholder="Calle 123 # 45 - 67..."
                 class="w-full"
                 :minLength="3"
+                style="width: 100%;"
                 :delay="250"
                 @complete="onModalAddressComplete"
                 @item-select="onSelectModalSuggestionEvent"
@@ -316,6 +319,7 @@
                   class="w-full"
                   placeholder="Escribe para buscar..."
                   :minLength="1"
+                  style="width:100%;"
                   :delay="150"
                   @complete="onModalNeighborhoodComplete"
                   dropdown
@@ -323,13 +327,13 @@
                 />
               </div>
 
-              <div v-if="modalSelectedNeighborhood" class="selected-nb-info">
+              <div v-if="modalSelectedNeighborhood" style="margin: 1rem 0;" class="selected-nb-info">
                 <div class="info-row">
-                  <span>Barrio:</span>
+                  <span>Barrio: </span>
                   <strong>{{ modalSelectedNeighborhood.name }}</strong>
                 </div>
                 <div class="info-row">
-                  <span>Domicilio:</span>
+                  <span>Domicilio: </span>
                   <strong class="text-green">{{ formatCOP(Number(modalSelectedNeighborhood.delivery_price || 0)) }}</strong>
                 </div>
               </div>
@@ -337,6 +341,7 @@
               <div class="form-group" style="margin-top: 1rem;">
                 <label class="city-label">Dirección Exacta</label>
                 <InputText
+                style="width: 100%;"
                   v-model="modalParamAddress"
                   class="w-full"
                   placeholder="Ej: Calle 123 # 45 - 67 Apt 201"

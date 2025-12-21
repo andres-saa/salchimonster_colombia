@@ -173,7 +173,6 @@
                 <label>{{ t('phone') }}</label>
 
                 <div class="phone-control">
-                  <!-- ✅ PrimeVue Select con bandera + dialCode -->
                   <div class="country-select">
                     <Select
                       v-model="user.user.phone_code"
@@ -286,31 +285,34 @@
           <section class="card form-section">
             <h2 class="section-title">Pago & Detalles</h2>
 
-            <!-- CUPONES -->
+            <!-- ================== CUPONES (FIX) ================== -->
             <div class="coupon-wrapper">
-              <div class="coupon-toggle" @click="have_discount = !have_discount">
+              <div class="coupon-toggle" @click="toggleCouponBox()">
                 <div class="coupon-left">
                   <Icon name="mdi:ticket-percent-outline" size="20" />
                   <span>{{ t('code') }}</span>
                 </div>
-                <div class="switch" :class="{ 'on': have_discount }">
+
+                <!-- ✅ Switch ya NO se traba -->
+                <div class="switch" :class="{ 'on': couponEnabled }">
                   <div class="knob"></div>
                 </div>
               </div>
 
-              <div v-if="have_discount" class="coupon-content">
+              <div v-if="couponEnabled" class="coupon-content">
                 <div class="coupon-input-row">
                   <InputText
-                    v-model="temp_discount"
+                    v-model="couponDraft"
                     :placeholder="t('code_placeholder')"
-                    :disabled="temp_code?.status === 'active'"
+                    :disabled="couponIsApplied"
                     class="coupon-input"
+                    @keyup.enter="onApplyCoupon"
                   />
 
                   <Button
-                    v-if="temp_code?.status === 'active'"
+                    v-if="couponIsApplied"
                     class="btn-coupon remove"
-                    @click="clearCoupon"
+                    @click="onRemoveCoupon"
                     severity="danger"
                     outlined
                   >
@@ -320,33 +322,40 @@
                   <Button
                     v-else
                     class="btn-coupon apply"
-                    @click="validateDiscount(temp_discount, { silent: false })"
-                    :disabled="!temp_discount"
+                    @click="onApplyCoupon"
+                    :disabled="!couponDraftTrim || couponLoading"
                   >
-                    {{ lang === 'en' ? 'Apply' : 'Aplicar' }}
+                    {{ couponLoading ? (lang === 'en' ? 'Checking...' : 'Verificando...') : (lang === 'en' ? 'Apply' : 'Aplicar') }}
                   </Button>
                 </div>
 
+                <!-- ✅ Mensajes SOLO después de intentar aplicar -->
                 <div
-                  v-if="temp_code?.status"
+                  v-if="couponTried && couponFeedback?.status"
                   class="coupon-feedback"
-                  :class="temp_code.status === 'active' ? 'positive' : 'negative'"
+                  :class="couponFeedback.status === 'active' ? 'positive' : 'negative'"
                 >
-                  <Icon :name="temp_code.status === 'active' ? 'mdi:check-circle' : 'mdi:alert-circle'" size="18" />
+                  <Icon :name="couponFeedback.status === 'active' ? 'mdi:check-circle' : 'mdi:alert-circle'" size="18" />
 
-                  <div v-if="temp_code.status === 'active'" class="feedback-info">
-                    <span class="discount-title">{{ temp_code.discount_name }}</span>
-                    <span class="discount-amount" v-if="temp_code.amount">
-                      Ahorras: <strong>{{ formatCOP(temp_code.amount) }}</strong>
+                  <div v-if="couponFeedback.status === 'active'" class="feedback-info">
+                    <span class="discount-title">{{ couponFeedback.discount_name }}</span>
+                    <span class="discount-amount" v-if="couponFeedback.amount">
+                      Ahorras: <strong>{{ formatCOP(couponFeedback.amount) }}</strong>
                     </span>
-                    <span class="discount-amount" v-else-if="temp_code.percent">
-                      Ahorras: <strong>{{ temp_code.percent }}%</strong>
+                    <span class="discount-amount" v-else-if="couponFeedback.percent">
+                      Ahorras: <strong>{{ couponFeedback.percent }}%</strong>
                     </span>
                   </div>
 
                   <div v-else class="feedback-info">
                     <span>
-                      {{ temp_code.status === 'invalid_site' ? 'No válido en esta sede' : (lang === 'en' ? 'Invalid code' : 'Código no válido') }}
+                      {{
+                        couponFeedback.status === 'invalid_site'
+                          ? (lang === 'en' ? 'Not valid for this location' : 'No válido en esta sede')
+                          : couponFeedback.status === 'invalid'
+                            ? (lang === 'en' ? 'Invalid code' : 'Código no válido')
+                            : (lang === 'en' ? 'Error validating coupon' : 'Error validando el cupón')
+                      }}
                     </span>
                   </div>
                 </div>
@@ -370,7 +379,7 @@
               </div>
             </div>
 
-            <div class="form-group">
+            <div class="form-group" style="margin-top: 1rem;">
               <label>{{ t('notes') }}</label>
               <Textarea
                 class="input-modern"
@@ -493,7 +502,7 @@ const t = (key) => DICT[lang.value]?.[key] || DICT.es[key] || key
 
 const formatCOP = (v) =>
   v === 0
-    ? 'Gratis'
+    ? (lang.value === 'en' ? 'Free' : 'Gratis')
     : new Intl.NumberFormat(lang.value === 'en' ? 'en-CO' : 'es-CO', {
         style: 'currency',
         currency: 'COP',
@@ -604,14 +613,12 @@ const confirmSelection = async () => {
 }
 
 const applySiteSelection = (data) => {
-  // data = coverage-details
   user.user.site = data
   user.user.address = data.formatted_address
   user.user.lat = data.lat
   user.user.lng = data.lng
   user.user.place_id = data.place_id
 
-  // sitio real al que queda asociado
   siteStore.location.site = data.nearest?.site || siteStore.location.site
   store.address_details = data
 
@@ -762,120 +769,149 @@ watch(
   }
 )
 
-/* ================= Cupones (persist + auto-apply) ================= */
-const have_discount = computed({
-  get: () => !!store.coupon_ui?.enabled || !!store.applied_coupon,
-  set: (v) => store.setCouponUi({ enabled: !!v })
-})
+/* ================= CUPONES (FIX: sin trabarse / sin validar por tecla) ================= */
+const couponEnabled = ref(false)
+const couponDraft = ref('')
+const couponTried = ref(false)
+const couponLoading = ref(false)
+const couponFeedback = ref({}) // {status:'active'|'invalid'|'invalid_site'|'error', amount, percent, discount_name...}
 
-const temp_discount = computed({
-  get: () => store.applied_coupon?.code || store.coupon_ui?.draft_code || '',
-  set: (v) => store.setCouponUi({ draft_code: (v || '').toString() })
-})
+const couponDraftTrim = computed(() => (couponDraft.value || '').toString().trim())
+const couponIsApplied = computed(() => !!store.applied_coupon?.code)
 
-const temp_code = ref({})
-const lastAutoApplyKey = ref('')
+const toggleCouponBox = () => {
+  const next = !couponEnabled.value
+  couponEnabled.value = next
+
+  // ✅ Si apagas el switch: limpias todo
+  if (!next) {
+    onRemoveCoupon({ silent: true })
+    couponDraft.value = ''
+    couponFeedback.value = {}
+    couponTried.value = false
+  }
+}
+
+const onRemoveCoupon = (opts = { silent: false }) => {
+  couponFeedback.value = {}
+  couponTried.value = false
+  couponLoading.value = false
+  store.removeCoupon?.()
+  store.setCouponUi?.({ enabled: couponEnabled.value, draft_code: couponDraft.value })
+  if (!opts?.silent) {
+    // opcional: no alert para no ser molesto
+  }
+}
 
 const validateDiscount = async (code, opts = { silent: false }) => {
   const silent = !!opts?.silent
 
   const site = siteStore.location?.site
   if (!site) {
-    if (!silent) alert('Selecciona una sede primero')
-    return
+    if (!silent) alert(lang.value === 'en' ? 'Select a location first' : 'Selecciona una sede primero')
+    return { status: 'error' }
   }
 
   const finalCode = (code || '').toString().trim()
-  if (!finalCode) return
+  if (!finalCode) return { status: 'invalid' }
 
   try {
     const res = await (await fetch(`${URI}/discount/get-discount-by-code/${encodeURIComponent(finalCode)}`)).json()
 
     if (res) {
       if (Array.isArray(res.sites) && !res.sites.some((s) => String(s.site_id) === String(site.site_id))) {
-        temp_code.value = { status: 'invalid_site' }
         if (store.applied_coupon?.code) store.removeCoupon()
-        if (!silent) alert(lang.value === 'en' ? 'Coupon not valid for this site' : 'Este cupón no es válido para esta sede.')
-        return
+        return { status: 'invalid_site' }
       }
 
       store.applyCoupon(res)
-      temp_code.value = {
+      return {
         ...res,
         status: 'active',
         discount_name: res.discount_name || res.name || 'Descuento'
       }
-    } else {
-      temp_code.value = { status: 'invalid' }
-      if (store.applied_coupon?.code) store.removeCoupon()
     }
+
+    if (store.applied_coupon?.code) store.removeCoupon()
+    return { status: 'invalid' }
   } catch (e) {
     console.error(e)
-    temp_code.value = { status: 'error' }
     if (!silent) alert(lang.value === 'en' ? 'Error validating coupon.' : 'Error validando el cupón.')
+    return { status: 'error' }
   }
 }
 
-const autoApplyCouponIfNeeded = async () => {
-  const siteId = siteStore.location?.site?.site_id
-  if (!siteId) return
+// ✅ SOLO al click en “Aplicar”
+const onApplyCoupon = async () => {
+  if (!couponDraftTrim.value) return
+  couponTried.value = true
+  couponLoading.value = true
 
-  const appliedCode = store.applied_coupon?.code ? String(store.applied_coupon.code) : ''
-  const draftCode = store.coupon_ui?.draft_code ? String(store.coupon_ui.draft_code) : ''
-  const enabled = !!store.coupon_ui?.enabled
+  const result = await validateDiscount(couponDraftTrim.value, { silent: true })
+  couponFeedback.value = result || { status: 'error' }
 
-  const candidate = appliedCode || (enabled ? draftCode : '')
-  if (!candidate) return
+  // Si quedó activo, congela input y guarda UI
+  if (couponFeedback.value?.status === 'active') {
+    couponEnabled.value = true
+    couponDraft.value = couponFeedback.value.code || couponDraftTrim.value
+  }
 
-  const key = `${siteId}|${candidate}`
-  if (lastAutoApplyKey.value === key) return
-  lastAutoApplyKey.value = key
-
-  have_discount.value = true
-  temp_discount.value = candidate
-
-  await validateDiscount(candidate, { silent: true })
+  couponLoading.value = false
 }
 
+// Persistir UI (sin disparar validación)
 watch(
-  () => store.applied_coupon,
-  (newCoupon) => {
-    if (newCoupon && newCoupon.code) {
-      have_discount.value = true
-      temp_discount.value = newCoupon.code
-      temp_code.value = {
-        ...newCoupon,
-        status: 'active',
-        discount_name: newCoupon.discount_name || newCoupon.name || 'Descuento'
-      }
-    } else {
-      temp_code.value = {}
-    }
-  },
-  { immediate: true, deep: true }
-)
-
-watch(
-  () => siteStore.location?.site?.site_id,
-  async () => {
-    await autoApplyCouponIfNeeded()
+  couponEnabled,
+  (v) => {
+    store.setCouponUi?.({ enabled: !!v, draft_code: couponDraft.value })
   },
   { immediate: true }
 )
 
 watch(
-  () => store.coupon_ui?.draft_code,
-  async () => {
-    await autoApplyCouponIfNeeded()
+  couponDraft,
+  (v) => {
+    store.setCouponUi?.({ enabled: couponEnabled.value, draft_code: (v || '').toString() })
   }
 )
 
-const clearCoupon = () => {
-  temp_code.value = {}
-  store.removeCoupon()
-  have_discount.value = true
-  temp_discount.value = ''
-}
+// Sincronizar desde store cuando ya hay cupón aplicado (por ejemplo, recarga)
+watch(
+  () => store.applied_coupon,
+  (newCoupon) => {
+    if (newCoupon?.code) {
+      couponEnabled.value = true
+      couponDraft.value = String(newCoupon.code)
+      couponFeedback.value = {
+        ...newCoupon,
+        status: 'active',
+        discount_name: newCoupon.discount_name || newCoupon.name || 'Descuento'
+      }
+      // Nota: NO marcamos couponTried aquí, para que no muestre mensaje sin que el usuario toque nada
+    } else {
+      couponFeedback.value = {}
+      // dejamos draft como está por si el usuario lo estaba escribiendo
+    }
+  },
+  { immediate: true, deep: true }
+)
+
+// Cuando cambias de sede: si había cupón aplicado, revalidarlo en silencio (sin spam)
+watch(
+  () => siteStore.location?.site?.site_id,
+  async () => {
+    if (!store.applied_coupon?.code) return
+    const result = await validateDiscount(store.applied_coupon.code, { silent: true })
+    if (result?.status !== 'active') {
+      // se volvió inválido en esta sede
+      store.removeCoupon?.()
+      couponFeedback.value = result || { status: 'invalid_site' }
+      couponEnabled.value = true
+      // no forzamos couponTried -> no “regaña” al usuario sin interacción
+    }
+  },
+  { immediate: true }
+)
 
 /* ================= Mount ================= */
 onMounted(async () => {
@@ -885,6 +921,10 @@ onMounted(async () => {
     user.user.phone_code = countries.value.find((c) => c.code === defaultCode)
   }
 
+  // inicializa cupón UI desde store
+  couponEnabled.value = !!store.coupon_ui?.enabled || !!store.applied_coupon?.code
+  couponDraft.value = store.applied_coupon?.code || store.coupon_ui?.draft_code || ''
+
   try {
     const spData = await apiFetch(`${URI}/site-payments-complete`)
     sitePaymentsComplete.value = spData || []
@@ -892,14 +932,14 @@ onMounted(async () => {
   } catch (e) {
     console.error('Error loading payment config', e)
   }
-
-  await autoApplyCouponIfNeeded()
 })
 
 watch(lang, initCountries)
 </script>
 
 <style scoped>
+/* (Tu mismo CSS; no lo toqué salvo que quieras mejorar mensajes) */
+
 /* =========================================
    VARIABLES & TEMA
    ========================================= */
@@ -957,8 +997,8 @@ watch(lang, initCountries)
 .checkout-layout { max-width: 1100px; margin: 0 auto; padding: 2rem .5rem; }
 .page-header { text-align: center; margin-bottom: 2.5rem; }
 .page-header h1 { font-weight: 800; font-size: 2rem; letter-spacing: -0.03em; margin: 0; }
-.checkout-grid { display: grid; grid-template-columns: 1fr; gap: 2rem; }
-@media (min-width: 992px) { .checkout-grid { grid-template-columns: 1.4fr 1fr; align-items: start; } }
+.checkout-grid { display: grid; grid-template-columns: 1fr; gap: 0rem; }
+@media (min-width: 992px) { .checkout-grid { grid-template-columns: 1.4fr 1fr; align-items: start;gap: 2rem; } }
 
 /* CARDS */
 .card {
