@@ -7,9 +7,9 @@
             <Icon name="mdi:rocket-launch-outline" size="3em" class="rocket-icon" />
             <div class="pulse-ring"></div>
           </div>
-          <h2 class="redirect-title">Te estamos llevando a</h2>
+          <h2 class="redirect-title">{{ t('redirecting_to') }}</h2>
           <h3 class="redirect-store">{{ targetSiteName }}</h3>
-          <p class="redirect-subtitle">Iniciando tu experiencia...</p>
+          <p class="redirect-subtitle">{{ t('starting_experience') }}</p>
         </div>
       </div>
     </Transition>
@@ -25,11 +25,38 @@
 
       <div class="vicio-sidebar">
         <header class="sidebar-header">
-          <h2 class="sidebar-title">ELIGE TU SALCHIMONSTER MÁS CERCANO</h2>
+          <!-- ✅ Header + Language selector -->
+          <div class="sidebar-header-top">
+            <h2 class="sidebar-title">{{ t('choose_nearest') }}</h2>
+
+            <div class="lang-switch" role="group" :aria-label="t('language')">
+              <button
+                type="button"
+                class="lang-btn"
+                :class="{ 'is-active': lang === 'es' }"
+                @click="setLang('es')"
+                aria-label="Español"
+              >
+                <img class="lang-flag" :src="FLAGS.es" alt="ES" />
+                <span class="lang-label">ES</span>
+              </button>
+
+              <button
+                type="button"
+                class="lang-btn"
+                :class="{ 'is-active': lang === 'en' }"
+                @click="setLang('en')"
+                aria-label="English"
+              >
+                <img class="lang-flag" :src="FLAGS.en" alt="EN" />
+                <span class="lang-label">EN</span>
+              </button>
+            </div>
+          </div>
 
           <!-- CIUDAD (PrimeVue Select) -->
           <div class="city-select-wrapper">
-            <label class="city-label" for="city-filter">Ciudad</label>
+            <label class="city-label" for="city-filter">{{ t('city') }}</label>
 
             <Select
               inputId="city-filter"
@@ -37,7 +64,7 @@
               :options="citySelectOptions"
               optionLabel="city_name"
               optionValue="city_id"
-              placeholder="Todas las ciudades"
+              :placeholder="t('all_cities')"
               filter
               style="width: 100%;"
               showClear
@@ -52,7 +79,7 @@
               v-model="addressQuery"
               :suggestions="suggestions"
               optionLabel="description"
-              placeholder="Escribe tu dirección..."
+              :placeholder="t('type_address')"
               class="w-full"
               :minLength="3"
               :delay="250"
@@ -72,7 +99,7 @@
           <!-- PARAMS CITY: BARRIOS + DIRECCION EXACTA -->
           <div v-if="selectedCityId && isParamsCity" class="params-box">
             <div class="form-group">
-              <label class="city-label">Barrio / Sector</label>
+              <label class="city-label">{{ t('neighborhood_sector') }}</label>
 
               <AutoComplete
                 v-model="selectedNeighborhood"
@@ -82,7 +109,9 @@
                 :minLength="1"
                 :delay="150"
                 :disabled="loadingNeighborhoods || neighborhoods.length === 0"
-                :placeholder="loadingNeighborhoods ? 'Cargando barrios...' : (neighborhoods.length ? 'Escribe para buscar...' : 'No hay barrios')"
+                :placeholder="loadingNeighborhoods
+                  ? t('loading_neighborhoods')
+                  : (neighborhoods.length ? t('type_to_search') : t('no_neighborhoods'))"
                 @complete="onNeighborhoodComplete"
                 dropdown
                 style="width: 100%;"
@@ -98,12 +127,12 @@
             </div>
 
             <div class="form-group" style="margin-top:.7rem;">
-              <label class="city-label">Dirección exacta</label>
+              <label class="city-label">{{ t('exact_address') }}</label>
               <InputText
                 style="width: 100%;"
                 v-model="paramExactAddress"
                 class="w-full"
-                placeholder="Ej: Calle 123 # 45 - 67..."
+                :placeholder="t('exact_address_example_short')"
               />
             </div>
           </div>
@@ -113,19 +142,19 @@
         <section v-if="coverageResult && isGoogleCity" class="coverage-card">
           <div class="coverage-header">
             <Icon name="mdi:map-marker-check" size="1.4em" class="coverage-icon" />
-            <h3 class="coverage-title">Resultado de búsqueda</h3>
+            <h3 class="coverage-title">{{ t('search_result') }}</h3>
           </div>
 
           <div class="coverage-body">
             <div class="coverage-row">
-              <span class="coverage-label">Dirección:</span>
+              <span class="coverage-label">{{ t('address') }}:</span>
               <span class="coverage-value address-text">{{ coverageResult.formatted_address }}</span>
             </div>
 
             <div class="coverage-row">
-              <span class="coverage-label">Sede más cercana:</span>
+              <span class="coverage-label">{{ t('nearest_store') }}:</span>
               <span class="coverage-value">
-                {{ coverageResult.nearest?.site?.site_name || 'N/A' }}
+                {{ coverageResult.nearest?.site?.site_name || t('na') }}
                 <small v-if="coverageResult.nearest">
                   ({{ Number(coverageResult.nearest.distance_km || 0).toFixed(1) }} km)
                 </small>
@@ -133,12 +162,12 @@
             </div>
 
             <div class="coverage-row highlight">
-              <span class="coverage-label">Costo envío:</span>
+              <span class="coverage-label">{{ t('delivery_cost') }}:</span>
               <span class="coverage-value price">{{ formatCOP(coverageResult.delivery_cost_cop) }}</span>
             </div>
 
             <div class="coverage-status-text" :class="coverageResult.nearest?.in_coverage ? 'text-ok' : 'text-fail'">
-              {{ coverageResult.nearest?.in_coverage ? '✅ Cubrimos tu zona' : '❌ Fuera de zona de entrega' }}
+              {{ coverageResult.nearest?.in_coverage ? t('we_cover_zone') : t('out_of_delivery_zone') }}
             </div>
           </div>
 
@@ -155,7 +184,7 @@
               <template #icon>
                 <Icon name="mdi:moped" size="1.2em" />
               </template>
-              <span>Domicilio</span>
+              <span>{{ t('delivery') }}</span>
             </Button>
           </div>
         </section>
@@ -164,21 +193,21 @@
         <section v-if="isParamsCity && selectedNeighborhood" class="coverage-card">
           <div class="coverage-header">
             <Icon name="mdi:home-map-marker" size="1.4em" class="coverage-icon" />
-            <h3 class="coverage-title">Tu zona (Por Barrios)</h3>
+            <h3 class="coverage-title">{{ t('your_zone_by_neighborhoods') }}</h3>
           </div>
 
           <div class="coverage-body">
             <div class="coverage-row">
-              <span class="coverage-label">Barrio:</span>
+              <span class="coverage-label">{{ t('neighborhood') }}:</span>
               <span class="coverage-value">{{ selectedNeighborhood?.name || '—' }}</span>
             </div>
 
             <div class="coverage-row highlight">
-              <span class="coverage-label">Costo envío:</span>
+              <span class="coverage-label">{{ t('delivery_cost') }}:</span>
               <span class="coverage-value price">{{ formatCOP(paramDeliveryPrice) }}</span>
             </div>
 
-            <div class="coverage-status-text text-ok">✅ Listo para enviar</div>
+            <div class="coverage-status-text text-ok">{{ t('ready_to_send') }}</div>
           </div>
 
           <div class="coverage-actions">
@@ -190,7 +219,7 @@
               <template #icon>
                 <Icon name="mdi:moped" size="1.2em" />
               </template>
-              <span>Domicilio</span>
+              <span>{{ t('delivery') }}</span>
             </Button>
           </div>
         </section>
@@ -210,7 +239,7 @@
                 @load="loadHighResImage(store)"
                 @error="onImgError(store)"
                 class="store-img"
-                alt="Foto sede"
+                :alt="t('store_photo_alt')"
               />
             </div>
 
@@ -230,9 +259,9 @@
 
               <button class="store-action" :data-status="store.status || 'unknown'">
                 <span v-if="store.status === 'open'" class="status-flex">
-                  <Icon name="mdi:check-circle-outline" size="1.1em" /> Abierto
+                  <Icon name="mdi:check-circle-outline" size="1.1em" /> {{ t('open') }}
                 </span>
-                <span v-else class="status-flex">Cerrado</span>
+                <span v-else class="status-flex">{{ t('closed') }}</span>
               </button>
             </div>
 
@@ -259,8 +288,8 @@
 
           <!-- STEP 1 -->
           <div v-if="modalStep === 1">
-            <h3 class="modal-title">¿Cómo quieres tu pedido?</h3>
-            <p class="modal-subtitle">Sede: <strong>{{ modalStore.name }}</strong></p>
+            <h3 class="modal-title">{{ t('how_want_order') }}</h3>
+            <p class="modal-subtitle">{{ t('store_label') }}: <strong>{{ modalStore.name }}</strong></p>
 
             <div class="modal-actions">
               <Button
@@ -282,19 +311,19 @@
             <div class="modal-header-nav">
               <Button text class="modal-back-btn" @click="setModalStep(1)">
                 <Icon name="mdi:arrow-left" size="1.2em" />
-                <span>Volver</span>
+                <span>{{ t('back') }}</span>
               </Button>
             </div>
 
             <!-- GOOGLE MODAL -->
             <div v-if="isGoogleCity">
-              <h3 class="modal-title">¿Dónde estás?</h3>
+              <h3 class="modal-title">{{ t('where_are_you') }}</h3>
 
               <AutoComplete
                 v-model="modalAddressQuery"
                 :suggestions="modalSuggestions"
                 optionLabel="description"
-                placeholder="Calle 123 # 45 - 67..."
+                :placeholder="t('address_example')"
                 class="w-full"
                 :minLength="3"
                 style="width: 100%;"
@@ -316,17 +345,17 @@
 
             <!-- PARAMS MODAL -->
             <div v-else class="params-flow-modal">
-              <h3 class="modal-title">Datos de Entrega</h3>
+              <h3 class="modal-title">{{ t('delivery_details') }}</h3>
 
               <div class="form-group">
-                <label class="city-label">Busca tu Barrio</label>
+                <label class="city-label">{{ t('search_neighborhood') }}</label>
 
                 <AutoComplete
                   v-model="modalSelectedNeighborhood"
                   :suggestions="modalNbSuggestions"
                   optionLabel="name"
                   class="w-full"
-                  placeholder="Escribe para buscar..."
+                  :placeholder="t('type_to_search')"
                   :minLength="1"
                   style="width:100%;"
                   :delay="150"
@@ -338,22 +367,22 @@
 
               <div v-if="modalSelectedNeighborhood" style="margin: 1rem 0;" class="selected-nb-info">
                 <div class="info-row">
-                  <span>Barrio: </span>
+                  <span>{{ t('neighborhood') }}: </span>
                   <strong>{{ modalSelectedNeighborhood.name }}</strong>
                 </div>
                 <div class="info-row">
-                  <span>Domicilio: </span>
+                  <span>{{ t('delivery') }}: </span>
                   <strong class="text-green">{{ formatCOP(Number(modalSelectedNeighborhood.delivery_price || 0)) }}</strong>
                 </div>
               </div>
 
               <div class="form-group" style="margin-top: 1rem;">
-                <label class="city-label">Dirección Exacta</label>
+                <label class="city-label">{{ t('exact_address') }}</label>
                 <InputText
                   style="width: 100%;"
                   v-model="modalParamAddress"
                   class="w-full"
-                  placeholder="Ej: Calle 123 # 45 - 67 Apt 201"
+                  :placeholder="t('exact_address_example')"
                 />
               </div>
 
@@ -366,7 +395,7 @@
                 <template #icon>
                   <Icon name="mdi:moped" size="1.2em" />
                 </template>
-                <span>Confirmar Domicilio</span>
+                <span>{{ t('confirm_delivery') }}</span>
               </Button>
             </div>
           </div>
@@ -374,7 +403,7 @@
           <!-- STEP 3 -->
           <div v-else-if="modalStep === 3" class="modal-loading-view">
             <ProgressSpinner style="width:48px;height:48px" />
-            <p>Validando cobertura...</p>
+            <p>{{ t('validating_coverage') }}</p>
           </div>
 
           <!-- STEP 4 -->
@@ -384,23 +413,29 @@
                 <template #icon>
                   <Icon name="mdi:arrow-left" size="1.2em" />
                 </template>
-                <span>Volver</span>
+                <span>{{ t('back') }}</span>
               </Button>
             </div>
 
-            <h3 class="modal-title">Resumen de Cobertura</h3>
+            <h3 class="modal-title">{{ t('coverage_summary') }}</h3>
 
-            <div class="coverage-card" style="margin: 1rem 0; width: auto; border: none; box-shadow: none; background: transparent;">
-              <div class="coverage-body" style="padding: 0; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 1rem;">
+            <div
+              class="coverage-card"
+              style="margin: 1rem 0; width: auto; border: none; box-shadow: none; background: transparent;"
+            >
+              <div
+                class="coverage-body"
+                style="padding: 0; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 1rem;"
+              >
                 <div class="coverage-row">
-                  <span class="coverage-label">Dirección:</span>
+                  <span class="coverage-label">{{ t('address') }}:</span>
                   <span class="coverage-value address-text">{{ modalCoverageResult.formatted_address }}</span>
                 </div>
 
                 <div class="coverage-row">
-                  <span class="coverage-label">Sede asignada:</span>
+                  <span class="coverage-label">{{ t('assigned_store') }}:</span>
                   <span class="coverage-value">
-                    {{ modalCoverageResult.nearest?.site?.site_name || 'N/A' }}
+                    {{ modalCoverageResult.nearest?.site?.site_name || t('na') }}
                     <small v-if="modalCoverageResult.nearest">
                       ({{ Number(modalCoverageResult.nearest.distance_km || 0).toFixed(1) }} km)
                     </small>
@@ -408,12 +443,12 @@
                 </div>
 
                 <div class="coverage-row highlight">
-                  <span class="coverage-label">Costo envío:</span>
+                  <span class="coverage-label">{{ t('delivery_cost') }}:</span>
                   <span class="coverage-value price">{{ formatCOP(modalCoverageResult.delivery_cost_cop) }}</span>
                 </div>
 
                 <div class="coverage-status-text" :class="modalCoverageResult.nearest?.in_coverage ? 'text-ok' : 'text-fail'">
-                  {{ modalCoverageResult.nearest?.in_coverage ? '✅ Cubrimos tu zona' : '❌ Fuera de zona de entrega' }}
+                  {{ modalCoverageResult.nearest?.in_coverage ? t('we_cover_zone') : t('out_of_delivery_zone') }}
                 </div>
               </div>
             </div>
@@ -427,7 +462,7 @@
               <template #icon>
                 <Icon name="mdi:check-circle-outline" size="1.2em" />
               </template>
-              <span>Confirmar e Ir</span>
+              <span>{{ t('confirm_and_go') }}</span>
             </Button>
           </div>
         </div>
@@ -448,6 +483,121 @@ import InputText from 'primevue/inputtext'
 import Select from 'primevue/select'
 import Button from 'primevue/button'
 import ProgressSpinner from 'primevue/progressspinner'
+
+/* =======================
+   ✅ i18n local + persistencia
+   ======================= */
+const LANG_KEY = 'vicio_lang' // ✅ localStorage key
+const FLAGS = {
+  es: 'https://flagcdn.com/h20/es.png',
+  en: 'https://flagcdn.com/h20/us.png'
+}
+
+const lang = ref('es')
+
+function safeReadLang() {
+  try {
+    const v = localStorage.getItem(LANG_KEY)
+    if (v === 'es' || v === 'en') return v
+  } catch {}
+  return 'es'
+}
+
+function setLang(v) {
+  lang.value = v === 'en' ? 'en' : 'es'
+  try { localStorage.setItem(LANG_KEY, lang.value) } catch {}
+}
+
+const I18N = {
+  es: {
+    language: 'Idioma',
+    choose_nearest: 'ELIGE TU SALCHIMONSTER MÁS CERCANO',
+    city: 'Ciudad',
+    all_cities: 'Todas las ciudades',
+    type_address: 'Escribe tu dirección...',
+    neighborhood_sector: 'Barrio / Sector',
+    loading_neighborhoods: 'Cargando barrios...',
+    type_to_search: 'Escribe para buscar...',
+    no_neighborhoods: 'No hay barrios',
+    exact_address: 'Dirección exacta',
+    exact_address_example_short: 'Ej: Calle 123 # 45 - 67...',
+    search_result: 'Resultado de búsqueda',
+    address: 'Dirección',
+    nearest_store: 'Sede más cercana',
+    delivery_cost: 'Costo envío',
+    we_cover_zone: '✅ Cubrimos tu zona',
+    out_of_delivery_zone: '❌ Fuera de zona de entrega',
+    delivery: 'Domicilio',
+    your_zone_by_neighborhoods: 'Tu zona (Por Barrios)',
+    neighborhood: 'Barrio',
+    ready_to_send: '✅ Listo para enviar',
+    store_photo_alt: 'Foto sede',
+    open: 'Abierto',
+    closed: 'Cerrado',
+    how_want_order: '¿Cómo quieres tu pedido?',
+    store_label: 'Sede',
+    back: 'Volver',
+    where_are_you: '¿Dónde estás?',
+    address_example: 'Calle 123 # 45 - 67...',
+    delivery_details: 'Datos de Entrega',
+    search_neighborhood: 'Busca tu Barrio',
+    exact_address_example: 'Ej: Calle 123 # 45 - 67 Apt 201',
+    confirm_delivery: 'Confirmar Domicilio',
+    validating_coverage: 'Validando cobertura...',
+    coverage_summary: 'Resumen de Cobertura',
+    assigned_store: 'Sede asignada',
+    confirm_and_go: 'Confirmar e Ir',
+    redirecting_to: 'Te estamos llevando a',
+    starting_experience: 'Iniciando tu experiencia...',
+    na: 'N/A'
+  },
+  en: {
+    language: 'Language',
+    choose_nearest: 'CHOOSE YOUR NEAREST SALCHIMONSTER',
+    city: 'City',
+    all_cities: 'All cities',
+    type_address: 'Type your address...',
+    neighborhood_sector: 'Neighborhood / Area',
+    loading_neighborhoods: 'Loading neighborhoods...',
+    type_to_search: 'Type to search...',
+    no_neighborhoods: 'No neighborhoods',
+    exact_address: 'Exact address',
+    exact_address_example_short: 'Ex: Street 123 # 45 - 67...',
+    search_result: 'Search result',
+    address: 'Address',
+    nearest_store: 'Nearest store',
+    delivery_cost: 'Delivery cost',
+    we_cover_zone: '✅ We deliver to your area',
+    out_of_delivery_zone: '❌ Outside delivery area',
+    delivery: 'Delivery',
+    your_zone_by_neighborhoods: 'Your area (By neighborhoods)',
+    neighborhood: 'Neighborhood',
+    ready_to_send: '✅ Ready to deliver',
+    store_photo_alt: 'Store photo',
+    open: 'Open',
+    closed: 'Closed',
+    how_want_order: 'How do you want your order?',
+    store_label: 'Store',
+    back: 'Back',
+    where_are_you: 'Where are you?',
+    address_example: 'Street 123 # 45 - 67...',
+    delivery_details: 'Delivery details',
+    search_neighborhood: 'Search your neighborhood',
+    exact_address_example: 'Ex: Street 123 # 45 - 67 Apt 201',
+    confirm_delivery: 'Confirm delivery',
+    validating_coverage: 'Checking coverage...',
+    coverage_summary: 'Coverage summary',
+    assigned_store: 'Assigned store',
+    confirm_and_go: 'Confirm & go',
+    redirecting_to: 'Taking you to',
+    starting_experience: 'Starting your experience...',
+    na: 'N/A'
+  }
+}
+
+function t(key) {
+  return I18N[lang.value]?.[key] ?? I18N.es[key] ?? key
+}
 
 /* =======================
    CONFIG & STATE
@@ -525,6 +675,9 @@ function updateIsMobile() {
 }
 
 onMounted(() => {
+  // ✅ cargar idioma desde localStorage
+  if (typeof window !== 'undefined') lang.value = safeReadLang()
+
   lockPage()
 
   if (typeof window === 'undefined') return
@@ -551,7 +704,9 @@ const orderedCities = computed(() => {
 })
 
 const citySelectOptions = computed(() => {
-  return [{ city_id: 0, city_name: 'Todas las ciudades' }, ...orderedCities.value]
+  // ✅ Mantengo city_name en español porque viene del backend
+  // (si quieres traducir nombres de ciudad también, lo hacemos aparte)
+  return [{ city_id: 0, city_name: t('all_cities') }, ...orderedCities.value]
 })
 
 const selectedCityObj = computed(() => {
@@ -585,7 +740,7 @@ async function onAddressComplete(e) {
   try {
     const params = new URLSearchParams({
       input: q,
-      language: 'es',
+      language: lang.value, // ✅ idioma para Google suggestions
       countries: 'co',
       limit: '5',
       session_token: sessionToken.value
@@ -615,7 +770,7 @@ function onSelectSuggestionEvent(ev) {
 async function fetchCoverageDetails(placeId) {
   try {
     const res = await fetch(
-      `${LOCATIONS_BASE}/co/places/coverage-details?place_id=${placeId}&session_token=${sessionToken.value}&language=es`
+      `${LOCATIONS_BASE}/co/places/coverage-details?place_id=${placeId}&session_token=${sessionToken.value}&language=${lang.value}`
     )
     const data = await res.json()
     coverageResult.value = data
@@ -736,6 +891,16 @@ watch(shouldCollapseMap, async (collapsed) => {
   }
 })
 
+/* ✅ Si cambias idioma: actualizo placeholders ya solos, pero
+   reseteo errores/resultado para evitar mezclas raras.
+*/
+watch(lang, () => {
+  modalAddressError.value = ''
+  // no toco selectedCityId, solo limpio resultados visibles
+  coverageResult.value = null
+  // (si prefieres mantener el resultado, quito esta línea)
+})
+
 /* =======================
    MODAL LOGIC
    ======================= */
@@ -799,7 +964,7 @@ async function onModalAddressComplete(e) {
   try {
     const params = new URLSearchParams()
     params.append('input', q)
-    params.append('language', 'es')
+    params.append('language', lang.value) // ✅
     params.append('countries', 'co')
     params.append('limit', '4')
     params.append('session_token', sessionToken.value)
@@ -827,7 +992,7 @@ async function onSelectModalSuggestion(s) {
     const params = new URLSearchParams({
       place_id: s.place_id,
       session_token: sessionToken.value,
-      language: 'es'
+      language: lang.value // ✅
     })
     const res = await fetch(`${LOCATIONS_BASE}/co/places/coverage-details?${params}`)
     const data = await res.json()
@@ -838,11 +1003,15 @@ async function onSelectModalSuggestion(s) {
     if (ot) {
       modalStep.value = 4
     } else {
-      modalAddressError.value = 'El servicio de domicilio no está disponible en esta sede.'
+      modalAddressError.value = (lang.value === 'en')
+        ? 'Delivery service is not available for this store.'
+        : 'El servicio de domicilio no está disponible en esta sede.'
       modalStep.value = 2
     }
   } catch {
-    modalAddressError.value = 'Error validando dirección.'
+    modalAddressError.value = (lang.value === 'en')
+      ? 'Error validating address.'
+      : 'Error validando dirección.'
     modalStep.value = 2
   }
 }
@@ -864,7 +1033,10 @@ function onDispatchModalParams() {
 
   const ot = getExactOrderType(targetStore.id, 3)
   if (!ot) {
-    alert('La sede asignada a este barrio no tiene servicio de domicilio activo.')
+    alert(lang.value === 'en'
+      ? 'The store assigned to this neighborhood does not have delivery enabled.'
+      : 'La sede asignada a este barrio no tiene servicio de domicilio activo.'
+    )
     return
   }
 
@@ -891,7 +1063,10 @@ function confirmGoogleDispatch() {
       city: selectedCityObj.value
     })
   } else {
-    alert('Error: No se pudo determinar el tipo de orden para domicilio.')
+    alert(lang.value === 'en'
+      ? 'Error: Could not determine the delivery order type.'
+      : 'Error: No se pudo determinar el tipo de orden para domicilio.'
+    )
   }
 }
 
@@ -1099,7 +1274,10 @@ async function dispatchToSite(manualStore, orderTypeObj, extra = { mode: 'simple
   } catch (error) {
     console.error(error)
     isRedirecting.value = false
-    alert('Error al transferir. Intenta de nuevo.')
+    alert(lang.value === 'en'
+      ? 'Transfer error. Please try again.'
+      : 'Error al transferir. Intenta de nuevo.'
+    )
   }
 }
 
@@ -1111,7 +1289,13 @@ function onDispatchParamsDelivery() {
   const store = paramAssignedStore.value
   if (!store) return
   const ot = getExactOrderType(store.id, 3)
-  if (!ot) { alert('Esta sede no tiene habilitado domicilio.'); return }
+  if (!ot) {
+    alert(lang.value === 'en'
+      ? 'This store does not have delivery enabled.'
+      : 'Esta sede no tiene habilitado domicilio.'
+    )
+    return
+  }
 
   dispatchToSite(store, ot, {
     mode: 'params',
@@ -1358,6 +1542,15 @@ onMounted(async () => {
   position: relative;
   z-index: 5;
 }
+
+/* ✅ Top row: title + language selector */
+.sidebar-header-top{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap: .75rem;
+}
+
 .sidebar-title {
   font-size: 0.82rem;
   letter-spacing: 0.18em;
@@ -1368,8 +1561,50 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 0.4rem;
+  flex: 1;
 }
 .sidebar-title::before { content: "🔥"; font-size: 1rem; }
+
+/* ✅ Language switch styles (local, no Pinia) */
+.lang-switch{
+  display:flex;
+  gap:.4rem;
+  margin-top:.05rem;
+  flex-shrink:0;
+}
+.lang-btn{
+  display:inline-flex;
+  align-items:center;
+  gap:.35rem;
+  padding:.28rem .45rem;
+  border-radius:999px;
+  border:1px solid #e2e8f0;
+  background:#fff;
+  cursor:pointer;
+  font-weight:800;
+  font-size:.72rem;
+  letter-spacing:.08em;
+  color:#334155;
+  transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+}
+.lang-btn:hover{
+  transform: translateY(-1px);
+  box-shadow: 0 6px 14px rgba(0,0,0,.06);
+}
+.lang-btn.is-active{
+  border-color:#ff6600;
+  box-shadow: 0 6px 16px rgba(255,102,0,.15);
+}
+.lang-flag{
+  width:18px;
+  height:18px;
+  border-radius:999px;
+  object-fit:cover;
+  border:1px solid rgba(0,0,0,.08);
+}
+.lang-label{
+  line-height:1;
+}
 
 .city-select-wrapper { margin-bottom: 0.9rem; }
 .city-label {
@@ -1621,5 +1856,8 @@ onMounted(async () => {
   .store-img-wrapper { width: 70px; height: 70px; }
   .store-item { padding: 0.8rem 1rem; }
   .coverage-card { margin: 1rem; }
+
+  /* ✅ en móvil el selector de idioma respira mejor */
+  .sidebar-header-top { align-items: center; }
 }
 </style>
