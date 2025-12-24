@@ -141,7 +141,7 @@
         <footer class="receipt-footer">
           <a :href="whatsappUrl" target="_blank" class="full-width-link">
               <button class="btn btn-whatsapp">
-                <i class="pi pi-whatsapp"></i> ¿Tienes dudas?
+                <i class="pi pi-whatsapp"></i> Dudas?
               </button>
           </a>
           
@@ -151,7 +151,7 @@
             :disabled="loadingPay"
           >
             <i class="pi" :class="loadingPay ? 'pi-spin pi-spinner' : 'pi-ticket'"></i>
-            {{ loadingPay ? 'Procesando...' : 'PAGAR AHORA' }}
+            {{ loadingPay ? 'Procesando...' : 'Pagar' }}
           </button>
         </footer>
 
