@@ -49,7 +49,7 @@ const shouldUseGoogleMaps = computed(() => {
 
 <template>
   <div>
-    <SiteDialog />
+
 
     <!-- <div style="font-size: 10px; color: gray;">
        Debug: ID Ciudad: {{ location?.site?.city_id }} | Google: {{ shouldUseGoogleMaps }}

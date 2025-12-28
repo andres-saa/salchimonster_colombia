@@ -1,5 +1,6 @@
 <template>
   <div class="checkout-page">
+        <SiteDialog />
     <!-- ================== OVERLAY REDIRECCIÓN ================== -->
     <Transition name="fade">
       <div v-if="isRedirecting" class="redirect-overlay">
@@ -931,6 +932,20 @@ const clearCoupon = () => {
 
 /* ================= Mount ================= */
 onMounted(async () => {
+
+
+
+
+    if (user.user.order_type?.id === 2 || user.user.order_type?.id === 6) {
+      siteStore.location.neigborhood.delivery_price = 0
+    } else {
+      const cost = user.user.site?.delivery_cost_cop ?? siteStore?.delivery_price
+      if (cost != null) siteStore.location.neigborhood.delivery_price = cost
+    }
+
+
+
+
   initCountries()
   if (!user.user.phone_code) {
     const defaultCode = lang.value === 'en' ? 'US' : 'CO'

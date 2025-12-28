@@ -178,6 +178,13 @@ const update = () => { /* Hook para recalcular si es necesario */ }
 watch(() => store.cart?.additions, () => update(), { deep: true })
 
 onMounted(async () => {
+
+    if (user.user.order_type?.id === 2 || user.user.order_type?.id === 6) {
+      siteStore.location.neigborhood.delivery_price = 0
+    } else {
+      const cost = user.user.site?.delivery_cost_cop ?? siteStore?.delivery_price
+      if (cost != null) siteStore.location.neigborhood.delivery_price = cost
+    }
   if (user.user.payment_method_option?.productogeneral_id != 7) {
     siteStore.setNeighborhoodPrice()
   } else {

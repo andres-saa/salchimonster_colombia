@@ -1,5 +1,6 @@
 <template>
   <div class="checkout-page">
+        <SiteDialog />
 
     <Transition name="fade">
       <div v-if="isRedirecting" class="redirect-overlay">
