@@ -23,11 +23,10 @@ const handleSearch = () => {
 
 // --- LÓGICA DE ESTADO (Abierto/Cerrado) ---
 const isOpen = computed(() => {
-  // const st = siteStore.status
-  // if (!st) return false
-  // if (typeof st === 'string') return st === 'open'
-  // return st.status === 'open'
-  return true
+  const st = siteStore.status
+  if (!st) return false
+  if (typeof st === 'string') return st === 'open'
+  return st.status === 'open'
 })
 
 // Hora de apertura para el mensaje de cerrado
@@ -162,24 +161,51 @@ const menusAll = computed(() => {
   return isLoggedIn.value ? menusLogueados : menusPublicos
 })
 
-// Redes por defecto
+// ✅ Country (para filtrar redes por país)
+const country = computed(() => {
+ 
+    const code =  siteStore?.location?.site?.country_code  || 'co'
+    return code
+})
+
+// ✅ Default Colombia (fallback)
 const defaultSocialLinks = [
-  { name: 'facebook', url: 'https://www.facebook.com/salchimonsteresp?locale=es_LA', icon: 'mdi:facebook' },
-  { name: 'instagram', url: 'https://www.instagram.com/salchimonsteresp/', icon: 'mdi:instagram' },
-  { name: 'whatsapp', url: 'https://wa.me/573005089846', icon: 'mdi:whatsapp' },
-  { name: 'tiktok', url: 'https://www.tiktok.com/@salchimonsterespana', icon: 'fa7-brands:tiktok' }
+  
 ]
 
-const socialLinks = computed(() => {
-  const raw = siteStore.status?.networks || siteStore.current?.networks || siteStore.site?.networks
-  if (!raw) return defaultSocialLinks
-  if (Array.isArray(raw)) return raw
+// ✅ API: redes por país
+const SOCIAL_LINKS_API = 'https://backend.salchimonster.com/data/social_links_by_country_v1'
+const socialLinksDB = ref(null)
+
+const fetchSocialLinksDB = async () => {
   try {
-    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
-    return Array.isArray(parsed) ? parsed : defaultSocialLinks
+    const res = await fetch(SOCIAL_LINKS_API).then(r => r.json())
+
+    // soporta: { data: { co:[], us:[], es:[] } } o directamente { co:[], us:[], es:[] }
+    const payload = res?.data && typeof res.data === 'object' ? res.data : res
+    socialLinksDB.value = payload && typeof payload === 'object' ? payload : null
   } catch (e) {
-    return defaultSocialLinks
+    console.error('Error cargando social_links_by_country_v1:', e)
+    socialLinksDB.value = null
   }
+}
+
+// ✅ socialLinks: primero DB, si no, fallback Colombia
+const socialLinks = computed(() => {
+  const fromDB = socialLinksDB.value?.[country.value]
+  const list = Array.isArray(fromDB) ? fromDB : null
+
+  const finalList = list || defaultSocialLinks
+
+  // filtra enabled si existe, y url válida
+  return finalList
+    .filter(n => (n?.enabled ?? true))
+    .filter(n => !!n?.url)
+    .map(n => ({
+      name: n.name,
+      url: n.url,
+      icon: n.icon
+    }))
 })
 
 const isActiveRoute = (path) => route.path === path
@@ -264,6 +290,7 @@ onMounted(() => {
   }
 
   siteStore.initStatusWatcher()
+  fetchSocialLinksDB() // ✅ aquí se llama la API
   nextTick().then(() => recalcMenus())
 })
 
@@ -317,7 +344,7 @@ watch([menusAll, windowWidth], () => {
               <div class="site-info">
                 <Icon name="mdi:map-marker" class="marker-icon" />
                 <span class="site-name">
-                  {{ siteStore?.location?.site?.site_name || 'Salchimonster' }}
+                  {{ siteStore?.location?.site?.site_name?.toLowerCase() || 'Salchimonster' }}
                 </span>
                 <div v-if="isOpen" class="live-dot-container" title="Estamos Abiertos">
                   <div class="live-dot"></div>
@@ -586,6 +613,7 @@ watch([menusAll, windowWidth], () => {
 .site-name {
   font-weight: 800;
   font-size: 1rem;
+  min-width: max-content;
   text-transform: capitalize;
   color: #333;
   line-height: 1.1;
@@ -608,7 +636,7 @@ watch([menusAll, windowWidth], () => {
 @keyframes blink-dot {
   0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0, 230, 118, 0.7); }
   70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(0, 230, 118, 0); }
-  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0, 230, 118, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(0, 230, 118, 0.7); }
 }
 
 /* --- MENÚ DE ESCRITORIO --- */
@@ -747,13 +775,13 @@ watch([menusAll, windowWidth], () => {
   padding: 0.45rem 0.65rem;
   border-radius: 999px;
   border: 1px solid #eee;
-  background: rgba(255,255,255,0.85);
+  background: rgba(255, 255, 255, 0.882);
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .lang-trigger:hover {
-  background: rgba(0,0,0,0.04);
+  background: rgb(240, 240, 240);
   border-color: #e0e0e0;
 }
 

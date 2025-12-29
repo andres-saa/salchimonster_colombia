@@ -257,12 +257,26 @@
                 {{ store.address }} – {{ store.city }}
               </p>
 
-              <button class="store-action" :data-status="store.status || 'unknown'">
-                <span v-if="store.status === 'open'" class="status-flex">
-                  <Icon name="mdi:check-circle-outline" size="1.1em" /> {{ t('open') }}
-                </span>
-                <span v-else class="status-flex">{{ t('closed') }}</span>
-              </button>
+              <!-- ✅ estado + whatsapp -->
+              <div class="store-actions-row">
+                <button class="store-action" :data-status="store.status || 'unknown'">
+                  <span v-if="store.status === 'open'" class="status-flex">
+                    <Icon name="mdi:check-circle-outline" size="1.1em" /> {{ t('open') }}
+                  </span>
+                  <span v-else class="status-flex">{{ t('closed') }}</span>
+                </button>
+
+                <button
+                  class="store-whatsapp"
+                  type="button"
+                  :disabled="!store.site_phone"
+                  @click.stop="openWhatsApp(store)"
+                  :title="store.site_phone ? t('write_whatsapp') : t('no_whatsapp')"
+                >
+                  <Icon name="mdi:whatsapp" size="1.15em" />
+                  <span>{{ t('whatsapp') }}</span>
+                </button>
+              </div>
             </div>
 
             <button class="store-arrow" type="button">
@@ -289,7 +303,26 @@
           <!-- STEP 1 -->
           <div v-if="modalStep === 1">
             <h3 class="modal-title">{{ t('how_want_order') }}</h3>
-            <p class="modal-subtitle">{{ t('store_label') }}: <strong>{{ modalStore.name }}</strong></p>
+            <p class="modal-subtitle">
+              {{ t('store_label') }}: <strong>{{ modalStore.name }}</strong>
+            </p>
+
+            <!-- ✅ WhatsApp en el modal -->
+            <div class="modal-whatsapp-row">
+              <Button
+                class="btn-action btn-whatsapp full-width"
+                severity="secondary"
+                :disabled="!modalStore.site_phone"
+                @click="openWhatsApp(modalStore)"
+              >
+                <template #icon>
+                  <Icon name="mdi:whatsapp" size="1.25em" />
+                </template>
+                 <Icon name="mdi:whatsapp" size="1.5em" />
+                <span>{{ t('write_whatsapp') }}</span>
+                
+              </Button>
+            </div>
 
             <div class="modal-actions">
               <Button
@@ -487,7 +520,7 @@ import ProgressSpinner from 'primevue/progressspinner'
 /* =======================
    ✅ i18n local + persistencia
    ======================= */
-const LANG_KEY = 'vicio_lang' // ✅ localStorage key
+const LANG_KEY = 'vicio_lang'
 const FLAGS = {
   es: 'https://flagcdn.com/h20/es.png',
   en: 'https://flagcdn.com/h20/us.png'
@@ -549,7 +582,13 @@ const I18N = {
     confirm_and_go: 'Confirmar e Ir',
     redirecting_to: 'Te estamos llevando a',
     starting_experience: 'Iniciando tu experiencia...',
-    na: 'N/A'
+    na: 'N/A',
+
+    // ✅ WhatsApp
+    whatsapp: 'WhatsApp',
+    write_whatsapp: 'Escribir por WhatsApp',
+    no_whatsapp: 'Esta sede no tiene WhatsApp',
+    whatsapp_default_msg: 'Hola, tengo una consulta. ¿Me ayudas por favor?'
   },
   en: {
     language: 'Language',
@@ -591,7 +630,13 @@ const I18N = {
     confirm_and_go: 'Confirm & go',
     redirecting_to: 'Taking you to',
     starting_experience: 'Starting your experience...',
-    na: 'N/A'
+    na: 'N/A',
+
+    // ✅ WhatsApp
+    whatsapp: 'WhatsApp',
+    write_whatsapp: 'Message on WhatsApp',
+    no_whatsapp: 'This store has no WhatsApp',
+    whatsapp_default_msg: 'Hi! I have a question. Can you help me please?'
   }
 }
 
@@ -631,11 +676,46 @@ const isRedirecting = ref(false)
 const targetSiteName = ref('')
 
 /* =======================
+   ✅ WhatsApp helper
+   ======================= */
+function normalizeWhatsAppPhone(phone) {
+  if (!phone) return ''
+  // deja solo dígitos
+  let digits = String(phone).replace(/[^\d]/g, '')
+  // si viene como 322xxxxxxx (10 dígitos), asumimos CO y prefijamos 57
+  if (digits.length === 10) digits = `57${digits}`
+  return digits
+}
+
+function buildWhatsAppLink(store, customText = '') {
+  const digits = normalizeWhatsAppPhone(store?.site_phone)
+  if (!digits) return ''
+  const text =
+    (customText && String(customText).trim())
+      ? String(customText).trim()
+      : t('whatsapp_default_msg')
+
+  // wa.me requiere URL encode
+  const q = encodeURIComponent(text)
+  return `https://wa.me/${digits}?text=${q}`
+}
+
+function openWhatsApp(store) {
+  const url = buildWhatsAppLink(store, `${t('whatsapp_default_msg')} (${store?.name || ''})`)
+  if (!url) return
+  try {
+    window.open(url, '_blank', 'noopener,noreferrer')
+  } catch {
+    // fallback
+    window.location.href = url
+  }
+}
+
+/* =======================
    ✅ App-like: bloquear scroll global + zoom del navegador
    ======================= */
 const preventGesture = (e) => { try { e.preventDefault() } catch {} }
 const preventCtrlWheelZoom = (e) => {
-  // Desktop: Ctrl + wheel => zoom del navegador
   if (e.ctrlKey) {
     try { e.preventDefault() } catch {}
   }
@@ -645,11 +725,9 @@ function lockPage() {
   if (typeof window === 'undefined') return
   document.documentElement.classList.add('no-global-scroll')
   document.body.classList.add('no-global-scroll')
-  // iOS Safari (pinch)
   window.addEventListener('gesturestart', preventGesture, { passive: false })
   window.addEventListener('gesturechange', preventGesture, { passive: false })
   window.addEventListener('gestureend', preventGesture, { passive: false })
-  // Desktop browser zoom
   window.addEventListener('wheel', preventCtrlWheelZoom, { passive: false })
 }
 
@@ -675,9 +753,7 @@ function updateIsMobile() {
 }
 
 onMounted(() => {
-  // ✅ cargar idioma desde localStorage
   if (typeof window !== 'undefined') lang.value = safeReadLang()
-
   lockPage()
 
   if (typeof window === 'undefined') return
@@ -689,7 +765,6 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   unlockPage()
-
   if (!mq) return
   if (mq.removeEventListener) mq.removeEventListener('change', updateIsMobile)
   else mq.removeListener(updateIsMobile)
@@ -704,8 +779,6 @@ const orderedCities = computed(() => {
 })
 
 const citySelectOptions = computed(() => {
-  // ✅ Mantengo city_name en español porque viene del backend
-  // (si quieres traducir nombres de ciudad también, lo hacemos aparte)
   return [{ city_id: 0, city_name: t('all_cities') }, ...orderedCities.value]
 })
 
@@ -740,7 +813,7 @@ async function onAddressComplete(e) {
   try {
     const params = new URLSearchParams({
       input: q,
-      language: lang.value, // ✅ idioma para Google suggestions
+      language: lang.value,
       countries: 'co',
       limit: '5',
       session_token: sessionToken.value
@@ -868,7 +941,6 @@ const isGoogleCity = computed(() => {
 })
 const isParamsCity = computed(() => !isGoogleCity.value)
 
-/* ✅ colapsa el mapa cuando ya hay selección (o modal abierto) en móvil */
 const shouldCollapseMap = computed(() => {
   if (!isMobile.value) return false
   const sidebarHasResult =
@@ -878,7 +950,6 @@ const shouldCollapseMap = computed(() => {
   return sidebarHasResult || modalIsOpen
 })
 
-/* ✅ cuando el mapa vuelve a aparecer, Leaflet necesita invalidateSize */
 watch(shouldCollapseMap, async (collapsed) => {
   if (!collapsed) {
     await nextTick()
@@ -891,14 +962,9 @@ watch(shouldCollapseMap, async (collapsed) => {
   }
 })
 
-/* ✅ Si cambias idioma: actualizo placeholders ya solos, pero
-   reseteo errores/resultado para evitar mezclas raras.
-*/
 watch(lang, () => {
   modalAddressError.value = ''
-  // no toco selectedCityId, solo limpio resultados visibles
   coverageResult.value = null
-  // (si prefieres mantener el resultado, quito esta línea)
 })
 
 /* =======================
@@ -910,7 +976,6 @@ async function openModal(store) {
   modalStep.value = 1
   isModalOpen.value = true
 
-  // reset
   modalAddressQuery.value = ''
   modalSuggestions.value = []
   modalCoverageResult.value = null
@@ -964,7 +1029,7 @@ async function onModalAddressComplete(e) {
   try {
     const params = new URLSearchParams()
     params.append('input', q)
-    params.append('language', lang.value) // ✅
+    params.append('language', lang.value)
     params.append('countries', 'co')
     params.append('limit', '4')
     params.append('session_token', sessionToken.value)
@@ -992,7 +1057,7 @@ async function onSelectModalSuggestion(s) {
     const params = new URLSearchParams({
       place_id: s.place_id,
       session_token: sessionToken.value,
-      language: lang.value // ✅
+      language: lang.value
     })
     const res = await fetch(`${LOCATIONS_BASE}/co/places/coverage-details?${params}`)
     const data = await res.json()
@@ -1111,7 +1176,8 @@ async function loadStores() {
         lng: s.location?.[1] || -74.0,
         subdomain: s.subdomain,
         img_id: s.img_id,
-        status: 'unknown'
+        status: 'unknown',
+        site_phone: s.site_phone || null // ✅ AQUI
       }))
   } catch {}
 }
@@ -1354,10 +1420,8 @@ function updateBounds() {
 }
 
 async function onCityChange() {
-  // ✅ asegurar número (PrimeVue a veces retorna string)
   selectedCityId.value = Number(selectedCityId.value || 0)
 
-  // ✅ al cambiar ciudad: reseteo resultados => el mapa vuelve a aparecer en móvil con animación
   coverageResult.value = null
   addressQuery.value = ''
   suggestions.value = []
@@ -1367,7 +1431,6 @@ async function onCityChange() {
   nbSuggestions.value = []
   if (!selectedCityId.value) paramExactAddress.value = ''
 
-  // marker gmaps reset
   try {
     if (dropoffMarker.value && map.value) {
       map.value.removeLayer(dropoffMarker.value)
@@ -1396,7 +1459,6 @@ async function onCityChange() {
 
   const targetBounds = L.latLngBounds(latlngs)
 
-  // ✅ "doble animación"
   map.value.flyToBounds(initialBounds.value, { padding: [40, 40], animate: true, duration: 0.7 })
   setTimeout(() => {
     if (!map.value || Number(selectedCityId.value) !== Number(cityIdAtClick)) return
@@ -1422,7 +1484,6 @@ onMounted(async () => {
     maxBoundsViscosity: 1.0,
     zoomControl: false,
 
-    // ✅ Sin gestos / zoom / scroll en el mapa (app-like)
     scrollWheelZoom: false,
     doubleClickZoom: false,
     touchZoom: false,
@@ -1480,34 +1541,22 @@ onMounted(async () => {
   overscroll-behavior: none;
 }
 
-:global(body.no-global-scroll) {
-  margin: 0;
-}
+:global(body.no-global-scroll) { margin: 0; }
+:global(html.no-global-scroll) { -webkit-text-size-adjust: 100%; }
 
-/* Evita “bounce” raro en iOS */
-:global(html.no-global-scroll) {
-  -webkit-text-size-adjust: 100%;
-}
-
-/* =========================
-   Layout base (App Shell)
-   ========================= */
 .vicio-root { width: 100%; height: 100%; }
 .vicio-page {
   display: flex;
   width: 100%;
-  height: 100dvh;           /* ✅ mejor que 100vh en móvil */
+  height: 100dvh;
   max-height: 100dvh;
-  overflow: hidden;         /* ✅ no scroll global */
+  overflow: hidden;
   background: var(--bg-page);
   color: var(--text-primary);
   font-family: 'Roboto', sans-serif;
-
-  /* ✅ evita gestos globales; el scroll vive SOLO en .stores-list */
   touch-action: none;
 }
 
-/* ✅ mapa se queda fijo dentro del layout, sin scroll */
 .vicio-map-shell {
   flex: 1 1 55%;
   height: 100%;
@@ -1519,10 +1568,9 @@ onMounted(async () => {
   width: 100%;
   height: 100%;
   background: #e2e8f0;
-  touch-action: none; /* ✅ sin pinch/drag en el mapa */
+  touch-action: none;
 }
 
-/* Sidebar sin scroll global, SOLO lista */
 .vicio-sidebar {
   flex: 1 1 45%;
   display: flex;
@@ -1531,7 +1579,7 @@ onMounted(async () => {
   border-left: 1px solid var(--border-subtle);
   box-shadow: -5px 0 25px rgba(0, 0, 0, 0.05);
   height: 100%;
-  overflow: hidden; /* ✅ */
+  overflow: hidden;
 }
 
 .sidebar-header {
@@ -1543,7 +1591,6 @@ onMounted(async () => {
   z-index: 5;
 }
 
-/* ✅ Top row: title + language selector */
 .sidebar-header-top{
   display:flex;
   align-items:flex-start;
@@ -1565,7 +1612,6 @@ onMounted(async () => {
 }
 .sidebar-title::before { content: "🔥"; font-size: 1rem; }
 
-/* ✅ Language switch styles (local, no Pinia) */
 .lang-switch{
   display:flex;
   gap:.4rem;
@@ -1602,9 +1648,7 @@ onMounted(async () => {
   object-fit:cover;
   border:1px solid rgba(0,0,0,.08);
 }
-.lang-label{
-  line-height:1;
-}
+.lang-label{ line-height:1; }
 
 .city-select-wrapper { margin-bottom: 0.9rem; }
 .city-label {
@@ -1684,17 +1728,24 @@ onMounted(async () => {
 .btn-action:active { transform: scale(0.97); }
 .btn-delivery { background-color: #ff6600; color: #ffffff; box-shadow: 0 4px 10px rgba(255, 102, 0, 0.25); }
 .btn-delivery:hover { background-color: #e65c00; }
+
+/* ✅ WhatsApp */
+.btn-whatsapp{
+  background:#22c55e;
+  color:#fff;
+  box-shadow: 0 4px 10px rgba(34,197,94,.25);
+}
+.btn-whatsapp:hover{ background:#16a34a; }
 .full-width { width: 100%; }
 
-/* ✅ SOLO aquí hay scroll */
 .stores-list {
   flex: 1;
   overflow-y: auto;
   background: #ffffff;
   padding: 0.45rem 0 1.2rem;
-  overscroll-behavior: contain;         /* ✅ no rebote hacia “body” */
-  -webkit-overflow-scrolling: touch;    /* ✅ suave iOS */
-  touch-action: pan-y;                  /* ✅ permitir scroll vertical */
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
 }
 
 .store-item {
@@ -1727,6 +1778,14 @@ onMounted(async () => {
 .store-services { font-size: 0.7rem; font-weight: 600; text-transform: uppercase; color: #ff6600; letter-spacing: 0.12em; }
 .store-address { font-size: 0.84rem; color: var(--text-soft); margin-bottom: 0.4rem; }
 
+/* ✅ fila de chips */
+.store-actions-row{
+  display:flex;
+  align-items:center;
+  gap:.55rem;
+  flex-wrap:wrap;
+}
+
 .store-action {
   align-self: flex-start;
   border: none;
@@ -1744,6 +1803,31 @@ onMounted(async () => {
 .store-action[data-status='closed'],
 .store-action[data-status='close'] { background: #fee2e2; color: #991b1b; }
 .store-action[data-status='unknown'] { background: #f1f5f9; color: #94a3b8; }
+
+/* ✅ botón WhatsApp en cada sede */
+.store-whatsapp{
+  border:none;
+  background:#dcfce7;
+  color:#166534;
+  font-size:.72rem;
+  font-weight:900;
+  padding:.38rem .8rem;
+  border-radius:999px;
+  letter-spacing:.12em;
+  text-transform:uppercase;
+  display:inline-flex;
+  align-items:center;
+  gap:.35rem;
+  cursor:pointer;
+  transition: transform .12s ease, filter .12s ease;
+}
+.store-whatsapp:hover{  filter: brightness(.98); }
+.store-whatsapp:disabled{
+  opacity:.55;
+  cursor:not-allowed;
+  background:#f1f5f9;
+  color:#94a3b8;
+}
 
 .store-arrow {
   background: #000000;
@@ -1778,7 +1862,12 @@ onMounted(async () => {
   text-transform: uppercase;
   margin-top: 2rem;
 }
-.modal-subtitle { text-align: center; color: #64748b; font-size: 0.9rem; margin-bottom: 1.5rem; }
+.modal-subtitle { text-align: center; color: #64748b; font-size: 0.9rem; margin-bottom: 1.0rem; }
+
+.modal-whatsapp-row{
+  /* padding: 0 1.2rem; */
+  margin-bottom: .8rem;
+}
 
 .modal-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem; }
 .modal-btn {
@@ -1816,7 +1905,6 @@ onMounted(async () => {
 .fade-enter-active, .fade-leave-active { transition: opacity 0.3s; }
 .fade-enter-from, .fade-leave-to { opacity: 0; }
 
-/* ✅ Mobile behavior + animación de colapso */
 @media (max-width: 900px) {
   .vicio-page { flex-direction: column; }
 
@@ -1856,9 +1944,10 @@ onMounted(async () => {
   .store-img-wrapper { width: 70px; height: 70px; }
   .store-item { padding: 0.8rem 1rem; }
   .coverage-card { margin: 1rem; }
-
-  /* ✅ en móvil el selector de idioma respira mejor */
   .sidebar-header-top { align-items: center; }
 }
+
+*{
+  transition: all .3s ease;
+}
 </style>
- 

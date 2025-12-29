@@ -5,7 +5,17 @@
     </NuxtLayout>
 
     <ToastContainer />
-
+ <a
+     
+      :href="whatsappFloatUrl"
+      target="_blank"
+      rel="noopener"
+      class="wsp-float"
+      aria-label="Abrir WhatsApp"
+      title="¿Tienes dudas? Escríbenos"
+    >
+      <Icon size="xx-large" name="mdi:whatsapp" class="wsp-icon" />
+    </a>
     <CartBar />
     <MenuSearchModal />
   </div>
@@ -36,6 +46,34 @@ let isRestoring = true // 🛡️ Bloqueo inicial para no guardar datos vacíos 
 // ------------------------------------------------------------------------
 // 1. LÓGICA DE SINCRONIZACIÓN (PUT)
 // ------------------------------------------------------------------------
+
+
+function cleanPhone(raw) {
+  if (!raw) return null
+  const digits = String(raw).replace(/\D/g, '')
+  return digits.length >= 10 ? digits : null
+}
+
+const whatsappPhone = computed(() => cleanPhone(siteStore.location?.site?.site_phone))
+
+const showWhatsappFloat = computed(() => {
+  // si estás en iframe y no quieres mostrarlo:
+  if (userStore.user?.iframe) return false
+  return !!whatsappPhone.value
+})
+
+const whatsappFloatUrl = computed(() => {
+  const baseUrl = 'https://api.whatsapp.com/send'
+  const phone = whatsappPhone.value || ''
+
+  const pageUrl = process.client ? window.location.href : ''
+  const siteName = siteStore.location?.site?.site_name || 'la sede'
+
+  const text = `Hola 😊 Tengo una duda con ${pageUrl ? `\n\nLink: ${pageUrl}` : ''}`
+
+  const params = new URLSearchParams({ phone, text })
+  return `${baseUrl}?${params.toString()}`
+})
 
 /**
  * Genera el objeto JSON exacto que espera el backend
@@ -344,3 +382,40 @@ onBeforeUnmount(() => {
   window.removeEventListener('popstate', onPopState)
 })
 </script>
+
+
+<style scoped>
+/* ✅ Botón flotante WhatsApp */
+.wsp-float {
+  position: fixed;
+  right: 16px;
+  bottom: 96px; /* deja espacio por CartBar */
+  width: 48px;
+  height:48px;
+  border-radius: 999px;
+  background: #25d366;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.18);
+  z-index: 9999;
+  transition: transform 0.12s ease, opacity 0.2s ease;
+}
+
+.wsp-float:hover {
+  transform: scale(1.05);
+}
+
+.wsp-float:active {
+  transform: scale(0.98);
+}
+
+/* NuxtIcon suele renderizar svg dentro */
+.wsp-icon :deep(svg) {
+  width: 40px;
+  height: 28px;
+  display: block;
+}
+</style>
