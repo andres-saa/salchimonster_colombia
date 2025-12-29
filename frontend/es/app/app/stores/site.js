@@ -169,7 +169,7 @@ export const useSitesStore = defineStore(
         else if (raw === 'closed' || raw === 'close') normalized = 'closed'
 
         status.value = {
-          status: 'open',
+          status: normalized,
           next_opening_time: data.next_opening_time || null,
           networks: data.networks || status.value.networks || null,
         }
