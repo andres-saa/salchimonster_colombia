@@ -161,7 +161,7 @@ const confirmLocation = () => {
   const currentHash = siteStore.session_hash
     if (!currentHash) return
 
-  window.location.href = `https://${subdomain}.salchimonster.com?hash=${currentHash}/`
+  window.location.href = `https://${subdomain}.salchimonster.com/pay?hash=${currentHash}/`
 
   store.setVisible('currentSiteRecoger', false)
 }
