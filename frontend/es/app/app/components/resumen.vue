@@ -273,8 +273,9 @@ const pay = async () => {
   }
 
   order_id.value = await orderServiceEpayco.sendOrder()
-  if (!order_id.value) return
-  payWithEpayco(order_id.value)
+  
+  // if (!order_id.value) return
+  // payWithEpayco(order_id.value)
 }
 
 const payWithEpayco = (id) => {
@@ -283,12 +284,12 @@ const payWithEpayco = (id) => {
       return
   }
 
-  const handler = window.ePayco.checkout.configure({
-    key: epaycoPublicKey,
-    test: false,
-    response_type: 'redirect',
-    onClosed: () => console.log('Modal cerrado')
-  })
+  // const handler = window.ePayco.checkout.configure({
+  //   key: epaycoPublicKey,
+  //   test: false,
+  //   response_type: 'redirect',
+  //   onClosed: () => console.log('Modal cerrado')
+  // })
 
   // Usamos el precio del domicilio del store (que pudo ser editado manualmente)
   const totalAPagar = store.cartTotal + (deliveryPrice.value || 0)

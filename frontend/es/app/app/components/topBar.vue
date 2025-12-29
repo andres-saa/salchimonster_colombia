@@ -23,10 +23,11 @@ const handleSearch = () => {
 
 // --- LÓGICA DE ESTADO (Abierto/Cerrado) ---
 const isOpen = computed(() => {
-  const st = siteStore.status
-  if (!st) return false
-  if (typeof st === 'string') return st === 'open'
-  return st.status === 'open'
+  // const st = siteStore.status
+  // if (!st) return false
+  // if (typeof st === 'string') return st === 'open'
+  // return st.status === 'open'
+  return true
 })
 
 // Hora de apertura para el mensaje de cerrado

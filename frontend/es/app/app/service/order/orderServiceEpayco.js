@@ -276,8 +276,12 @@ export const orderServiceEpayco = {
         cart.last_order = response.data;
         report.setLoading(false, "enviando tu pedido");
 
+        if (order.payment_method_id == 9) {
+          router.push(`/pagar/${response.data}`);
+        }
         // aquí solo devolvemos los datos; redirección la puedes manejar afuera
         return cart.last_order;
+        
       } else {
         console.error(
           "An error occurred while sending the order:",
