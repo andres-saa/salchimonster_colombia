@@ -24,31 +24,150 @@ const cartStore = usecartStore()
 const route = useRoute()
 const router = useRouter()
 
-// 🔒 lock para evitar dobles ejecuciones
+// 🔒 Control de ejecución
 let running = false
 let lastKey = ''
 
-// 💾 Variables para la sincronización de sesión
+// 🔄 Variables para la Sincronización (Sync)
 let syncInterval = null
-let lastJsonState = '' // Para comparar si hubo cambios
+let lastSavedSnapshot = '' // Para comparar cambios
+let isRestoring = true // 🛡️ Bloqueo inicial para no guardar datos vacíos sobre el hash
+
+// ------------------------------------------------------------------------
+// 1. LÓGICA DE SINCRONIZACIÓN (PUT)
+// ------------------------------------------------------------------------
+
+/**
+ * Genera el objeto JSON exacto que espera el backend
+ */
+function generatePayload() {
+  return {
+    site_location: siteStore.location.site,
+    user: userStore.user,
+    // Construimos location_meta basándonos en lo que 'restoreLocationFromMeta' espera leer
+    location_meta: {
+      city: siteStore.location.city,
+      mode: siteStore.location.mode,
+      formatted_address: siteStore.location.formatted_address,
+      place_id: siteStore.location.place_id,
+      lat: siteStore.location.lat,
+      lng: siteStore.location.lng,
+      address_details: siteStore.location.address_details,
+      neigborhood: siteStore.location.neigborhood,
+      delivery_price: siteStore.current_delivery
+    },
+    cart: cartStore.cart, // Asumiendo que es un array o objeto serializable
+    discount: cartStore.coupon || null, // Ajusta según tu store de carrito
+    coupon_ui: cartStore.coupon_ui || null
+  }
+}
+
+/**
+ * Revisa cada 3 segundos si hay cambios y envía PUT
+ */
+function startHashSyncer() {
+  // Limpiamos intervalo previo si existe
+  if (syncInterval) clearInterval(syncInterval)
+
+  syncInterval = setInterval(async () => {
+    // 1. Si no hay hash en el store, no hay nada que actualizar en el servidor
+    const currentHash = siteStore.session_hash
+    if (!currentHash) return
+
+    // 2. Si todavía estamos restaurando datos (bootstrap), NO guardar para evitar sobrescribir
+    if (isRestoring || running) return
+
+    // 3. Generar "Snapshot" actual
+    const currentData = generatePayload()
+    const currentSnapshot = JSON.stringify(currentData)
+
+    // 4. Comparar con el último guardado. Si son iguales, no hacer nada.
+    if (currentSnapshot === lastSavedSnapshot) return
+
+    // 5. Detectamos cambio -> ENVIAR PUT
+    try {
+      // console.log('🔄 Detectados cambios locales, sincronizando hash...', currentHash)
+      
+      const res = await fetch(`${URI}/data/${currentHash}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: currentSnapshot
+      })
+
+      if (res.ok) {
+        // Actualizamos la referencia del último snapshot guardado
+        lastSavedSnapshot = currentSnapshot
+      } else {
+        console.warn('Error sincronizando hash:', res.status)
+      }
+    } catch (e) {
+      console.error('Error de red al sincronizar hash:', e)
+    }
+
+  }, 3000) // ⏱️ Cada 3 segundos
+}
+
+// ------------------------------------------------------------------------
+// 2. LÓGICA DE RESTAURACIÓN Y CARGA (GET)
+// ------------------------------------------------------------------------
 
 function cleanQueryParams({ removeHash = false, removeCredentials = false, removeIframe = false } = {}) {
   const q = { ...route.query }
   let changed = false
-
   if (removeHash && q.hash !== undefined) { delete q.hash; changed = true }
   if (removeCredentials) {
     if (q.inserted_by !== undefined) { delete q.inserted_by; changed = true }
     if (q.token !== undefined) { delete q.token; changed = true }
   }
   if (removeIframe && q.iframe !== undefined) { delete q.iframe; changed = true }
-
   if (changed) router.replace({ query: q })
+}
+
+function applyRestoredData(restoredData) {
+  if (!restoredData) return
+
+  // Site
+  if (restoredData.site_location) {
+    const prevId = siteStore.location.site?.site_id ?? siteStore.location.site?.id
+    const newId = restoredData.site_location?.site_id ?? restoredData.site_location?.id
+    siteStore.location.site = restoredData.site_location
+    if (prevId !== newId) siteStore.initStatusWatcher()
+  }
+
+  // User
+  if (restoredData.user) {
+    const currentIframeState = userStore.user.iframe
+    userStore.user = {
+      ...userStore.user,
+      ...restoredData.user,
+      iframe: (currentIframeState !== undefined) ? currentIframeState : restoredData.user.iframe,
+    }
+  }
+
+  // Meta Location
+  restoreLocationFromMeta(restoredData?.location_meta)
+
+  // Cart
+  if (restoredData.cart) {
+    const cartItems = Array.isArray(restoredData.cart) ? restoredData.cart : (restoredData.cart.items || [])
+    if (cartItems.length > 0) {
+      cartStore.cart = Array.isArray(restoredData.cart) ? restoredData.cart : restoredData.cart
+    }
+  }
+
+  // Coupons
+  if (restoredData.discount) cartStore.applyCoupon(restoredData.discount)
+  if (restoredData.coupon_ui && cartStore.setCouponUi) cartStore.setCouponUi(restoredData.coupon_ui)
+  
+  // 🔥 Importante: Actualizamos el snapshot inicial para que el watcher no crea que hubo un cambio 
+  // inmediatamente después de cargar los datos del servidor.
+  lastSavedSnapshot = JSON.stringify(generatePayload())
 }
 
 function restoreLocationFromMeta(meta) {
   if (!meta) return
-
   if (meta.city) siteStore.location.city = meta.city
   if (meta.mode) siteStore.location.mode = meta.mode
 
@@ -58,17 +177,8 @@ function restoreLocationFromMeta(meta) {
     siteStore.location.lat = meta.lat ?? null
     siteStore.location.lng = meta.lng ?? null
     siteStore.location.address_details = meta.address_details ?? null
-
     const price = meta.delivery_price ?? meta.price ?? 0
-
-    siteStore.location.neigborhood = {
-      name: '',
-      delivery_price: price,
-      neighborhood_id: null,
-      id: null,
-      site_id: null,
-    }
-
+    siteStore.location.neigborhood = { name: '', delivery_price: price, neighborhood_id: null, id: null, site_id: null }
     siteStore.current_delivery = price
     return
   }
@@ -76,7 +186,6 @@ function restoreLocationFromMeta(meta) {
   if (meta.neigborhood) {
     const nb = meta.neigborhood
     const price = nb.delivery_price ?? meta.delivery_price ?? 0
-
     siteStore.location.neigborhood = {
       name: nb.name || '',
       delivery_price: price,
@@ -84,257 +193,99 @@ function restoreLocationFromMeta(meta) {
       id: nb.id ?? nb.neighborhood_id ?? null,
       site_id: nb.site_id ?? null,
     }
-
     siteStore.current_delivery = price
   } else {
-    siteStore.location.neigborhood = {
-      name: '',
-      delivery_price: 0,
-      neighborhood_id: null,
-      id: null,
-      site_id: null,
-    }
+    siteStore.location.neigborhood = { name: '', delivery_price: 0, neighborhood_id: null, id: null, site_id: null }
     siteStore.current_delivery = 0
   }
 }
 
-// ✅ helper: siempre leer subdominio “fresco”
 function getCurrentSubdomain() {
   const sede = useSedeFromSubdomain()
   return typeof sede === 'string' ? sede : sede?.value
 }
 
-// 🔄 Construye el payload actual basado en los stores
-function buildSessionPayload() {
-  // Reconstruir location_meta
-  let location_meta = {}
-  
-  if (siteStore.location.mode === 'google') {
-    location_meta = {
-      mode: 'google',
-      city: siteStore.location.city,
-      formatted_address: siteStore.location.formatted_address,
-      place_id: siteStore.location.place_id,
-      lat: siteStore.location.lat,
-      lng: siteStore.location.lng,
-      address_details: siteStore.location.address_details,
-      delivery_price: siteStore.current_delivery
-    }
-  } else {
-    // Modo barrio
-    location_meta = {
-      mode: 'neighborhood', // o el modo por defecto
-      city: siteStore.location.city,
-      neigborhood: siteStore.location.neigborhood,
-      delivery_price: siteStore.current_delivery
-    }
-  }
-
-  return {
-    site_location: siteStore.location.site,
-    user: userStore.user,
-    cart: cartStore.cart, // Asumiendo que cartStore.cart tiene items o es el array
-    discount: cartStore.discount || null,
-    coupon_ui: cartStore.coupon_ui || null, // Asegurar nombres correctos del store
-    location_meta: location_meta
-  }
-}
-
-// 📡 Función que se ejecuta cada 5s
-async function syncSession() {
-  // Solo sincronizar si hay un hash activo en el store
-  const hash = siteStore.session_hash
-  
-  // DEBUG: Ver si corre el intervalo
-  console.log(`⏱️ Tick Sync... Hash actual: ${hash ? hash : 'NINGUNO'}`)
-
-  if (!hash) return
-
-  try {
-    const currentData = buildSessionPayload()
-    const currentJson = JSON.stringify(currentData)
-
-    // DEBUG: Comparación
-    if (currentJson === lastJsonState) {
-        console.log('💤 Sync ignorado: El estado es IDÉNTICO al anterior.')
-        return
-    }
-    
-    // DEBUG: Ver diferencia si falla
-    console.log('⚡ CAMBIO DETECTADO. Preparando envío...')
-    console.log('ANTES:', lastJsonState)
-    console.log('AHORA:', currentJson)
-
-    // 🚨 ALERT SOLO CUANDO HAY CAMBIO REAL
-    alert(`🚀 Sincronizando cambios al servidor...\nHash: ${hash}`)
-
-    // Actualizamos el estado local antes de enviar para evitar loops si la red es lenta
-    lastJsonState = currentJson
-
-    const response = await fetch(`${URI}/data/${hash}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: currentJson
-    })
-
-    if (!response.ok) {
-      alert(`❌ Error al guardar en servidor: ${response.statusText}`)
-      console.warn('Error sincronizando sesión:', response.statusText)
-    } else {
-        console.log('✅ Guardado exitoso en servidor')
-    }
-  } catch (error) {
-    alert(`❌ Excepción en Sync: ${error.message}`)
-    console.error('Error en syncSession:', error)
-  }
-}
-
 async function bootstrapFromUrl(reason = 'nav') {
-  if (running) {
-      console.warn(`Bootstrap saltado (ya estaba corriendo). Razón: ${reason}`)
-      return
-  }
+  if (running) return
   running = true
+  isRestoring = true // 🔴 Iniciando carga, bloquear sync
 
   try {
-    const qInsertedBy = route.query.inserted_by
-    const qToken = route.query.token
-    const qiframe = route.query.iframe
-    const isIframe = qiframe === '1'
-
-    // ✅ hash: primero URL, si no hay -> store
-    const hashFromQuery = route.query.hash
-    const storedHash = siteStore.session_hash || ''
-    const hashToUse = hashFromQuery || storedHash || ''
-    
-    // 🚨 DEBUG INICIAL
-    // alert(`Bootstrap iniciado (${reason})\nHash URL: ${hashFromQuery}\nHash Store: ${storedHash}`)
-
-    // ✅ persistir hash SOLO si vino por URL
-    if (hashFromQuery) siteStore.setSessionHash(hashFromQuery)
-
-    // clave para evitar repetir exactamente lo mismo
     const key = JSON.stringify({
       path: route.fullPath,
-      hashToUse,
-      inserted_by: qInsertedBy,
-      token: qToken,
-      iframe: qiframe,
-      host: process.client ? window.location.host : '',
+      hash: route.query.hash,
+      stored_hash: siteStore.session_hash,
+      inserted_by: route.query.inserted_by,
+      token: route.query.token,
+      iframe: route.query.iframe,
       reason,
     })
+    
     if (key === lastKey) {
-        console.log('🗝️ Bootstrap saltado: misma key que la anterior')
-        return
+      isRestoring = false // Si salimos por cache key, habilitar sync
+      return
     }
     lastKey = key
 
-    // ======================================================
-    // 0) RECUPERAR SESIÓN (F5 safe)
-    // ======================================================
-    if (process.client) {
-      const storedSession = localStorage.getItem('session_external_data')
-      if (storedSession) {
-        try {
-          const parsedSession = JSON.parse(storedSession)
-          userStore.user = { ...userStore.user, ...parsedSession }
-        } catch (e) {
-          console.error('Error leyendo sesión local', e)
-        }
-      }
-    }
+    let siteLoaded = false
 
-    if (qInsertedBy && qToken) {
-      const sessionData = { inserted_by: qInsertedBy, token: qToken, iframe: isIframe }
-      userStore.user = { ...userStore.user, ...sessionData }
-      if (process.client) {
-        localStorage.setItem('session_external_data', JSON.stringify(sessionData))
-      }
-    }
-
-    // ======================================================
-    // 1) CARGA POR HASH (URL o STORE)
-    // ======================================================
-    let siteLoadedFromHash = false
-
-    if (hashToUse) {
-      alert(`🔎 Buscando datos para Hash: ${hashToUse}`) // DEBUG
+    // 0) Storage Local (Session)
+    const storedSession = localStorage.getItem('session_external_data')
+    if (storedSession) {
       try {
-        const response = await fetch(`${URI}/data/${hashToUse}`)
+        const parsedSession = JSON.parse(storedSession)
+        userStore.user = { ...userStore.user, ...parsedSession }
+      } catch (e) { console.error(e) }
+    }
+
+    const qInsertedBy = route.query.inserted_by
+    const qToken = route.query.token
+    const qiframe = route.query.iframe
+    
+    if (qInsertedBy && qToken) {
+      const sessionData = { inserted_by: qInsertedBy, token: qToken, iframe: (qiframe === '1') }
+      userStore.user = { ...userStore.user, ...sessionData }
+      localStorage.setItem('session_external_data', JSON.stringify(sessionData))
+    }
+
+    // 1) Carga por HASH (URL o Store)
+    const urlHash = route.query.hash
+    const storedHash = siteStore.session_hash
+    const targetHash = urlHash || storedHash
+    const isUrlHash = !!urlHash
+
+    if (targetHash) {
+      try {
+        const response = await fetch(`${URI}/data/${targetHash}`)
         if (response.ok) {
           const jsonResponse = await response.json()
           const restoredData = jsonResponse?.data || {}
+
+          applyRestoredData(restoredData)
           
-          alert('✅ Datos recibidos del servidor. Restaurando estado...') // DEBUG
+          if (isUrlHash) siteStore.setSessionHash(urlHash)
+          siteLoaded = true
 
-          // Guardamos el estado inicial tal cual vino del servidor para no disparar un PUT inmediato innecesario
-          // (aunque si los stores formatean la data distinto, el primer sync la corregirá, lo cual es bueno)
-          
-          if (restoredData.site_location) {
-            const prevId = siteStore.location.site?.site_id ?? siteStore.location.site?.id
-            const newId = restoredData.site_location?.site_id ?? restoredData.site_location?.id
-            siteStore.location.site = restoredData.site_location
-            if (prevId !== newId) siteStore.initStatusWatcher()
-            siteLoadedFromHash = true
-          }
-
-          if (restoredData.user) {
-            const currentIframeState = userStore.user.iframe
-            userStore.user = {
-              ...userStore.user,
-              ...restoredData.user,
-              iframe: (currentIframeState !== undefined) ? currentIframeState : restoredData.user.iframe,
-            }
-          }
-
-          restoreLocationFromMeta(restoredData?.location_meta)
-
-          if (restoredData.cart) {
-            const cartItems = Array.isArray(restoredData.cart)
-              ? restoredData.cart
-              : (restoredData.cart.items || [])
-
-            if (cartItems.length > 0) {
-              cartStore.cart = Array.isArray(restoredData.cart)
-                ? restoredData.cart
-                : restoredData.cart
-            }
-          }
-
-          if (restoredData.discount) cartStore.applyCoupon(restoredData.discount)
-          if (restoredData.coupon_ui && cartStore.setCouponUi) cartStore.setCouponUi(restoredData.coupon_ui)
-          
-          // DEBUG: Establecer lastJsonState para que no salte sync inmediato si es igual
-          // lastJsonState = JSON.stringify(buildSessionPayload()); 
-
-          // ✅ limpiar query SOLO si venía el hash en URL
-          if (hashFromQuery || qInsertedBy || qToken || qiframe !== undefined) {
+          if (isUrlHash) {
             cleanQueryParams({
-              removeHash: !!hashFromQuery,
+              removeHash: true,
               removeCredentials: !!(qInsertedBy && qToken),
               removeIframe: qiframe !== undefined,
             })
           }
         } else {
-          alert('❌ El hash existe pero el servidor devolvió error (404/500)') // DEBUG
-          // si el hash guardado ya no sirve, lo limpiamos
-          if (!hashFromQuery) siteStore.clearSessionHash()
+          console.warn('Hash inválido o expirado, limpiando store.')
+          siteStore.clearSessionHash()
         }
       } catch (err) {
-        alert(`❌ Error restaurando hash: ${err.message}`)
         console.error('❌ Error restaurando hash:', err)
       }
     }
 
-    // ======================================================
-    // 2) CARGA NORMAL (Subdominio) si no se cargó por hash
-    // ======================================================
-    if (!siteLoadedFromHash) {
+    // 2) Fallback Subdominio
+    if (!siteLoaded) {
       try {
         const currentSede = getCurrentSubdomain()
-
         if (currentSede) {
           const response = await fetch(`${URI}/sites/subdomain/${currentSede}`)
           if (response.ok) {
@@ -348,7 +299,10 @@ async function bootstrapFromUrl(reason = 'nav') {
             }
           }
         }
-
+        
+        // Si cargamos de cero (sin hash), definimos el snapshot actual como base
+        lastSavedSnapshot = JSON.stringify(generatePayload())
+        
         const needsCredClean = !!(qInsertedBy && qToken)
         const needsIframeClean = qiframe !== undefined
         if (needsCredClean || needsIframeClean) {
@@ -361,9 +315,11 @@ async function bootstrapFromUrl(reason = 'nav') {
         console.error('Error cargando sede:', err)
       }
     }
+
   } finally {
     await nextTick()
     running = false
+    isRestoring = false // 🟢 Carga terminada, el sync puede trabajar
   }
 }
 
@@ -372,15 +328,9 @@ function onPopState() {
 }
 
 onMounted(() => {
-  // Alert inicial
-  alert('🏁 App Montada. Iniciando bootstrap...')
   bootstrapFromUrl('mounted')
+  startHashSyncer() // ✅ Iniciamos el "cron" de 3 segundos
   window.addEventListener('popstate', onPopState)
-
-  // ⏱️ INICIO DEL INTERVALO DE 5 SEGUNDOS
-  syncInterval = setInterval(() => {
-    syncSession()
-  }, 5000)
 })
 
 watch(
@@ -390,12 +340,7 @@ watch(
 )
 
 onBeforeUnmount(() => {
+  if (syncInterval) clearInterval(syncInterval) // 🧹 Limpieza
   window.removeEventListener('popstate', onPopState)
-  
-  // 🧹 LIMPIEZA DEL INTERVALO
-  if (syncInterval) {
-    clearInterval(syncInterval)
-    syncInterval = null
-  }
 })
 </script>

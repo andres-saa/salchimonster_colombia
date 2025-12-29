@@ -1,81 +1,106 @@
 <template>
   <Dialog
-    style="max-width: 30rem; margin: .5rem; width: 90%;"
+    style="max-width: 30rem; margin: .5rem; width: 90%; font-family: 'Inter', sans-serif;"
     modal
     v-model:visible="store.visibles.currentSite"
+    :dismissableMask="true"
+    header="UBICACIÓN DE ENTREGA"
   >
-    <div>
-      <div class="modal-body">
-        <!-- ================== CIUDAD FIJA (SIN SELECTOR) ================== -->
-        <div class="form-group">
-          <label>Ciudad</label>
-          <div class="fixed-city">
-            <span class="fixed-city-name">
-              {{ fixedCity?.city_name || `Ciudad #${cityId || '-'}` }}
-            </span>
-            <span v-if="loadingSite" class="mini-muted">Cargando sede…</span>
-          </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Ciudad</label>
+        <div class="fixed-city">
+          <span class="fixed-city-name">
+            <Icon name="mdi:city" size="18" />
+            {{ fixedCity?.city_name || `Ciudad #${cityId || '-'}` }}
+          </span>
+          <span v-if="loadingSite" class="mini-muted">
+            <Icon name="svg-spinners:90-ring-with-bg" /> Cargando...
+          </span>
         </div>
+      </div>
 
-        <!-- ================== BARRIO (SIEMPRE) ================== -->
-        <div class="form-group fade-in">
-          <label>¿Cuál es tu barrio?</label>
-
-          <div class="custom-select">
-            <Select
-              v-model="currenNeigborhood"
-              :options="possibleNeigborhoods"
-              optionLabel="name"
-              placeholder="Selecciona tu barrio"
-              filter
-              filterPlaceholder="Buscar barrio..."
-              :disabled="!possibleNeigborhoods.length || !cityId"
-              :loading="spinnersView.barrio"
-              class="pv-select"
-            />
-          </div>
-
-          <span v-if="spinnersView.barrio" class="loader-mini-external"></span>
-
-          <div v-if="!spinnersView.barrio && cityId && possibleNeigborhoods.length === 0" class="mini-muted">
-            No hay barrios disponibles para esta ciudad.
-          </div>
+      <div class="form-group fade-in">
+        <label>¿Cuál es tu barrio?</label>
+        <div class="custom-select">
+          <Select
+            v-model="currenNeigborhood"
+            :options="possibleNeigborhoods"
+            optionLabel="name"
+            placeholder="Selecciona tu barrio"
+            filter
+            filterPlaceholder="Buscar barrio..."
+            :disabled="!possibleNeigborhoods.length || !cityId"
+            :loading="spinnersView.barrio"
+            class="pv-select w-full"
+          >
+            <template #value="slotProps">
+              <div v-if="slotProps.value" class="flex align-items-center">
+                <div>{{ slotProps.value.name }}</div>
+              </div>
+              <span v-else>{{ slotProps.placeholder }}</span>
+            </template>
+            <template #option="slotProps">
+              <div class="flex align-items-center">
+                <div>{{ slotProps.option.name }}</div>
+              </div>
+            </template>
+          </Select>
         </div>
+        <div v-if="!spinnersView.barrio && cityId && possibleNeigborhoods.length === 0" class="mini-muted error-text">
+          No hay barrios disponibles para esta zona.
+        </div>
+      </div>
 
-        <!-- Preview de sede -->
-        <div
-          class="image-preview fade-in"
-          v-if="currenNeigborhood?.site_id"
-        >
-          <div style="padding: 1rem;" class="image-overlay">
-            <p class="site-info">
-              <span class="brand">SALCHIMONSTER - </span>
-              <span class="site">{{ currentSite?.site_name || 'Cargando...' }}</span>
-            </p>
-            <p class="delivery-info">
-              Domicilio: ${{ formatPrice(currenNeigborhood?.delivery_price) }}
-            </p>
-          </div>
-
-          <img
-            :src="`${URI}/read-product-image/600/site-${currenNeigborhood?.site_id}`"
-            class="site-img"
-            style="aspect-ratio: 5/3; object-fit: cover;"
-            @error="handleImageError"
+      <div class="form-group fade-in" v-if="currenNeigborhood">
+        <label>Dirección Exacta</label>
+        <div class="input-wrapper">
+          <Icon name="mdi:map-marker" class="input-icon" />
+          <input 
+            type="text" 
+            v-model="exactAddress" 
+            class="input-modern" 
+            placeholder="Ej: Calle 123 # 45 - 67, Apto 201" 
           />
         </div>
+        <small class="mini-muted">Escribe la dirección para el domiciliario.</small>
+      </div>
+
+      <div
+        class="image-preview fade-in"
+        v-if="currenNeigborhood?.site_id"
+      >
+        <div class="image-overlay">
+          <p class="site-info">
+            <span class="brand">SALCHIMONSTER</span>
+            <span class="site"> - {{ currentSite?.site_name || 'SEDE' }}</span>
+          </p>
+          <div class="delivery-badge">
+            <Icon name="mdi:moped" size="16" />
+            <span>Domicilio: ${{ formatPrice(currenNeigborhood?.delivery_price) }}</span>
+          </div>
+        </div>
+
+        <img
+          :src="`${URI}/read-product-image/600/site-${currenNeigborhood?.site_id}`"
+          class="site-img"
+          @error="handleImageError"
+        />
       </div>
     </div>
 
     <template #footer>
-      <button
-        @click="confirmLocation"
-        :disabled="!canSave"
-        class="native-btn"
-        :class="{ 'btn-disabled': !canSave }"
-      >
-        Confirmar Ubicación
-      </button>
+      <div class="footer-actions">
+        <button class="btn-text" @click="store.setVisible('currentSite', false)">Cancelar</button>
+        <button
+          @click="confirmLocation"
+          :disabled="!canSave"
+          class="native-btn"
+          :class="{ 'btn-disabled': !canSave }"
+        >
+          Confirmar Ubicación
+        </button>
+      </div>
     </template>
   </Dialog>
 </template>
@@ -84,57 +109,59 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import Dialog from 'primevue/dialog'
 import Select from 'primevue/select'
+import { useSitesStore, useUserStore, useSedeFromSubdomain } from '#imports' // Asegúrate de importar useUserStore
+import { URI } from '~/service/conection'
 
-import { useSedeFromSubdomain } from '#imports'
-import { useSitesStore } from '@/stores/site'
-import { URI } from '@/service/conection'
-
+/* ================= STORES ================= */
 const store = useSitesStore()
+const userStore = useUserStore()
 
-// ================== ESTADOS ==================
+/* ================= STATE ================= */
 const spinnersView = ref({ barrio: false })
 const possibleNeigborhoods = ref([])
 const currenNeigborhood = ref(null)
+const exactAddress = ref('') // Nuevo estado para la dirección escrita
 
 const currentSite = ref({})
 const cachedSites = ref(null)
-
 const loadingSite = ref(false)
 const siteFromSubdomain = ref(null)
 
 const cities = ref([])
-const fixedCity = ref(null)     // objeto ciudad {city_id, city_name, ...}
+const fixedCity = ref(null)
+
+// Computed para obtener ID de ciudad desde el subdominio
 const cityId = computed(() => siteFromSubdomain.value?.city_id ?? null)
 
-// ================== HELPERS ==================
+/* ================= HELPERS ================= */
 const handleImageError = (e) => { e.target.style.display = 'none' }
 const formatPrice = (v) => new Intl.NumberFormat('es-CO').format(v || 0)
 
-// ✅ subdominio fresco
 function getCurrentSubdomain() {
   const sede = useSedeFromSubdomain()
   return typeof sede === 'string' ? sede : sede?.value
 }
 
-// ================== COMPUTED ==================
+/* ================= COMPUTED ================= */
 const canSave = computed(() => {
   const nb = currenNeigborhood.value
-  if (!nb) return false
-  return !!(nb.neighborhood_id || nb.id)
+  // Debe haber barrio Y dirección escrita (mínimo 5 letras para ser válida)
+  return !!(nb && (nb.neighborhood_id || nb.id) && exactAddress.value?.length > 4)
 })
 
-// ================== CONFIRM ==================
+/* ================= ACTIONS ================= */
 const confirmLocation = () => {
   if (!canSave.value) return
 
   const nb = currenNeigborhood.value
   const delivery = nb?.delivery_price || 0
 
-  // ✅ site: preferimos el completo si ya lo resolvimos por site_id
+  // Construir objeto de Sede
   const siteObj = (currentSite.value && currentSite.value.site_id)
     ? currentSite.value
     : { site_id: nb?.site_id, site_name: 'SEDE' }
 
+  // 1. Actualizar Store de Sitios (Lógica de negocio/precios)
   store.updateLocation(
     {
       city: fixedCity.value || { city_id: cityId.value },
@@ -145,10 +172,19 @@ const confirmLocation = () => {
     delivery
   )
 
+  // 2. Actualizar Usuario (Texto visible y dirección para el pedido)
+  userStore.user.address = exactAddress.value
+  // Guardamos también el objeto completo por si se necesita
+  userStore.user.site = {
+    ...siteObj,
+    delivery_cost_cop: delivery,
+    formatted_address: exactAddress.value
+  }
+
   store.setVisible('currentSite', false)
 }
 
-// ================== APIs ==================
+/* ================= API CALLS ================= */
 const getCities = async () => {
   try {
     cities.value = await (await fetch(`${URI}/cities`)).json()
@@ -158,10 +194,8 @@ const getCities = async () => {
 }
 
 const resolveFixedCity = async () => {
-  // intenta resolver el nombre de la ciudad desde /cities
   if (!cityId.value) return
   if (!cities.value.length) await getCities()
-
   const match = cities.value.find(c => Number(c.city_id) === Number(cityId.value))
   fixedCity.value = match || { city_id: cityId.value, city_name: '' }
 }
@@ -171,14 +205,13 @@ const loadSiteBySubdomain = async () => {
   try {
     const sub = getCurrentSubdomain()
     if (!sub) return
-
     const res = await fetch(`${URI}/sites/subdomain/${sub}`)
-    if (!res.ok) return
-
-    const data = await res.json()
-    siteFromSubdomain.value = data?.[0] || data || null
-  } catch {
-    siteFromSubdomain.value = null
+    if (res.ok) {
+      const data = await res.json()
+      siteFromSubdomain.value = data?.[0] || data || null
+    }
+  } catch (e) {
+    console.error(e)
   } finally {
     loadingSite.value = false
   }
@@ -206,39 +239,38 @@ const ensureSitesLoaded = async () => {
   return cachedSites.value
 }
 
-// ================== RESTORE ==================
-const restoreFromStore = async () => {
-  // si ya hay barrio guardado y pertenece a esta ciudad, lo re-seleccionamos
+/* ================= RESTORE ================= */
+const restoreFromStore = () => {
+  // Restaurar Barrio
   const storedNb = store.location?.neigborhood
-  if (!storedNb) return
+  if (storedNb) {
+    const wantedId = storedNb.neighborhood_id || storedNb.id
+    if (wantedId) {
+      const match = possibleNeigborhoods.value.find(n => (n.neighborhood_id || n.id) === wantedId)
+      if (match) currenNeigborhood.value = match
+    }
+  }
 
-  const wantedId = storedNb.neighborhood_id || storedNb.id
-  if (!wantedId) return
-
-  const match = possibleNeigborhoods.value.find(n => (n.neighborhood_id || n.id) === wantedId)
-  if (match) currenNeigborhood.value = match
+  // Restaurar Dirección escrita
+  if (userStore.user.address) {
+    exactAddress.value = userStore.user.address
+  }
 }
 
-// ================== LIFECYCLE ==================
+/* ================= LIFECYCLE ================= */
 onMounted(async () => {
-  // 1) Sede por subdominio
   await loadSiteBySubdomain()
-
-  // 2) Resolver ciudad (nombre) y cargar barrios
   await resolveFixedCity()
   await changePossiblesNeigborhoods()
-
-  // 3) Restaurar selección previa (si aplica)
-  await restoreFromStore()
+  await restoreFromStore() // Mover aquí para asegurar que los barrios ya cargaron
 })
 
-// Cuando cambia el barrio, trae la sede (por site_id)
+// Watch: Si cambia el barrio, buscar info de la sede
 watch(currenNeigborhood, async (newVal) => {
   if (!newVal?.site_id) {
     currentSite.value = {}
     return
   }
-
   try {
     const allSites = await ensureSitesLoaded()
     currentSite.value = allSites.find(s => Number(s.site_id) === Number(newVal.site_id)) || {}
@@ -247,7 +279,11 @@ watch(currenNeigborhood, async (newVal) => {
   }
 })
 
-// Si por alguna razón cambia la sede/city_id (hash/subdominio), recarga barrios
+// Watch: Si el store se abre externamente, re-sincronizar datos
+watch(() => store.visibles.currentSite, (val) => {
+  if (val) restoreFromStore()
+})
+
 watch(cityId, async (newId, oldId) => {
   if (!newId || newId === oldId) return
   currenNeigborhood.value = null
@@ -259,138 +295,69 @@ watch(cityId, async (newId, oldId) => {
 </script>
 
 <style scoped>
-.custom-select {
-  position: relative;
-  width: 100%;
-  font-family: inherit;
-  user-select: none;
-}
-
-.custom-select :deep(.p-select) {
-  width: 100%;
-}
-
-.custom-select :deep(.p-select:hover) {
-  background: #f3f4f6;
-  border-color: #d1d5db;
-}
-
-.custom-select :deep(.p-select[aria-expanded="true"]) {
-  border-color: #000;
-  background: #fff;
-  border-bottom-left-radius: 0;
-  border-bottom-right-radius: 0;
-}
-
-.custom-select :deep(.p-select-overlay) {
-  border: 1px solid #000;
-  border-top: none;
-  border-bottom-left-radius: 10px;
-  border-bottom-right-radius: 10px;
-  box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
-  overflow: hidden;
-}
-
-.modal-body {
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 1.2rem;
-  overflow-y: visible;
-}
+/* Estilos modernizados */
+.modal-body { display: flex; flex-direction: column; gap: 1.25rem; padding-top: 0.5rem; }
 
 .form-group label {
-  font-weight: 700;
-  font-size: 0.85rem;
-  color: #374151;
-  margin-bottom: 0.5rem;
-  display: block;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  font-weight: 700; font-size: 0.8rem; color: #374151;
+  margin-bottom: 0.4rem; display: block; text-transform: uppercase; letter-spacing: 0.05em;
 }
 
+/* Fixed City Box */
 .fixed-city {
-  padding: .8rem 1rem;
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
-  background: #f9fafb;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: .75rem;
+  padding: 0.8rem 1rem; border: 1px solid #e5e7eb; border-radius: 8px;
+  background: #f9fafb; display: flex; justify-content: space-between; align-items: center; color: #111;
 }
+.fixed-city-name { font-weight: 700; display: flex; align-items: center; gap: 0.5rem; }
+.mini-muted { font-size: 0.75rem; opacity: 0.7; display: flex; align-items: center; gap: 4px; }
+.error-text { color: #ef4444; margin-top: 0.5rem; }
 
-.fixed-city-name {
-  font-weight: 800;
-  font-size: .95rem;
-  color: #111827;
+/* Input Dirección */
+.input-wrapper { position: relative; }
+.input-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: #9ca3af; }
+.input-modern {
+  width: 100%; padding: 0.8rem 1rem 0.8rem 2.2rem;
+  border: 1px solid #d1d5db; border-radius: 8px; font-size: 0.95rem; outline: none; transition: 0.2s;
 }
+.input-modern:focus { border-color: #000; box-shadow: 0 0 0 2px rgba(0,0,0,0.05); }
 
-.mini-muted {
-  font-size: .8rem;
-  opacity: .7;
-}
-
-.loader-mini-external {
-  display: inline-block;
-  width: 12px;
-  height: 12px;
-  border: 2px solid #ccc;
-  border-top-color: #000;
-  border-radius: 50%;
-  animation: spin 1s infinite linear;
-  margin-left: 5px;
-}
-
+/* Image Preview */
 .image-preview {
-  position: relative;
-  width: 100%;
-  border-radius: 12px;
-  overflow: hidden;
-  background: #eee;
-  box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+  position: relative; width: 100%; border-radius: 12px; overflow: hidden;
+  background: #eee; box-shadow: 0 4px 10px rgba(0,0,0,0.1); margin-top: 0.5rem;
 }
-.image-preview img { width: 100%; height: 100%; object-fit: cover; }
-
-.site-info {
-  font-weight: 800;
-  font-size: 1rem;
-  margin: 0;
-  text-transform: uppercase;
+.site-img { width: 100%; aspect-ratio: 16/9; object-fit: cover; display: block; }
+.image-overlay {
+  position: absolute; bottom: 0; left: 0; width: 100%;
+  background: linear-gradient(to top, rgba(0,0,0,0.8), transparent);
+  padding: 2rem 1rem 1rem; color: #fff;
 }
-.delivery-info {
-  font-size: 0.85rem;
-  margin: 0;
-  opacity: 0.9;
-  margin-top: 2px;
+.site-info { font-weight: 800; font-size: 1.1rem; margin: 0; text-shadow: 0 2px 4px rgba(0,0,0,0.5); }
+.delivery-badge {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  background: #fff; color: #000; padding: 4px 8px;
+  border-radius: 4px; font-weight: 700; font-size: 0.8rem; margin-top: 0.5rem;
 }
 
+/* Footer */
+.footer-actions { display: flex; justify-content: flex-end; gap: 1rem; align-items: center; width: 100%; }
+.btn-text { background: none; border: none; cursor: pointer; color: #6b7280; font-weight: 600; }
+.btn-text:hover { color: #000; }
 .native-btn {
-  background: #000;
-  color: #fff;
-  width: 100%;
-  padding: 1rem;
-  border: none;
-  border-radius: 8px;
-  font-weight: 700;
-  cursor: pointer;
-  margin-top: 0.5rem;
-  font-size: 1rem;
-  transition: transform 0.1s;
+  background: #000; color: #fff; padding: 0.8rem 1.5rem; border: none; border-radius: 8px;
+  font-weight: 700; cursor: pointer; transition: 0.2s;
 }
 .native-btn:active { transform: scale(0.98); }
-.native-btn.btn-disabled {
-  background: #e5e7eb;
-  color: #9ca3af;
-  cursor: not-allowed;
-}
+.native-btn.btn-disabled { background: #e5e7eb; color: #9ca3af; cursor: not-allowed; transform: none; }
 
-@keyframes spin { to { transform: rotate(360deg); } }
-.fade-in { animation: fadeIn 0.3s ease; }
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(5px); }
-  to { opacity: 1; transform: translateY(0); }
-}
+/* Animations */
+.fade-in { animation: fadeIn 0.4s ease; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 
-* { text-transform: uppercase; }
+/* PrimeVue Overrides */
+:deep(.p-select) { width: 100%; border-radius: 8px; }
+:deep(.p-select:focus) { border-color: #000; box-shadow: 0 0 0 2px rgba(0,0,0,0.1); }
+:deep(.p-dialog-header) { padding: 1.2rem; border-bottom: 1px solid #f3f4f6; }
+:deep(.p-dialog-content) { padding: 1.2rem; }
+:deep(.p-dialog-footer) { padding: 1rem 1.2rem; border-top: 1px solid #f3f4f6; }
 </style>
