@@ -14,10 +14,8 @@
       </div>
     </Transition>
 
-    <!-- ✅ App-like shell: sin scroll global, todo ocurre dentro -->
     <div class="vicio-page" :class="{ 'is-map-collapsed': shouldCollapseMap }">
       <ClientOnly>
-        <!-- ✅ Shell para animar el alto del mapa sin destruir Leaflet -->
         <div class="vicio-map-shell">
           <div id="vicio-map" class="vicio-map"></div>
         </div>
@@ -25,7 +23,6 @@
 
       <div class="vicio-sidebar">
         <header class="sidebar-header">
-          <!-- ✅ Header + Language selector -->
           <div class="sidebar-header-top">
             <h2 class="sidebar-title">{{ t('choose_nearest') }}</h2>
 
@@ -54,10 +51,8 @@
             </div>
           </div>
 
-          <!-- CIUDAD (PrimeVue Select) -->
           <div class="city-select-wrapper">
             <label class="city-label" for="city-filter">{{ t('city') }}</label>
-
             <Select
               inputId="city-filter"
               v-model="selectedCityId"
@@ -73,7 +68,6 @@
             />
           </div>
 
-          <!-- GOOGLE CITY: AUTOCOMPLETE DIRECCION -->
           <div class="search-wrapper" v-if="selectedCityId && isGoogleCity">
             <AutoComplete
               v-model="addressQuery"
@@ -96,11 +90,9 @@
             </AutoComplete>
           </div>
 
-          <!-- PARAMS CITY: BARRIOS + DIRECCION EXACTA -->
           <div v-if="selectedCityId && isParamsCity" class="params-box">
             <div class="form-group">
               <label class="city-label">{{ t('neighborhood_sector') }}</label>
-
               <AutoComplete
                 v-model="selectedNeighborhood"
                 :suggestions="nbSuggestions"
@@ -138,7 +130,6 @@
           </div>
         </header>
 
-        <!-- RESULTADO GOOGLE -->
         <section v-if="coverageResult && isGoogleCity" class="coverage-card">
           <div class="coverage-header">
             <Icon name="mdi:map-marker-check" size="1.4em" class="coverage-icon" />
@@ -189,7 +180,6 @@
           </div>
         </section>
 
-        <!-- RESULTADO PARAMS -->
         <section v-if="isParamsCity && selectedNeighborhood" class="coverage-card">
           <div class="coverage-header">
             <Icon name="mdi:home-map-marker" size="1.4em" class="coverage-icon" />
@@ -224,7 +214,6 @@
           </div>
         </section>
 
-        <!-- LISTA SEDES (✅ scroll interno, no global) -->
         <main class="stores-list">
           <article
             v-for="store in filteredStores"
@@ -233,7 +222,7 @@
             :class="{ 'store-item--active': store.id === selectedStoreId }"
             @click="openModal(store)"
           >
-            <div class="store-img-wrapper">
+            <div style="grid-area: img;" class="store-img-wrapper">
               <img
                 :src="currentImage(store)"
                 @load="loadHighResImage(store)"
@@ -243,7 +232,7 @@
               />
             </div>
 
-            <div class="store-info">
+            <div style="grid-area: info;" class="store-info">
               <h3 class="store-name">{{ store.name }}</h3>
 
               <p class="store-services">
@@ -257,36 +246,44 @@
                 {{ store.address }} – {{ store.city }}
               </p>
 
-              <!-- ✅ estado + whatsapp -->
-              <div class="store-actions-row">
-                <button class="store-action" :data-status="store.status || 'unknown'">
-                  <span v-if="store.status === 'open'" class="status-flex">
-                    <Icon name="mdi:check-circle-outline" size="1.1em" /> {{ t('open') }}
-                  </span>
-                  <span v-else class="status-flex">{{ t('closed') }}</span>
-                </button>
-
-                <button
-                  class="store-whatsapp"
-                  type="button"
-                  :disabled="!store.site_phone"
-                  @click.stop="openWhatsApp(store)"
-                  :title="store.site_phone ? t('write_whatsapp') : t('no_whatsapp')"
-                >
-                  <Icon name="mdi:whatsapp" size="1.15em" />
-                  <span>{{ t('whatsapp') }}</span>
-                </button>
-              </div>
             </div>
 
-            <button class="store-arrow" type="button">
-              <Icon name="mdi:chevron-right" size="1.6em" />
+
+              <div class="store-actions-row" style="grid-area: status;">
+                <div class="store-action" :data-status="store.status || 'unknown'">
+                  <span v-if="store.status === 'open'" class="status-flex">
+                    <Icon name="mdi:check-decagram" size="1.2em" /> {{ t('open') }}
+                  </span>
+                  <span v-else class="status-flex">
+                    <Icon name="mdi:lock" size="1.2em" />
+                    <span v-if="store.next_opening_time">
+                       {{ t('closed') }} • {{ t('opens_at') }} {{ store.next_opening_time }}
+                    </span>
+                    <span v-else>
+                      {{ t('closed') }}
+                    </span>
+                  </span>
+                </div>
+              </div>
+
+            <button
+            style="grid-area: wsp;"
+              class="store-whatsapp"
+              type="button"
+              :disabled="!store.site_phone"
+              @click.stop="openWhatsApp(store)"
+              :title="store.site_phone ? t('write_whatsapp') : t('no_whatsapp')"
+            >
+              <Icon name="mdi:whatsapp" size="1.8rem" />
+            </button>
+
+            <button style="grid-area: arrow;" class="store-arrow" type="button">
+              <Icon name="mdi:chevron-right" size="1.8em" />
             </button>
           </article>
         </main>
       </div>
 
-      <!-- MODAL (PrimeVue Dialog) -->
       <Dialog
         v-model:visible="isModalOpen"
         modal
@@ -300,27 +297,24 @@
             <Icon name="mdi:close" size="1.5em" />
           </button>
 
-          <!-- STEP 1 -->
           <div v-if="modalStep === 1">
             <h3 class="modal-title">{{ t('how_want_order') }}</h3>
             <p class="modal-subtitle">
               {{ t('store_label') }}: <strong>{{ modalStore.name }}</strong>
             </p>
 
-            <!-- ✅ WhatsApp en el modal -->
             <div class="modal-whatsapp-row">
               <Button
+              
                 class="btn-action btn-whatsapp full-width"
                 severity="secondary"
                 :disabled="!modalStore.site_phone"
                 @click="openWhatsApp(modalStore)"
               >
                 <template #icon>
-                  <Icon name="mdi:whatsapp" size="1.25em" />
+                   <Icon name="mdi:whatsapp" size="1.6em" />
                 </template>
-                 <Icon name="mdi:whatsapp" size="1.5em" />
-                <span>{{ t('write_whatsapp') }}</span>
-                
+                <span style="font-size:1.1em;">{{ t('write_whatsapp') }}</span>
               </Button>
             </div>
 
@@ -339,7 +333,6 @@
             </div>
           </div>
 
-          <!-- STEP 2 -->
           <div v-else-if="modalStep === 2">
             <div class="modal-header-nav">
               <Button text class="modal-back-btn" @click="setModalStep(1)">
@@ -347,11 +340,8 @@
                 <span>{{ t('back') }}</span>
               </Button>
             </div>
-
-            <!-- GOOGLE MODAL -->
             <div v-if="isGoogleCity">
               <h3 class="modal-title">{{ t('where_are_you') }}</h3>
-
               <AutoComplete
                 v-model="modalAddressQuery"
                 :suggestions="modalSuggestions"
@@ -364,25 +354,13 @@
                 @complete="onModalAddressComplete"
                 @item-select="onSelectModalSuggestionEvent"
                 dropdown
-              >
-                <template #item="{ item }">
-                  <div class="ac-item">
-                    <Icon name="mdi:map-marker-outline" class="item-icon" />
-                    <span>{{ item.description }}</span>
-                  </div>
-                </template>
-              </AutoComplete>
-
+              />
               <div v-if="modalAddressError" class="modal-error">{{ modalAddressError }}</div>
             </div>
-
-            <!-- PARAMS MODAL -->
             <div v-else class="params-flow-modal">
               <h3 class="modal-title">{{ t('delivery_details') }}</h3>
-
               <div class="form-group">
                 <label class="city-label">{{ t('search_neighborhood') }}</label>
-
                 <AutoComplete
                   v-model="modalSelectedNeighborhood"
                   :suggestions="modalNbSuggestions"
@@ -397,9 +375,8 @@
                   forceSelection
                 />
               </div>
-
               <div v-if="modalSelectedNeighborhood" style="margin: 1rem 0;" class="selected-nb-info">
-                <div class="info-row">
+                 <div class="info-row">
                   <span>{{ t('neighborhood') }}: </span>
                   <strong>{{ modalSelectedNeighborhood.name }}</strong>
                 </div>
@@ -408,7 +385,6 @@
                   <strong class="text-green">{{ formatCOP(Number(modalSelectedNeighborhood.delivery_price || 0)) }}</strong>
                 </div>
               </div>
-
               <div class="form-group" style="margin-top: 1rem;">
                 <label class="city-label">{{ t('exact_address') }}</label>
                 <InputText
@@ -418,7 +394,6 @@
                   :placeholder="t('exact_address_example')"
                 />
               </div>
-
               <Button
                 class="btn-action btn-delivery full-width"
                 style="margin-top: 1.5rem;"
@@ -432,16 +407,12 @@
               </Button>
             </div>
           </div>
-
-          <!-- STEP 3 -->
           <div v-else-if="modalStep === 3" class="modal-loading-view">
             <ProgressSpinner style="width:48px;height:48px" />
             <p>{{ t('validating_coverage') }}</p>
           </div>
-
-          <!-- STEP 4 -->
           <div v-else-if="modalStep === 4 && modalCoverageResult">
-            <div class="modal-header-nav">
+             <div class="modal-header-nav">
               <Button text class="modal-back-btn" @click="setModalStep(2)">
                 <template #icon>
                   <Icon name="mdi:arrow-left" size="1.2em" />
@@ -449,23 +420,14 @@
                 <span>{{ t('back') }}</span>
               </Button>
             </div>
-
             <h3 class="modal-title">{{ t('coverage_summary') }}</h3>
-
-            <div
-              class="coverage-card"
-              style="margin: 1rem 0; width: auto; border: none; box-shadow: none; background: transparent;"
-            >
-              <div
-                class="coverage-body"
-                style="padding: 0; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 1rem;"
-              >
-                <div class="coverage-row">
+            <div class="coverage-card" style="margin: 1rem 0; width: auto; border: none; box-shadow: none; background: transparent;">
+               <div class="coverage-body" style="padding: 0; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 1rem;">
+                 <div class="coverage-row">
                   <span class="coverage-label">{{ t('address') }}:</span>
                   <span class="coverage-value address-text">{{ modalCoverageResult.formatted_address }}</span>
                 </div>
-
-                <div class="coverage-row">
+                 <div class="coverage-row">
                   <span class="coverage-label">{{ t('assigned_store') }}:</span>
                   <span class="coverage-value">
                     {{ modalCoverageResult.nearest?.site?.site_name || t('na') }}
@@ -474,18 +436,15 @@
                     </small>
                   </span>
                 </div>
-
                 <div class="coverage-row highlight">
                   <span class="coverage-label">{{ t('delivery_cost') }}:</span>
                   <span class="coverage-value price">{{ formatCOP(modalCoverageResult.delivery_cost_cop) }}</span>
                 </div>
-
                 <div class="coverage-status-text" :class="modalCoverageResult.nearest?.in_coverage ? 'text-ok' : 'text-fail'">
                   {{ modalCoverageResult.nearest?.in_coverage ? t('we_cover_zone') : t('out_of_delivery_zone') }}
                 </div>
-              </div>
+               </div>
             </div>
-
             <Button
               class="btn-action btn-delivery full-width"
               style="margin-top: 1rem;"
@@ -518,7 +477,7 @@ import Button from 'primevue/button'
 import ProgressSpinner from 'primevue/progressspinner'
 
 /* =======================
-   ✅ i18n local + persistencia
+   i18n local + persistencia
    ======================= */
 const LANG_KEY = 'vicio_lang'
 const FLAGS = {
@@ -565,8 +524,9 @@ const I18N = {
     neighborhood: 'Barrio',
     ready_to_send: '✅ Listo para enviar',
     store_photo_alt: 'Foto sede',
-    open: 'Abierto',
-    closed: 'Cerrado',
+    open: 'ABIERTO',
+    closed: 'CERRADO',
+    opens_at: 'ABRE A ', // NUEVO
     how_want_order: '¿Cómo quieres tu pedido?',
     store_label: 'Sede',
     back: 'Volver',
@@ -583,8 +543,6 @@ const I18N = {
     redirecting_to: 'Te estamos llevando a',
     starting_experience: 'Iniciando tu experiencia...',
     na: 'N/A',
-
-    // ✅ WhatsApp
     whatsapp: 'WhatsApp',
     write_whatsapp: 'Escribir por WhatsApp',
     no_whatsapp: 'Esta sede no tiene WhatsApp',
@@ -613,8 +571,9 @@ const I18N = {
     neighborhood: 'Neighborhood',
     ready_to_send: '✅ Ready to deliver',
     store_photo_alt: 'Store photo',
-    open: 'Open',
-    closed: 'Closed',
+    open: 'OPEN',
+    closed: 'CLOSED',
+    opens_at: 'OPENS ', // NUEVO
     how_want_order: 'How do you want your order?',
     store_label: 'Store',
     back: 'Back',
@@ -631,8 +590,6 @@ const I18N = {
     redirecting_to: 'Taking you to',
     starting_experience: 'Starting your experience...',
     na: 'N/A',
-
-    // ✅ WhatsApp
     whatsapp: 'WhatsApp',
     write_whatsapp: 'Message on WhatsApp',
     no_whatsapp: 'This store has no WhatsApp',
@@ -676,14 +633,11 @@ const isRedirecting = ref(false)
 const targetSiteName = ref('')
 
 /* =======================
-   ✅ WhatsApp helper
+   WhatsApp helper
    ======================= */
 function normalizeWhatsAppPhone(phone) {
   if (!phone) return ''
-  // deja solo dígitos
   let digits = String(phone).replace(/[^\d]/g, '')
-  // si viene como 322xxxxxxx (10 dígitos), asumimos CO y prefijamos 57
-  
   return digits
 }
 
@@ -694,8 +648,6 @@ function buildWhatsAppLink(store, customText = '') {
     (customText && String(customText).trim())
       ? String(customText).trim()
       : t('whatsapp_default_msg')
-
-  // wa.me requiere URL encode
   const q = encodeURIComponent(text)
   return `https://wa.me/${digits}?text=${q}`
 }
@@ -706,13 +658,12 @@ function openWhatsApp(store) {
   try {
     window.open(url, '_blank', 'noopener,noreferrer')
   } catch {
-    // fallback
     window.location.href = url
   }
 }
 
 /* =======================
-   ✅ App-like: bloquear scroll global + zoom del navegador
+   App-like: bloquear scroll global
    ======================= */
 const preventGesture = (e) => { try { e.preventDefault() } catch {} }
 const preventCtrlWheelZoom = (e) => {
@@ -742,7 +693,7 @@ function unlockPage() {
 }
 
 /* =======================
-   ✅ MOBILE DETECTOR + COLLAPSE MAP
+   MOBILE DETECTOR + COLLAPSE MAP
    ======================= */
 const isMobile = ref(false)
 let mq
@@ -755,7 +706,6 @@ function updateIsMobile() {
 onMounted(() => {
   if (typeof window !== 'undefined') lang.value = safeReadLang()
   lockPage()
-
   if (typeof window === 'undefined') return
   mq = window.matchMedia('(max-width: 900px)')
   updateIsMobile()
@@ -771,7 +721,7 @@ onBeforeUnmount(() => {
 })
 
 /* =======================
-   CITY OPTIONS (con “Todas”)
+   CITY OPTIONS
    ======================= */
 const orderedCities = computed(() => {
   return [...cities.value.filter((s) => ![18, 15, 19].includes(Number(s.city_id)))]
@@ -818,12 +768,10 @@ async function onAddressComplete(e) {
       limit: '5',
       session_token: sessionToken.value
     })
-
     if (Number(selectedCityId.value)) {
       const c = cities.value.find((x) => Number(x.city_id) === Number(selectedCityId.value))
       if (c) params.append('city', c.city_name)
     }
-
     const res = await fetch(`${LOCATIONS_BASE}/co/places/autocomplete?${params}`)
     const data = await res.json()
     suggestions.value = normalizePredictions(data.predictions)
@@ -913,14 +861,10 @@ async function loadNeighborhoodsByCity(cityId) {
 const isModalOpen = ref(false)
 const modalStore = ref(null)
 const modalStep = ref(1)
-
-// Google Modal
 const modalAddressQuery = ref('')
 const modalSuggestions = ref([])
 const modalCoverageResult = ref(null)
 const modalAddressError = ref('')
-
-// Barrios Modal
 const modalSelectedNeighborhood = ref(null)
 const modalNbSuggestions = ref([])
 const modalParamAddress = ref('')
@@ -975,12 +919,10 @@ async function openModal(store) {
   modalStore.value = store
   modalStep.value = 1
   isModalOpen.value = true
-
   modalAddressQuery.value = ''
   modalSuggestions.value = []
   modalCoverageResult.value = null
   modalAddressError.value = ''
-
   modalSelectedNeighborhood.value = null
   modalNbSuggestions.value = []
   modalParamAddress.value = ''
@@ -1015,7 +957,6 @@ async function handleModalOption(orderType) {
     setModalStep(2)
     return
   }
-
   dispatchToSite(modalStore.value, orderType, { mode: 'simple', city: selectedCityObj.value })
 }
 
@@ -1025,7 +966,6 @@ async function onModalAddressComplete(e) {
     modalSuggestions.value = []
     return
   }
-
   try {
     const params = new URLSearchParams()
     params.append('input', q)
@@ -1052,7 +992,6 @@ function onSelectModalSuggestionEvent(ev) {
 async function onSelectModalSuggestion(s) {
   modalAddressQuery.value = s.description
   modalStep.value = 3
-
   try {
     const params = new URLSearchParams({
       place_id: s.place_id,
@@ -1061,9 +1000,7 @@ async function onSelectModalSuggestion(s) {
     })
     const res = await fetch(`${LOCATIONS_BASE}/co/places/coverage-details?${params}`)
     const data = await res.json()
-
     modalCoverageResult.value = data
-
     const ot = getExactOrderType(modalStore.value.id, 3)
     if (ot) {
       modalStep.value = 4
@@ -1091,11 +1028,9 @@ async function onModalNeighborhoodComplete(e) {
 
 function onDispatchModalParams() {
   if (!modalSelectedNeighborhood.value || !modalParamAddress.value.trim()) return
-
   const assignedSiteId = modalSelectedNeighborhood.value.site_id
   let targetStore = getStoreById(Number(assignedSiteId))
   if (!targetStore) targetStore = modalStore.value
-
   const ot = getExactOrderType(targetStore.id, 3)
   if (!ot) {
     alert(lang.value === 'en'
@@ -1104,7 +1039,6 @@ function onDispatchModalParams() {
     )
     return
   }
-
   dispatchToSite(targetStore, ot, {
     mode: 'params',
     city: cities.value.find((c) => Number(c.city_id) === Number(targetStore.cityId)),
@@ -1115,11 +1049,9 @@ function onDispatchModalParams() {
 
 function confirmGoogleDispatch() {
   if (!modalCoverageResult.value) return
-
   const siteId = modalCoverageResult.value.nearest?.site?.site_id || modalStore.value.id
   let targetStore = getStoreById(Number(siteId))
   if (!targetStore) targetStore = modalStore.value
-
   const ot = getExactOrderType(targetStore.id, 3)
   if (ot) {
     dispatchToSite(targetStore, ot, {
@@ -1177,7 +1109,7 @@ async function loadStores() {
         subdomain: s.subdomain,
         img_id: s.img_id,
         status: 'unknown',
-        site_phone: s.site_phone || null // ✅ AQUI
+        site_phone: s.site_phone || null
       }))
   } catch {}
 }
@@ -1188,6 +1120,8 @@ async function loadStatuses() {
       const res = await fetch(`${BACKEND_BASE}/site/${s.id}/status`)
       const d = await res.json()
       s.status = d.status
+      // CAMBIO: Capturar la hora de apertura
+      s.next_opening_time = d.next_opening_time
     } catch {
       if (!s.status) s.status = 'unknown'
     }
@@ -1347,9 +1281,6 @@ async function dispatchToSite(manualStore, orderTypeObj, extra = { mode: 'simple
   }
 }
 
-/* =======================
-   SIDEBAR DISPATCH PARAMS
-   ======================= */
 function onDispatchParamsDelivery() {
   if (!canDispatchParams.value) return
   const store = paramAssignedStore.value
@@ -1362,7 +1293,6 @@ function onDispatchParamsDelivery() {
     )
     return
   }
-
   dispatchToSite(store, ot, {
     mode: 'params',
     city: selectedCityObj.value,
@@ -1400,7 +1330,6 @@ const filteredStores = computed(() => {
   let base = stores.value
   const cityId = Number(selectedCityId.value || 0)
   if (cityId) base = base.filter((s) => Number(s.cityId) === cityId)
-
   if (mapBounds.value) {
     base = base.filter((s) =>
       s.lat <= mapBounds.value.north &&
@@ -1421,44 +1350,34 @@ function updateBounds() {
 
 async function onCityChange() {
   selectedCityId.value = Number(selectedCityId.value || 0)
-
   coverageResult.value = null
   addressQuery.value = ''
   suggestions.value = []
-
   neighborhoods.value = []
   selectedNeighborhood.value = null
   nbSuggestions.value = []
   if (!selectedCityId.value) paramExactAddress.value = ''
-
   try {
     if (dropoffMarker.value && map.value) {
       map.value.removeLayer(dropoffMarker.value)
       dropoffMarker.value = null
     }
   } catch {}
-
   if (selectedCityId.value && !isGoogleMapsEnabled(selectedCityId.value)) {
     await loadNeighborhoodsByCity(selectedCityId.value)
   }
-
   if (!map.value || !leafletModule.value) return
   const L = leafletModule.value
   const cityIdAtClick = selectedCityId.value
-
   if (!initialBounds.value) initialBounds.value = map.value.getBounds()
-
   if (!cityIdAtClick) {
     map.value.flyToBounds(initialBounds.value, { padding: [40, 40], animate: true, duration: 0.9 })
     return
   }
-
   const cityStores = stores.value.filter((s) => Number(s.cityId) === Number(cityIdAtClick))
   const latlngs = cityStores.map((s) => [s.lat, s.lng])
   if (!latlngs.length) return
-
   const targetBounds = L.latLngBounds(latlngs)
-
   map.value.flyToBounds(initialBounds.value, { padding: [40, 40], animate: true, duration: 0.7 })
   setTimeout(() => {
     if (!map.value || Number(selectedCityId.value) !== Number(cityIdAtClick)) return
@@ -1470,11 +1389,9 @@ onMounted(async () => {
   await Promise.all([loadPaymentConfig(), loadCityMapStatus()])
   await Promise.all([loadCities(), loadStores()])
   await loadStatuses()
-
   const mod = await import('leaflet')
   const L = mod.default ?? mod
   leafletModule.value = L
-
   const colombiaBounds = L.latLngBounds(L.latLng(-4.5, -79.5), L.latLng(13.5, -66.5))
   map.value = L.map('vicio-map', {
     zoom: 6,
@@ -1483,7 +1400,6 @@ onMounted(async () => {
     maxBounds: colombiaBounds,
     maxBoundsViscosity: 1.0,
     zoomControl: false,
-
     scrollWheelZoom: false,
     doubleClickZoom: false,
     touchZoom: false,
@@ -1492,21 +1408,17 @@ onMounted(async () => {
     dragging: false,
     tap: false
   })
-
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap' }).addTo(map.value)
-
   const fireIcon = L.divIcon({
     className: 'leaflet-div-icon fire-icon',
     html: `<img src="https://cdn.deliclever.com/viciocdn/ecommerce/icon-fire-color.gif" class="fire-img" style="width:100%;height:100%"/>`,
     iconSize: [42, 42]
   })
-
   dropoffIcon = L.icon({
     iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
     iconSize: [25, 41],
     iconAnchor: [12, 41]
   })
-
   const group = L.featureGroup()
   stores.value.forEach((s) => {
     const m = L.marker([s.lat, s.lng], { icon: fireIcon })
@@ -1515,7 +1427,6 @@ onMounted(async () => {
     group.addLayer(m)
     markers.value[s.id] = m
   })
-
   if (stores.value.length) {
     map.value.fitBounds(group.getBounds(), { padding: [40, 40] })
     map.value.setMinZoom(map.value.getBoundsZoom(group.getBounds()))
@@ -1524,7 +1435,6 @@ onMounted(async () => {
     initialBounds.value = colombiaBounds
     map.value.fitBounds(colombiaBounds, { padding: [40, 40] })
   }
-
   map.value.on('moveend', updateBounds)
   updateBounds()
 })
@@ -1532,7 +1442,7 @@ onMounted(async () => {
 
 <style scoped>
 /* =========================
-   ✅ GLOBAL: sin scroll global (app-like)
+   GLOBAL
    ========================= */
 :global(html.no-global-scroll),
 :global(body.no-global-scroll) {
@@ -1540,7 +1450,6 @@ onMounted(async () => {
   overflow: hidden !important;
   overscroll-behavior: none;
 }
-
 :global(body.no-global-scroll) { margin: 0; }
 :global(html.no-global-scroll) { -webkit-text-size-adjust: 100%; }
 
@@ -1604,7 +1513,7 @@ onMounted(async () => {
   font-weight: 800;
   margin: 0 0 0.9rem;
   text-transform: uppercase;
-  color: var(--text-primary);
+  color: #1e293b; /* Más oscuro para contraste */
   display: flex;
   align-items: center;
   gap: 0.4rem;
@@ -1657,16 +1566,16 @@ onMounted(async () => {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.12em;
-  color: var(--text-soft);
+  color: #475569; /* Gris más oscuro para legibilidad */
   margin-bottom: 0.35rem;
 }
 
 .search-wrapper { position: relative; display: flex; flex-direction: column; gap: 0.25rem; }
 .params-box { margin-top: .6rem; }
-
 .ac-item { display: flex; align-items: center; gap: .55rem; }
-.item-icon { color: var(--text-soft); font-size: 1.1em; }
+.item-icon { color: #64748b; font-size: 1.1em; }
 
+/* Tarjeta Resultado */
 .coverage-card {
   margin: 1rem 1.8rem;
   background-color: #ffffff;
@@ -1709,6 +1618,7 @@ onMounted(async () => {
 .text-fail { color: #b91c1c; }
 .coverage-actions { display: flex; gap: 0.8rem; padding: 0 1rem 1rem; flex-wrap: wrap; }
 
+/* Botones */
 .btn-action {
   flex: 1;
   display: flex;
@@ -1722,22 +1632,37 @@ onMounted(async () => {
   text-transform: uppercase;
   cursor: pointer;
   border: none;
-  transition: transform 0.1s;
+  transition: all 0.2s ease;
 }
-.btn-action:disabled { opacity: .55; cursor: not-allowed; }
+.btn-action:disabled { opacity: .55; cursor: not-allowed; filter: grayscale(1); }
 .btn-action:active { transform: scale(0.97); }
-.btn-delivery { background-color: #ff6600; color: #ffffff; box-shadow: 0 4px 10px rgba(255, 102, 0, 0.25); }
-.btn-delivery:hover { background-color: #e65c00; }
 
-/* ✅ WhatsApp */
-.btn-whatsapp{
-  background:#22c55e;
-  color:#fff;
-  box-shadow: 0 4px 10px rgba(34,197,94,.25);
+/* ✅ Botón Domicilio: Naranja vibrante */
+.btn-delivery {
+  background: linear-gradient(135deg, #ff6600 0%, #ff5500 100%);
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(255, 102, 0, 0.3);
 }
-.btn-whatsapp:hover{ background:#16a34a; }
+.btn-delivery:hover {
+  background: linear-gradient(135deg, #ff5500 0%, #e64a19 100%);
+  box-shadow: 0 6px 15px rgba(255, 102, 0, 0.4);
+  transform: translateY(-1px);
+}
+
+/* ✅ Botón WhatsApp: Verde Intenso + Gradiente */
+.btn-whatsapp{
+  background: linear-gradient(135deg, #25D366 0%, #128C7E 100%);
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(37, 211, 102, 0.4);
+}
+.btn-whatsapp:hover {
+  background: linear-gradient(135deg, #2ecc71 0%, #16a085 100%);
+  box-shadow: 0 6px 15px rgba(37, 211, 102, 0.5);
+  transform: translateY(-1px);
+}
 .full-width { width: 100%; }
 
+/* Lista de Sedes */
 .stores-list {
   flex: 1;
   overflow-y: auto;
@@ -1749,41 +1674,55 @@ onMounted(async () => {
 }
 
 .store-item {
-  display: flex;
+  display: grid;
   align-items: center;
-  justify-content: flex-start;
-  padding: 0.95rem 1.8rem;
+  justify-content: space-between;
+  grid-template-areas: 
+  "img info wsp arrow"
+  "img info wsp arrow"
+   "img info wsp arrow"
+  "img status status status";
+  grid-template-columns: auto 1fr auto auto;
+  padding: 1.1rem 1.8rem;
   border-bottom: 1px solid #f1f5f9;
   cursor: pointer;
   gap: 1rem;
-  transition: all 0.15s ease;
+  width: 100%;
+  transition: all 0.2s ease;
+  position: relative;
 }
-.store-item:hover { background: #f8fafc; transform: translateY(-1px); }
-.store-item--active { background: #fff7ed; border-left: 3px solid #ff6600; }
+.store-item:hover { background: #f8fafc; }
+
+/* ✅ Estado Activo: Borde más grueso y fondo cálido */
+.store-item--active {
+  background: #fffcf9;
+  border-left: 5px solid #ff6600;
+}
+.store-item--active .store-name { color: #ff6600; }
 
 .store-img-wrapper {
   width: 90px;
   height: 90px;
   flex-shrink: 0;
-  border-radius: 0.5rem;
+  border-radius: 0.8rem;
   overflow: hidden;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  box-shadow: 0 4px 10px rgba(0,0,0,0.1);
   background-color: #f1f5f9;
 }
 .store-img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.3s ease; }
 .store-item:hover .store-img { transform: scale(1.05); }
 
-.store-info { flex: 1; display: flex; flex-direction: column; gap: 0.2rem; }
-.store-name { margin: 0; font-size: 1rem; font-weight: 800; color: var(--text-primary); }
-.store-services { font-size: 0.7rem; font-weight: 600; text-transform: uppercase; color: #ff6600; letter-spacing: 0.12em; }
-.store-address { font-size: 0.84rem; color: var(--text-soft); margin-bottom: 0.4rem; }
+.store-info { flex: 1; display: flex; flex-direction: column; gap: 0.3rem; }
+.store-name { margin: 0; font-size: 1.05rem; font-weight: 800; color: #1e293b; transition: color 0.2s; }
+.store-services { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; color: #f97316; letter-spacing: 0.12em; }
+.store-address { font-size: 0.84rem; color: #64748b; margin-bottom: 0.5rem; font-weight: 500; }
 
-/* ✅ fila de chips */
 .store-actions-row{
   display:flex;
   align-items:center;
   gap:.55rem;
   flex-wrap:wrap;
+  margin-top: 0.2rem;
 }
 
 .store-action {
@@ -1791,83 +1730,93 @@ onMounted(async () => {
   border: none;
   font-size: 0.72rem;
   font-weight: 800;
-  padding: 0.38rem 0.85rem;
-  border-radius: 999px;
+  padding: 0.4rem 0.9rem;
+  border-radius: 10rem;
   text-transform: uppercase;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.08em;
   display: inline-flex;
   align-items: center;
+  transition: all 0.2s ease;
 }
-.status-flex { display: flex; align-items: center; gap: 0.35rem; }
-.store-action[data-status='open'] { background: #dcfce7; color: #166534; }
-.store-action[data-status='closed'],
-.store-action[data-status='close'] { background: #fee2e2; color: #991b1b; }
-.store-action[data-status='unknown'] { background: #f1f5f9; color: #94a3b8; }
 
-/* ✅ botón WhatsApp en cada sede */
+/* ✅ ETIQUETAS DE ESTADO: Colores Intensos */
+.store-action[data-status='open'] {
+  background: linear-gradient(135deg, #00c853 0%, #009624 100%);
+  color: #ffffff;
+  box-shadow: 0 3px 8px rgba(0, 200, 83, 0.4); /* Glow verde */
+  text-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+.store-action[data-status='closed'],
+.store-action[data-status='close'] {
+  background: linear-gradient(135deg, #d50000 0%, #9b0000 100%);
+  color: #ffffff;
+  box-shadow: 0 3px 8px rgba(213, 0, 0, 0.4); /* Glow rojo */
+  text-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+.store-action[data-status='unknown'] { background: #cbd5e1; color: #475569; }
+
+.status-flex { display: flex; align-items: center; gap: 0.35rem; }
+
+/* ✅ Botón flotante WhatsApp en la lista */
 .store-whatsapp{
   border:none;
-  background:#dcfce7;
-  color:#166534;
+  background: linear-gradient(135deg, #25D366 50%, #128C7E 100%);
+  color:#ffffff;
   font-size:.72rem;
-  font-weight:900;
-  padding:.38rem .8rem;
-  border-radius:999px;
-  letter-spacing:.12em;
-  text-transform:uppercase;
-  display:inline-flex;
+  height: 2.8rem;
+  width: 2.8rem;
+  box-shadow: 0 4px 12px rgba(37, 211, 102, 0.4);
+  border-radius:50%;
+  display:flex;
+  justify-content: center;
   align-items:center;
-  gap:.35rem;
   cursor:pointer;
-  transition: transform .12s ease, filter .12s ease;
+  transition: all 0.2s ease;
+  z-index: 2;
 }
-.store-whatsapp:hover{  filter: brightness(.98); }
-.store-whatsapp:disabled{
-  opacity:.55;
-  cursor:not-allowed;
-  background:#f1f5f9;
-  color:#94a3b8;
-}
+.store-whatsapp:hover{ transform: scale(1.1) rotate(5deg); box-shadow: 0 6px 16px rgba(37, 211, 102, 0.5); }
+.store-whatsapp:disabled{ opacity:.4; filter:grayscale(1); cursor:not-allowed; box-shadow:none; }
 
 .store-arrow {
-  background: #000000;
-  color: #ffffff;
-  width: 40px;
-  height: 40px;
+  background: transparent;
+  color: #94a3b8;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
-  border: none;
+  border: 1px solid transparent;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: transform 0.2s ease, background 0.2s ease;
-  box-shadow: 0 4px 10px rgba(0,0,0,0.2);
-  flex-shrink: 0;
+  transition: all 0.2s ease;
 }
-.store-arrow:hover { background: #333333; transform: scale(1.1); }
+.store-item:hover .store-arrow {
+  background: #f1f5f9;
+  color: #334155;
+  transform: translateX(3px);
+}
 
 :global(.leaflet-div-icon.fire-icon) { width: 42px !important; height: 42px !important; border: none; background: transparent; display: flex; align-items: center; justify-content: center; }
-:global(.leaflet-div-icon.fire-icon .fire-img) { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2)); }
+:global(.leaflet-div-icon.fire-icon .fire-img) { width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 4px 8px rgba(0,0,0,0.3)); transition: transform 0.3s; }
+:global(.leaflet-div-icon.fire-icon:hover .fire-img) { transform: scale(1.2); }
 :deep(.leaflet-tile) { filter: grayscale(100%) !important; }
 
-.modal-close-btn { position: absolute; top: 10px; right: 10px; background: transparent; border: none; cursor: pointer; color: #94a3b8; padding: 5px; }
-.modal-close-btn:hover { color: #ef4444; }
+/* Modal Styles */
+.modal-close-btn { position: absolute; top: 12px; right: 12px; background: #f1f5f9; border-radius: 50%; width: 32px; height: 32px; border: none; cursor: pointer; color: #64748b; padding: 0; display:flex; align-items:center; justify-content:center; transition: all 0.2s; }
+.modal-close-btn:hover { background: #fee2e2; color: #ef4444; }
 
 .modal-title {
   margin: 0 0 5px;
-  font-size: 1.2rem;
-  font-weight: 800;
-  color: #1e293b;
+  font-size: 1.3rem;
+  font-weight: 900;
+  color: #0f172a;
   text-align: center;
   text-transform: uppercase;
-  margin-top: 2rem;
+  margin-top: 1.5rem;
+  letter-spacing: -0.02em;
 }
-.modal-subtitle { text-align: center; color: #64748b; font-size: 0.9rem; margin-bottom: 1.0rem; }
-
-.modal-whatsapp-row{
-  /* padding: 0 1.2rem; */
-  margin-bottom: .8rem;
-}
+.modal-subtitle { text-align: center; color: #64748b; font-size: 0.95rem; margin-bottom: 1.2rem; }
+.modal-whatsapp-row{ margin-bottom: .8rem; }
 
 .modal-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem; }
 .modal-btn {
@@ -1875,79 +1824,50 @@ onMounted(async () => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 1.1rem 1rem;
-  border-radius: 12px;
+  padding: 1rem;
+  border-radius: 16px;
   width: 100%;
-  aspect-ratio: 1 / 1;
+  aspect-ratio: 1 / 0.85;
   border: 2px solid transparent;
   background: #f8fafc;
+  transition: all 0.2s;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.02);
 }
-.modal-btn--delivery:hover { background: #fff7ed; border-color: #ff6600; color: #c2410c; }
-.modal-btn--pickup:hover { background: #f0fdf4; border-color: #16a34a; color: #15803d; }
+.modal-btn--delivery:hover { background: #fff7ed; border-color: #ff6600; color: #c2410c; transform: translateY(-3px); box-shadow: 0 10px 20px rgba(255, 102, 0, 0.15); }
+.modal-btn--pickup:hover { background: #f0fdf4; border-color: #16a34a; color: #15803d; transform: translateY(-3px); box-shadow: 0 10px 20px rgba(22, 163, 74, 0.15); }
 
 .modal-header-nav { margin-bottom: 0.8rem; }
-.modal-back-btn { display: inline-flex; align-items: center; gap: 6px; margin: 1rem; }
+.modal-back-btn { display: inline-flex; align-items: center; gap: 6px; margin: 1rem; color: #475569; font-weight: 600; }
+.modal-back-btn:hover { color: #0f172a; background: #f1f5f9; }
 
-.modal-error { margin-top: 10px; color: #ef4444; font-size: 0.85rem; text-align: center; }
+.modal-error { margin-top: 10px; color: #ef4444; font-size: 0.85rem; text-align: center; font-weight: 600; }
 .modal-loading-view { text-align: center; padding: 2rem 0; color: #64748b; }
 
-.redirect-overlay { position: fixed; inset: 0; background: rgba(255,255,255,0.9); z-index: 10000; display: flex; align-items: center; justify-content: center; }
-.redirect-content { text-align: center; animation: popIn 0.5s ease-out; }
+.redirect-overlay { position: fixed; inset: 0; background: rgba(255,255,255,0.95); z-index: 10000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(5px); }
+.redirect-content { text-align: center; animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
 .redirect-spinner { position: relative; display: inline-flex; margin-bottom: 2rem; color: #ff6600; }
-.rocket-icon { z-index: 2; animation: rocketFloat 1.5s ease-in-out infinite alternate; color: #ff6600; }
-.pulse-ring { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 80px; height: 80px; border-radius: 50%; border: 2px solid #ff6600; opacity: 0; animation: pulse 2s infinite; }
-.redirect-store { font-size: 2.5rem; font-weight: 900; color: #0f172a; margin: 0.5rem 0; }
-.redirect-subtitle { font-size: 1rem; color: #94a3b8; }
+.rocket-icon { z-index: 2; animation: rocketFloat 1.5s ease-in-out infinite alternate; color: #ff6600; filter: drop-shadow(0 4px 6px rgba(255,102,0,0.4)); }
+.pulse-ring { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 80px; height: 80px; border-radius: 50%; border: 3px solid #ff6600; opacity: 0; animation: pulse 2s infinite; }
+.redirect-store { font-size: 2.5rem; font-weight: 900; color: #0f172a; margin: 0.5rem 0; letter-spacing: -0.03em; }
+.redirect-subtitle { font-size: 1.1rem; color: #64748b; font-weight: 500; }
 
 @keyframes popIn { from { transform: scale(0.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-@keyframes rocketFloat { from { transform: translateY(0); } to { transform: translateY(-10px); } }
+@keyframes rocketFloat { from { transform: translateY(0); } to { transform: translateY(-15px) rotate(5deg); } }
 @keyframes pulse { 0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0.8; } 100% { transform: translate(-50%, -50%) scale(1.5); opacity: 0; } }
 .fade-enter-active, .fade-leave-active { transition: opacity 0.3s; }
 .fade-enter-from, .fade-leave-to { opacity: 0; }
 
 @media (max-width: 900px) {
   .vicio-page { flex-direction: column; }
-
-  .vicio-map-shell {
-    flex: 0 0 auto;
-    height: 40%;
-    width: 100%;
-    z-index: 10;
-    transition: height 0.38s ease, opacity 0.38s ease, transform 0.38s ease;
-  }
-
-  .vicio-sidebar {
-    flex: 1 1 auto;
-    height: 60%;
-    width: 100%;
-    overflow: hidden;
-    border-radius: 1.5rem 1.5rem 0 0;
-    margin-top: -1.5rem;
-    z-index: 20;
-    box-shadow: 0 -4px 20px rgba(0,0,0,0.15);
-    transition: height 0.38s ease, border-radius 0.38s ease, margin-top 0.38s ease;
-  }
-
-  .vicio-page.is-map-collapsed .vicio-map-shell {
-    height: 0% !important;
-    opacity: 0;
-    transform: translateY(-10px);
-    pointer-events: none;
-  }
-
-  .vicio-page.is-map-collapsed .vicio-sidebar {
-    height: 100% !important;
-    margin-top: 0 !important;
-    border-radius: 0 !important;
-  }
-
+  .vicio-map-shell { flex: 0 0 auto; height: 35%; width: 100%; z-index: 10; transition: height 0.38s ease, opacity 0.38s ease, transform 0.38s ease; }
+  .vicio-sidebar { flex: 1 1 auto; height: 65%; width: 100%; overflow: hidden; border-radius: 1.5rem 1.5rem 0 0; margin-top: -1.5rem; z-index: 20; box-shadow: 0 -4px 25px rgba(0,0,0,0.1); transition: height 0.38s ease, border-radius 0.38s ease, margin-top 0.38s ease; }
+  .vicio-page.is-map-collapsed .vicio-map-shell { height: 0% !important; opacity: 0; transform: translateY(-10px); pointer-events: none; }
+  .vicio-page.is-map-collapsed .vicio-sidebar { height: 100% !important; margin-top: 0 !important; border-radius: 0 !important; }
   .store-img-wrapper { width: 70px; height: 70px; }
-  .store-item { padding: 0.8rem 1rem; }
+  .store-item { padding: 1rem 1.2rem; }
   .coverage-card { margin: 1rem; }
   .sidebar-header-top { align-items: center; }
 }
 
-*{
-  transition: all .3s ease;
-}
+* { transition: all .2s ease-out; }
 </style>
