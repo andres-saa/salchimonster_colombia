@@ -1,42 +1,48 @@
 <template>
   <Transition name="modal-fade">
-    <div class="search-modal" v-if="uiStore.isSearchOpen">
-      
+    <div v-if="uiStore.isSearchOpen" class="search-modal">
       <div class="menu-background">
-        
         <div class="search-sticky-header">
           <div class="header-content">
             <div class="search-bar-container">
               <i class="fas fa-search search-icon"></i>
-              <input 
+
+              <input
                 ref="searchInputRef"
-                type="text" 
                 v-model="searchQuery"
+                type="text"
                 class="search-input"
-                placeholder="¿Qué se te antoja hoy?"
+                :placeholder="t('search_placeholder')"
                 @input="onSearchInput"
               />
-              <button v-if="searchQuery" @click="clearSearch" class="search-clear-btn">
+
+              <button
+                v-if="searchQuery"
+                class="search-clear-btn"
+                type="button"
+                @click="clearSearch"
+              >
                 ✕
               </button>
             </div>
-            
-            <button class="close-modal-btn" @click="closeModal">
-              Cerrar
+
+            <button class="close-modal-btn" type="button" @click="closeModal">
+              {{ t('close') }}
             </button>
           </div>
         </div>
 
         <div v-if="showLoader" class="loading-container">
           <div class="spinner"></div>
-          <p class="loading-text">Cargando nuestro menú...</p>
+          <p class="loading-text">{{ t('loading_menu') }}</p>
         </div>
 
         <div v-else class="menu-content">
-          
           <div v-if="filteredCategories.length === 0 && !menuPending" class="no-results">
-            <p>No encontramos productos que coincidan con "{{ searchQuery }}" ☹️</p>
-            <button @click="clearSearch" class="reset-btn">Ver todo el menú</button>
+            <p>{{ t('no_results', { q: searchQuery }) }} ☹️</p>
+            <button class="reset-btn" type="button" @click="clearSearch">
+              {{ t('see_all_menu') }}
+            </button>
           </div>
 
           <section
@@ -50,13 +56,14 @@
                 class="menu-category-section__title"
                 :style="shouldUseWhiteText(index) ? 'color:white' : ''"
               >
-                {{ formatLabel(cat.category_name) }}
+                {{ formatLabel(cat.category_name)?.toLowerCase() }}
               </h2>
+
               <p
                 class="menu-category-section__count"
                 :style="shouldUseWhiteText(index) ? 'color:white' : ''"
               >
-                {{ cat.products?.length || 0 }} productos
+                {{ (cat.products?.length || 0) }} {{ t('products') }}
               </p>
             </header>
 
@@ -79,38 +86,65 @@
 </template>
 
 <script setup>
-import {
-  ref,
-  computed,
-  nextTick,
-  watch,
-  onMounted,
-  onBeforeUnmount
-} from 'vue'
+import { ref, computed, nextTick, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useUIStore } from '~/stores/ui' 
+import { useUIStore } from '~/stores/ui'
 import MenuProductCard from '~/components/MenuProductCard.vue'
 import { URI } from '~/service/conection'
-import { useFetch, useSitesStore, useMenuStore } from '#imports'
+import { useFetch, useSitesStore, useMenuStore, useUserStore } from '#imports'
 
 const route = useRoute()
 const router = useRouter()
 const sitesStore = useSitesStore()
 const menuStore = useMenuStore()
 const uiStore = useUIStore()
+const userStore = useUserStore()
+
 const searchInputRef = ref(null)
 
-// === LÓGICA DE BÚSQUEDA Y MODAL ===
+/* ================= i18n ================= */
+const lang = computed(() =>
+  (userStore?.lang?.name || 'es').toString().toLowerCase() === 'en' ? 'en' : 'es'
+)
+
+const DICT = {
+  es: {
+    search_placeholder: '¿Qué se te antoja hoy?',
+    close: 'Cerrar',
+    loading_menu: 'Cargando nuestro menú...',
+    products: 'productos',
+    see_all_menu: 'Ver todo el menú',
+    no_results: 'No encontramos productos que coincidan con "{q}"'
+  },
+  en: {
+    search_placeholder: 'What are you craving today?',
+    close: 'Close',
+    loading_menu: 'Loading our menu...',
+    products: 'products',
+    see_all_menu: 'See full menu',
+    no_results: 'We couldn’t find products matching "{q}"'
+  }
+}
+
+const t = (key, vars = {}) => {
+  const dict = DICT[lang.value] || DICT.es
+  let s = dict[key] ?? DICT.es[key] ?? key
+  Object.entries(vars).forEach(([k, v]) => {
+    s = s.replaceAll(`{${k}}`, String(v))
+  })
+  return s
+}
+
+/* ================= Modal / Search ================= */
 const searchQuery = ref('')
 
 const closeModal = () => {
   uiStore.closeSearch()
-  searchQuery.value = '' // Opcional: limpiar búsqueda al cerrar
+  searchQuery.value = ''
 }
 
 const clearSearch = () => {
   searchQuery.value = ''
-  // No cerramos el modal al limpiar el texto, solo limpiamos el input
   if (searchInputRef.value) searchInputRef.value.focus()
 }
 
@@ -118,26 +152,24 @@ const onSearchInput = () => {
   // Lógica simple de input
 }
 
-// === LOCK SCROLL: Bloquear el scroll de la página de fondo ===
+/* Lock scroll */
 watch(
   () => uiStore.isSearchOpen,
   (isOpen) => {
-    if (process.client) {
-      if (isOpen) {
-        document.body.style.overflow = 'hidden'
-        // Auto focus al input cuando se abre
-        nextTick(() => {
-          if (searchInputRef.value) searchInputRef.value.focus()
-        })
-      } else {
-        document.body.style.overflow = ''
-      }
+    if (!process.client) return
+    if (isOpen) {
+      document.body.style.overflow = 'hidden'
+      nextTick(() => {
+        if (searchInputRef.value) searchInputRef.value.focus()
+      })
+    } else {
+      document.body.style.overflow = ''
     }
   },
   { immediate: true }
 )
 
-// === CONFIGURACIÓN BASE ===
+/* ================= Config ================= */
 const CACHE_TTL = 30 * 60 * 1000
 const isRefreshing = ref(false)
 let clientRefreshIntervalId = null
@@ -151,14 +183,10 @@ const doClientRefresh = async (refreshFn) => {
   }
 }
 
-const siteId = computed(() => (sitesStore?.location?.site?.site_id) || 1)
+const siteId = computed(() => sitesStore?.location?.site?.site_id || 1)
 
-// === FETCH DATA ===
-const {
-  data: rawCategoriesData,
-  refresh,
-  pending: menuPending
-} = useFetch(
+/* ================= Fetch ================= */
+const { data: rawCategoriesData, refresh, pending: menuPending } = useFetch(
   () => `${URI}/tiendas/${siteId.value}/products`,
   {
     key: () => `menu-data-${siteId.value}`,
@@ -167,13 +195,12 @@ const {
   }
 )
 
+/* Cache (cliente) */
 if (process.client) {
   const cachedWrapper = menuStore.getMenuBySite(siteId.value)
   if (cachedWrapper && cachedWrapper.data && cachedWrapper.timestamp) {
     const age = Date.now() - cachedWrapper.timestamp
-    if (age < CACHE_TTL) {
-      rawCategoriesData.value = cachedWrapper.data
-    }
+    if (age < CACHE_TTL) rawCategoriesData.value = cachedWrapper.data
   }
 }
 
@@ -184,16 +211,13 @@ watch(
   (val) => {
     if (!process.client) return
     if (val && Array.isArray(val.categorias) && val.categorias.length) {
-      menuStore.setMenuForSite(siteId.value, {
-        data: val,
-        timestamp: Date.now()
-      })
+      menuStore.setMenuForSite(siteId.value, { data: val, timestamp: Date.now() })
     }
   },
   { immediate: true }
 )
 
-// === NORMALIZACIÓN ===
+/* ================= Helpers ================= */
 const normalize = (str) =>
   String(str || '')
     .toLowerCase()
@@ -202,35 +226,42 @@ const normalize = (str) =>
     .trim()
 
 const formatLabel = (str) => {
-  const s = String(str || '').toLowerCase()
+  const s = String(str || '')
+  if (!s) return ''
+  // Capitaliza suave sin destruir el resto
   return s.charAt(0).toUpperCase() + s.slice(1)
 }
 
-// === PROCESAMIENTO DE CATEGORÍAS (BASE) ===
+/* ================= Base categories (RESPONDE AL IDIOMA) ================= */
 const baseCategories = computed(() => {
   const raw = sourceData.value
   if (!raw || !Array.isArray(raw.categorias)) return []
 
+  const isEn = lang.value === 'en'
+
   return raw.categorias
-    .filter(
-      (cat) =>
-        cat.visible &&
-        Array.isArray(cat.products) &&
-        cat.products.length > 0
-    )
+    .filter((cat) => cat.visible && Array.isArray(cat.products) && cat.products.length > 0)
     .map((cat) => {
       const category_id = Number(cat.categoria_id)
-      const category_name = cat.categoria_descripcion || cat.english_name || ''
+
+      // ✅ AQUÍ: nombre de categoría según idioma actual
+      const category_name = isEn
+        ? (cat.english_name || cat.categoria_descripcion || '')
+        : (cat.categoria_descripcion || cat.english_name || '')
 
       const products = (cat.products || []).map((p) => ({
         ...p,
         id: p.producto_id,
+
+        // Nombre según disponibilidad (ya cubre EN si existe english_name)
         product_name:
           p.productogeneral_descripcionweb ||
           p.productogeneral_descripcion ||
           p.english_name ||
           '',
+
         price: Number(p.productogeneral_precio ?? 0),
+
         image_url:
           p.productogeneral_urlimagen ||
           (p.lista_productobase &&
@@ -239,22 +270,18 @@ const baseCategories = computed(() => {
           ''
       }))
 
-      return {
-        ...cat,
-        category_id,
-        category_name,
-        products
-      }
+      return { ...cat, category_id, category_name, products }
     })
 })
 
-// === FILTRADO EN VIVO ===
+/* ================= Live filter ================= */
 const filteredCategories = computed(() => {
   const query = normalize(searchQuery.value)
   if (!query) return baseCategories.value
+
   return baseCategories.value
-    .map(cat => {
-      const matchingProducts = cat.products.filter(p => {
+    .map((cat) => {
+      const matchingProducts = cat.products.filter((p) => {
         const name = normalize(p.product_name)
         const desc = normalize(p.productogeneral_descripcion || p.productogeneral_descripcionweb)
         const eng = normalize(p.english_name)
@@ -262,27 +289,22 @@ const filteredCategories = computed(() => {
       })
       return { ...cat, products: matchingProducts }
     })
-    .filter(cat => cat.products.length > 0)
+    .filter((cat) => cat.products.length > 0)
 })
 
-const showLoader = computed(() => {
-  return menuPending.value && baseCategories.value.length === 0
-})
-
+const showLoader = computed(() => menuPending.value && baseCategories.value.length === 0)
 const shouldUseWhiteText = (index) => index === 0
 
 const onClickProduct = (category, product) => {
-  // Al hacer clic, quizás quieras cerrar el buscador antes de navegar
   uiStore.closeSearch()
   router.push(`/producto/${product.id}`)
 }
 
-// === REFS / OBSERVERS ===
+/* ================= Refs / observers ================= */
 const activeCategoryId = ref(null)
 const categoryRefs = ref({})
 const productRefs = ref({})
 const productObserver = ref(null)
-const productCategoryObserver = ref(null)
 
 onMounted(async () => {
   if (!process.client) return
@@ -298,7 +320,11 @@ onMounted(async () => {
         }
       })
     },
-    { root: document.querySelector('.search-modal'), rootMargin: '0px 0px 20% 0px', threshold: 0.01 }
+    {
+      root: document.querySelector('.search-modal'),
+      rootMargin: '0px 0px 20% 0px',
+      threshold: 0.01
+    }
   )
 
   await doClientRefresh(refresh)
@@ -311,12 +337,14 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   if (productObserver.value) productObserver.value.disconnect()
   if (clientRefreshIntervalId && process.client) window.clearInterval(clientRefreshIntervalId)
-  // Asegurarnos de desbloquear el scroll si el componente se desmonta
   if (process.client) document.body.style.overflow = ''
 })
 
 const setCategoryRef = (id, el) => {
-  if (!el) { delete categoryRefs.value[id]; return }
+  if (!el) {
+    delete categoryRefs.value[id]
+    return
+  }
   categoryRefs.value[id] = el
 }
 
@@ -327,28 +355,28 @@ const setProductRef = (productId, categoryId, el) => {
     delete productRefs.value[productId]
     return
   }
+
   productRefs.value[productId] = el
   el.classList.add('menu-product-card--hidden')
   el.dataset.productId = String(productId)
+
   if (productObserver.value) productObserver.value.observe(el)
 }
-
 </script>
 
 <style scoped>
-/* === MODAL CONTAINER === */
+/* (tu <style> queda igual, no lo toco) */
 .search-modal {
   position: fixed;
   top: 0;
   left: 0;
   width: 100%;
-  height: 100vh; /* Ocupa toda la pantalla */
-  z-index: 99999; /* Por encima de todo */
-  overflow-y: auto; /* El scroll ocurre DENTRO del modal */
-  overscroll-behavior: contain; /* Evita scroll en la página de fondo */
+  height: 100vh;
+  z-index: 99999;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
-/* === TRANSICIONES === */
 .modal-fade-enter-active,
 .modal-fade-leave-active {
   transition: opacity 0.3s ease, transform 0.3s ease;
@@ -360,23 +388,21 @@ const setProductRef = (productId, categoryId, el) => {
   transform: translateY(20px);
 }
 
-/* === FONDO DINÁMICO === */
 .menu-background {
-  min-height: 100%; /* Asegura que cubra el scroll */
+  min-height: 100%;
   background-image:
     linear-gradient(
       to bottom,
-      rgba(0, 0, 0, 0.75) 0, /* Un poco más oscuro para que resalte como modal */
+      rgba(0, 0, 0, 0.75) 0,
       rgb(255, 255, 255) 50vh,
-      #ffffff 50vh 
+      #ffffff 50vh
     ),
     url('https://backend.salchimonster.com/read-photo-product/Ym5HMDik');
   background-repeat: no-repeat;
   background-size: 100% auto;
-  background-attachment: local; /* Importante: local para que scrollee con el modal */
+  background-attachment: local;
 }
 
-/* === HEADER (Ahora dentro del modal) === */
 .search-sticky-header {
   position: sticky;
   top: 0;
@@ -397,7 +423,7 @@ const setProductRef = (productId, categoryId, el) => {
 
 .search-bar-container {
   position: relative;
-  flex: 1; /* Toma el espacio disponible */
+  flex: 1;
   display: flex;
   align-items: center;
 }
@@ -439,7 +465,6 @@ const setProductRef = (productId, categoryId, el) => {
   padding: 0 5px;
 }
 
-/* === BOTÓN CERRAR MODAL === */
 .close-modal-btn {
   background: transparent;
   border: 1px solid #e5e7eb;
@@ -457,7 +482,6 @@ const setProductRef = (productId, categoryId, el) => {
   color: #000;
 }
 
-/* === CONTENIDO === */
 .menu-content {
   max-width: 1300px;
   margin: 0 auto 2.5rem;
@@ -483,7 +507,6 @@ const setProductRef = (productId, categoryId, el) => {
   cursor: pointer;
 }
 
-/* SECCIÓN CATEGORÍA */
 .menu-category-section {
   padding-top: 2rem;
   padding-bottom: 1.5rem;
@@ -513,7 +536,6 @@ const setProductRef = (productId, categoryId, el) => {
   color: #6b7280;
 }
 
-/* GRID PRODUCTOS */
 .menu-category-section__grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
@@ -521,7 +543,6 @@ const setProductRef = (productId, categoryId, el) => {
   padding-bottom: 5rem;
 }
 
-/* LOADING */
 .loading-container {
   display: flex;
   flex-direction: column;
@@ -547,14 +568,9 @@ const setProductRef = (productId, categoryId, el) => {
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* RESPONSIVE */
 @media (max-width: 768px) {
-  .menu-background {
-    background-size: contain;
-  }
-  .menu-content {
-    padding: 0.5rem 0.5rem 1.5rem;
-  }
+  .menu-background { background-size: contain; }
+  .menu-content { padding: 0.5rem 0.5rem 1.5rem; }
   .menu-category-section__title { font-size: 1.5rem; }
   .menu-category-section__grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -564,5 +580,9 @@ const setProductRef = (productId, categoryId, el) => {
     padding: 8px 12px;
     font-size: 0.9rem;
   }
+}
+
+*{
+  text-transform: capitalize;
 }
 </style>

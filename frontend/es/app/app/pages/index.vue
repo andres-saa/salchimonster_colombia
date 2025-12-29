@@ -1,3 +1,12 @@
+
+
+
+
+
+
+
+
+
 <template>
   <div class="menu-page">
     <CarouselBanners v-if="!isLoggedIn" />
@@ -12,7 +21,9 @@
     <div class="menu-background">
       <div v-if="showLoader" class="loading-container">
         <div class="spinner"></div>
-        <p class="loading-text">Cargando nuestro menú...</p>
+        <p class="loading-text">
+          {{ tMenu.loading_menu || 'Cargando nuestro menú...' }}
+        </p>
       </div>
 
       <div v-else class="menu-content">
@@ -29,11 +40,12 @@
             >
               {{ formatLabel(cat.category_name) }}
             </h2>
+
             <p
               class="menu-category-section__count"
               :style="index === 0 ? 'color:white' : ''"
             >
-              {{ cat.products?.length || 0 }} productos
+              {{ cat.products?.length || 0 }} {{ productCountLabel(cat.products?.length || 0) }}
             </p>
           </header>
 
@@ -61,13 +73,44 @@ import CarouselBanners from '~/components/carouselBanners.vue'
 import MenuCategoriesBar from '~/components/MenuCategoriesBar.vue'
 import MenuProductCard from '~/components/MenuProductCard.vue'
 import { URI } from '~/service/conection'
-import { useHead, useFetch, useSitesStore, useMenuStore, useUserStore } from '#imports'
+import { useHead, useFetch, useSitesStore, useMenuStore, useUserStore, texts } from '#imports'
 
 const route = useRoute()
 const router = useRouter()
 const sitesStore = useSitesStore()
 const menuStore = useMenuStore()
 const userStore = useUserStore()
+
+/* ==========================
+   TRADUCCIONES / IDIOMA
+   ========================== */
+const langKey = computed(() => (userStore.lang?.name || 'es').toLowerCase())
+const isEnglish = computed(() => langKey.value === 'en')
+
+// ✅ Textos UI de esta vista
+const tMenu = computed(() => texts[langKey.value]?.menu_page || {})
+
+// ✅ helper: elige EN si existe, si no ES. (y viceversa cuando está en ES)
+const pickByLang = (esValue, enValue) => {
+  const es = esValue || ''
+  const en = enValue || ''
+  return isEnglish.value ? (en || es) : (es || en)
+}
+
+// ✅ helper: pluralización simple para "producto(s) / product(s)"
+const productCountLabel = (n) => {
+  const num = Number(n || 0)
+
+  if (isEnglish.value) {
+    const s = tMenu.value.product_singular || 'product'
+    const p = tMenu.value.product_plural || 'products'
+    return num === 1 ? s : p
+  }
+
+  const s = tMenu.value.product_singular || 'producto'
+  const p = tMenu.value.product_plural || 'productos'
+  return num === 1 ? s : p
+}
 
 /* ==========================
    CONFIGURACIÓN DE CACHÉ
@@ -154,6 +197,8 @@ const formatLabel = (str) => {
 
 /* ==========================
    ADAPTACIÓN DE LA DATA
+   (✅ EN: usa english_name si existe, si no usa ES)
+   (✅ ES: usa ES si existe, si no usa english_name)
    ========================== */
 const categories = computed(() => {
   const raw = rawCategoriesData.value
@@ -163,16 +208,22 @@ const categories = computed(() => {
     .filter((cat) => cat.visible && Array.isArray(cat.products) && cat.products.length > 0)
     .map((cat) => {
       const category_id = Number(cat.categoria_id)
-      const category_name = cat.categoria_descripcion || cat.english_name || ''
+
+      // ✅ “english_name” es el campo EN. “categoria_descripcion” es ES.
+      const category_name = pickByLang(cat.categoria_descripcion, cat.english_name)
 
       const products = (cat.products || []).map((p) => ({
         ...p,
         id: p.producto_id,
-        product_name:
-          p.productogeneral_descripcionweb ||
-          p.productogeneral_descripcion ||
-          p.english_name ||
-          '',
+
+        // ✅ EN: english_name si existe, si no ES
+        // ✅ ES: ES si existe, si no english_name
+        product_name: pickByLang(
+           p.english_name ||
+          p.productogeneral_descripcionweb || p.productogeneral_descripcion,
+         
+        ),
+
         price: Number(p.productogeneral_precio ?? 0),
         image_url:
           p.productogeneral_urlimagen ||
@@ -212,7 +263,7 @@ const isProgrammaticScroll = ref(false)
 let programmaticScrollTimer = null
 
 /* ==========================
-   ✅ DEBOUNCE CAMBIO DE CATEGORÍA (500ms)
+   ✅ DEBOUNCE CAMBIO DE CATEGORÍA
    ========================== */
 const CATEGORY_CHANGE_DEBOUNCE_MS = 100
 let categoryDebounceTimer = null
@@ -300,7 +351,6 @@ onMounted(async () => {
       const best = visibles[0]
 
       if (best.catId) {
-        // ✅ aquí está el cambio: NO rafaga, solo si se mantiene 500ms
         scheduleActiveCategoryChange(best.catId)
       }
     },
@@ -311,11 +361,9 @@ onMounted(async () => {
     }
   )
 
-  // enganchar lo que ya exista en el DOM
   await nextTick()
   observeAllProducts()
 
-  // refresco inicial y refresco periódico
   await doClientRefresh(refresh)
 
   clientRefreshIntervalId = window.setInterval(() => {
@@ -335,7 +383,6 @@ onBeforeUnmount(() => {
     window.clearInterval(clientRefreshIntervalId)
   }
 
-  // ✅ limpiar debounce timer
   if (categoryDebounceTimer && process.client) {
     window.clearTimeout(categoryDebounceTimer)
   }
@@ -350,7 +397,6 @@ const setCategoryRef = (id, el) => {
 }
 
 const setProductRef = (productId, categoryId, el) => {
-  // Cuando el elemento se destruye
   if (!el) {
     const prevEl = productRefs.value[productId]
     if (prevEl) {
@@ -363,10 +409,8 @@ const setProductRef = (productId, categoryId, el) => {
 
   productRefs.value[productId] = el
 
-  // animación inicial
   el.classList.add('menu-product-card--hidden')
 
-  // Guardamos ids para el observer de categoría
   el.dataset.productId = String(productId)
   el.dataset.categoryId = String(categoryId)
 
@@ -463,7 +507,6 @@ watch(
       if (activeCategoryId.value != null) {
         scrollToCategoryId(activeCategoryId.value)
       }
-      // re-observamos por si el refresh cambió DOM/refs
       observeAllProducts()
     })
   },
@@ -474,7 +517,10 @@ watch(
    SEO / META
    ========================== */
 const pageTitle = computed(() => {
-  const base = 'Carta Salchimonster'
+  const base =
+    tMenu.value.page_title_base ||
+    (isEnglish.value ? 'Salchimonster Menu' : 'Carta Salchimonster')
+
   const categoryQ = route.query.category
   if (categoryQ && typeof categoryQ === 'string') {
     return `${formatLabel(categoryQ)} | ${base}`
@@ -485,11 +531,19 @@ const pageTitle = computed(() => {
 useHead(() => ({ title: pageTitle.value }))
 </script>
 
+
+
+
+
+
+
+
+
 <style scoped>
 .menu-page {
   min-height: 100vh;
   color: #111827;
-
+  padding-bottom: 5rem;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
@@ -551,7 +605,7 @@ useHead(() => ({ title: pageTitle.value }))
 
   .menu-category-section {
     padding-top: 1.2rem;
-    padding: .5rem;
+    padding: .0rem;
     padding-bottom: 1rem;
   }
 

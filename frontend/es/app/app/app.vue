@@ -419,7 +419,7 @@ onBeforeUnmount(() => {
 .wsp-float {
   position: fixed;
   right: 16px;
-  bottom: 96px;
+  bottom: 80px;
   width: 48px;
   height: 48px;
   border-radius: 999px;

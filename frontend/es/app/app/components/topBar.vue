@@ -149,6 +149,8 @@ const menusAll = computed(() => {
     { label: t.carta || 'Carta', to: `/carta` },
     { label: t.rastrear || 'Rastrear', to: `/rastrear` },
     { label: t.ayuda || 'Ayuda', to: `/pqr` },
+    { label: t.franquicias || 'Franquicias', to: `/franquicias` },
+
     { label: t.colaboraciones || 'Colaboraciones', to: `/colaboraciones` },
     { label: t.sonando || 'Sonando', to: `/sonando` }
   ]
@@ -426,7 +428,8 @@ watch([menusAll, windowWidth], () => {
                 role="listbox"
               >
                 <li v-for="lng in languages" :key="lng.name">
-                  <button
+                  <button 
+                  style="height: 2.5rem;"
                     type="button"
                     class="dropdown-item lang-item"
                     :class="{ 'is-selected': user.lang?.name === lng.name }"
@@ -441,7 +444,7 @@ watch([menusAll, windowWidth], () => {
             </transition>
           </div>
 
-          <button type="button" class="action-btn search-btn" @click="handleSearch" title="Buscar">
+          <button style="height: 2.5rem;width: 2.5rem;" type="button" class="action-btn search-btn" @click="handleSearch" title="Buscar">
             <Icon name="mdi:magnify" class="action-icon" />
           </button>
 
