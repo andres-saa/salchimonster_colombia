@@ -1,5 +1,7 @@
 <template>
   <div>
+    <SiteDialog />
+    <SiteDialogRecoger></SiteDialogRecoger>
     <NuxtLayout>
       <NuxtPage />
     </NuxtLayout>
@@ -44,11 +46,26 @@ let lastKey = ''
 let syncInterval = null
 let lastSavedSnapshot = ''
 let isRestoring = true
+let isSyncing = false
 
 let stopRouteWatch = null
 
 // ------------------------------------------------------------------------
-// 1. LÓGICA DE WHATSAPP (con site_phone fresco por subdominio)
+// 0. UTILIDAD: GENERAR UUID V4 (Cliente)
+// ------------------------------------------------------------------------
+function getUUID() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID()
+  }
+  // Fallback para navegadores antiguos
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8)
+    return v.toString(16)
+  })
+}
+
+// ------------------------------------------------------------------------
+// 1. LÓGICA DE WHATSAPP
 // ------------------------------------------------------------------------
 
 function cleanPhone(raw) {
@@ -62,9 +79,7 @@ const whatsappPhone = computed(() => {
 })
 
 const showWhatsappFloat = computed(() => {
-  // 1) Si estás en iframe y no quieres mostrarlo:
   if (userStore.user?.iframe) return false
-  // 2) Solo mostrar si hay un teléfono válido
   return !!whatsappPhone.value
 })
 
@@ -73,7 +88,6 @@ const whatsappFloatUrl = computed(() => {
 
   const baseUrl = 'https://api.whatsapp.com/send'
   const phone = whatsappPhone.value
-
   const pageUrl = process.client ? window.location.href : ''
   const text = `Hola 😊 Tengo una duda con ${pageUrl ? `\n\nLink: ${pageUrl}` : ''}`
 
@@ -82,7 +96,7 @@ const whatsappFloatUrl = computed(() => {
 })
 
 // ------------------------------------------------------------------------
-// 2. LÓGICA DE SINCRONIZACIÓN (PUT)
+// 2. LÓGICA DE SINCRONIZACIÓN (PUT SIEMPRE)
 // ------------------------------------------------------------------------
 
 function generatePayload() {
@@ -110,16 +124,31 @@ function startHashSyncer() {
   if (syncInterval) clearInterval(syncInterval)
 
   syncInterval = setInterval(async () => {
-    const currentHash = siteStore.session_hash
-    if (!currentHash) return
+    // Si estamos restaurando o ya hay una petición en vuelo, esperamos
+    if (isRestoring || running || isSyncing) return
 
-    if (isRestoring || running) return
+    // 1. Obtener o Generar Hash Localmente
+    let currentHash = siteStore.session_hash
 
+    // 🆕 SI NO HAY HASH: Lo creamos nosotros (Cliente), lo guardamos y seguimos
+    if (!currentHash) {
+      currentHash = getUUID()
+      // Guardamos en el store inmediatamente para que el usuario ya tenga sesión
+      if (siteStore.setSessionHash) {
+        siteStore.setSessionHash(currentHash)
+        console.log('✨ Nuevo Hash Generado (Local):', currentHash)
+      }
+    }
+
+    // 2. Preparar payload
     const currentData = generatePayload()
     const currentSnapshot = JSON.stringify(currentData)
 
+    // 3. Validar cambios
     if (currentSnapshot === lastSavedSnapshot) return
 
+    // 4. Enviar PUT (Creación o Actualización es lo mismo para el Back)
+    isSyncing = true
     try {
       const res = await fetch(`${URI}/data/${currentHash}`, {
         method: 'PUT',
@@ -129,12 +158,16 @@ function startHashSyncer() {
 
       if (res.ok) {
         lastSavedSnapshot = currentSnapshot
+        // console.log('✅ Sync PUT exitoso:', currentHash)
       } else {
-        console.warn('Error sincronizando hash:', res.status)
+        console.warn('⚠️ Error en Sync PUT:', res.status)
       }
     } catch (e) {
-      console.error('Error de red al sincronizar hash:', e)
+      console.error('❌ Error de red Sync PUT:', e)
+    } finally {
+      isSyncing = false
     }
+
   }, 3000)
 }
 
@@ -198,7 +231,7 @@ function restoreLocationFromMeta(meta) {
 function applyRestoredData(restoredData) {
   if (!restoredData) return
 
-  // Site (desde hash)
+  // Site
   if (restoredData.site_location) {
     const prevId = siteStore.location.site?.site_id ?? siteStore.location.site?.id
     const newId = restoredData.site_location?.site_id ?? restoredData.site_location?.id
@@ -235,11 +268,10 @@ function applyRestoredData(restoredData) {
 }
 
 // ------------------------------------------------------------------------
-// 4. 👇 NUEVO: SIEMPRE HIDRATAR EL SITE POR SUBDOMINIO (para WhatsApp y demás)
+// 4. HIDRATACIÓN DEL SITE
 // ------------------------------------------------------------------------
 
 function getCurrentSubdomain() {
-  // ⚠️ Esto debe correr en client (useSedeFromSubdomain a veces depende de window)
   const sede = useSedeFromSubdomain()
   return typeof sede === 'string' ? sede : sede?.value
 }
@@ -258,7 +290,6 @@ async function fetchSiteBySubdomain(currentSede) {
     const prevId = siteStore.location.site?.site_id ?? siteStore.location.site?.id
     const newId = siteData?.site_id ?? siteData?.id
 
-    // ✅ Importante: sobrescribe con la info real del endpoint (teléfono, wsp_link, address, etc.)
     siteStore.location.site = {
       ...(siteStore.location.site || {}),
       ...siteData
@@ -322,9 +353,7 @@ async function bootstrapFromUrl(reason = 'nav') {
       localStorage.setItem('session_external_data', JSON.stringify(sessionData))
     }
 
-    // ✅ subdominio actual (para hidratar site sí o sí)
     const currentSede = getCurrentSubdomain()
-
     let siteLoadedFromHash = false
 
     // 1) Carga por HASH
@@ -345,7 +374,6 @@ async function bootstrapFromUrl(reason = 'nav') {
           if (isUrlHash) siteStore.setSessionHash?.(urlHash)
           siteLoadedFromHash = true
 
-          // ✅ siempre hidratar site por subdominio para arreglar WhatsApp y datos del site
           await fetchSiteBySubdomain(currentSede)
 
           if (isUrlHash) {
@@ -364,10 +392,9 @@ async function bootstrapFromUrl(reason = 'nav') {
       }
     }
 
-    // 2) Fallback: si no vino nada del hash, igual carga sede por subdominio
+    // 2) Fallback
     if (!siteLoadedFromHash) {
       await fetchSiteBySubdomain(currentSede)
-
       lastSavedSnapshot = JSON.stringify(generatePayload())
 
       const needsCredClean = !!(qInsertedBy && qToken)
@@ -399,7 +426,6 @@ onMounted(() => {
 
   window.addEventListener('popstate', onPopState)
 
-  // ✅ mover watch al client para evitar cosas raras SSR
   stopRouteWatch = watch(
     () => route.fullPath,
     () => bootstrapFromUrl('route-watch'),
@@ -415,7 +441,6 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-/* ✅ Botón flotante WhatsApp */
 .wsp-float {
   position: fixed;
   right: 16px;

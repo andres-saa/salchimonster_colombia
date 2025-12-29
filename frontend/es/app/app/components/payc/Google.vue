@@ -1,6 +1,6 @@
 <template>
   <div class="checkout-page">
-        <SiteDialog />
+
     <!-- ================== OVERLAY REDIRECCIÓN ================== -->
     <Transition name="fade">
       <div v-if="isRedirecting" class="redirect-overlay">
@@ -246,7 +246,7 @@
 
             <!-- PICKUP -->
             <div v-else class="address-selector">
-              <div class="address-card has-address" @click="siteStore.setVisible('currentSiteSites', true)">
+              <div class="address-card has-address" @click="siteStore.setVisible('currentSiteRecoger', true)">
                 <div class="icon-box-addr pickup"><Icon name="mdi:store-marker" /></div>
                 <div class="addr-info">
                   <span class="addr-title">{{ siteStore?.location?.site?.site_name || t('site_selector') }}</span>
