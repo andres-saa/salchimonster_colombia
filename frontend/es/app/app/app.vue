@@ -5,7 +5,7 @@
     </NuxtLayout>
 
     <ToastContainer />
-    
+
     <a
       v-if="showWhatsappFloat"
       :href="whatsappFloatUrl"
@@ -42,11 +42,13 @@ let lastKey = ''
 
 // 🔄 Variables para la Sincronización (Sync)
 let syncInterval = null
-let lastSavedSnapshot = '' 
-let isRestoring = true 
+let lastSavedSnapshot = ''
+let isRestoring = true
+
+let stopRouteWatch = null
 
 // ------------------------------------------------------------------------
-// 1. LÓGICA DE WHATSAPP (CORREGIDA)
+// 1. LÓGICA DE WHATSAPP (con site_phone fresco por subdominio)
 // ------------------------------------------------------------------------
 
 function cleanPhone(raw) {
@@ -55,16 +57,14 @@ function cleanPhone(raw) {
   return digits.length >= 10 ? digits : null
 }
 
-// Usamos computed para que reaccione cuando siteStore.location.site cambie
 const whatsappPhone = computed(() => {
   return cleanPhone(siteStore.location?.site?.site_phone)
 })
 
 const showWhatsappFloat = computed(() => {
-  // 1. Si estás en iframe y no quieres mostrarlo:
+  // 1) Si estás en iframe y no quieres mostrarlo:
   if (userStore.user?.iframe) return false
-  
-  // 2. Solo mostrar si hay un teléfono válido
+  // 2) Solo mostrar si hay un teléfono válido
   return !!whatsappPhone.value
 })
 
@@ -74,10 +74,7 @@ const whatsappFloatUrl = computed(() => {
   const baseUrl = 'https://api.whatsapp.com/send'
   const phone = whatsappPhone.value
 
-  // Usamos process.client para evitar errores de hidratación en SSR
   const pageUrl = process.client ? window.location.href : ''
-  
-  // Mensaje predeterminado
   const text = `Hola 😊 Tengo una duda con ${pageUrl ? `\n\nLink: ${pageUrl}` : ''}`
 
   const params = new URLSearchParams({ phone, text })
@@ -88,9 +85,6 @@ const whatsappFloatUrl = computed(() => {
 // 2. LÓGICA DE SINCRONIZACIÓN (PUT)
 // ------------------------------------------------------------------------
 
-/**
- * Genera el objeto JSON exacto que espera el backend
- */
 function generatePayload() {
   return {
     site_location: siteStore.location.site,
@@ -106,15 +100,12 @@ function generatePayload() {
       neigborhood: siteStore.location.neigborhood,
       delivery_price: siteStore.current_delivery
     },
-    cart: cartStore.cart, 
-    discount: cartStore.coupon || null, 
+    cart: cartStore.cart,
+    discount: cartStore.coupon || null,
     coupon_ui: cartStore.coupon_ui || null
   }
 }
 
-/**
- * Revisa cada 3 segundos si hay cambios y envía PUT
- */
 function startHashSyncer() {
   if (syncInterval) clearInterval(syncInterval)
 
@@ -132,9 +123,7 @@ function startHashSyncer() {
     try {
       const res = await fetch(`${URI}/data/${currentHash}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: currentSnapshot
       })
 
@@ -146,30 +135,70 @@ function startHashSyncer() {
     } catch (e) {
       console.error('Error de red al sincronizar hash:', e)
     }
-
-  }, 3000) 
+  }, 3000)
 }
 
 // ------------------------------------------------------------------------
-// 3. LÓGICA DE RESTAURACIÓN Y CARGA (GET)
+// 3. RESTAURACIÓN Y CARGA (GET)
 // ------------------------------------------------------------------------
 
 function cleanQueryParams({ removeHash = false, removeCredentials = false, removeIframe = false } = {}) {
   const q = { ...route.query }
   let changed = false
+
   if (removeHash && q.hash !== undefined) { delete q.hash; changed = true }
+
   if (removeCredentials) {
     if (q.inserted_by !== undefined) { delete q.inserted_by; changed = true }
     if (q.token !== undefined) { delete q.token; changed = true }
   }
+
   if (removeIframe && q.iframe !== undefined) { delete q.iframe; changed = true }
+
   if (changed) router.replace({ query: q })
+}
+
+function restoreLocationFromMeta(meta) {
+  if (!meta) return
+
+  if (meta.city) siteStore.location.city = meta.city
+  if (meta.mode) siteStore.location.mode = meta.mode
+
+  if (meta.mode === 'google') {
+    siteStore.location.formatted_address = meta.formatted_address || ''
+    siteStore.location.place_id = meta.place_id || ''
+    siteStore.location.lat = meta.lat ?? null
+    siteStore.location.lng = meta.lng ?? null
+    siteStore.location.address_details = meta.address_details ?? null
+
+    const price = meta.delivery_price ?? meta.price ?? 0
+    siteStore.location.neigborhood = { name: '', delivery_price: price, neighborhood_id: null, id: null, site_id: null }
+    siteStore.current_delivery = price
+    return
+  }
+
+  if (meta.neigborhood) {
+    const nb = meta.neigborhood
+    const price = nb.delivery_price ?? meta.delivery_price ?? 0
+
+    siteStore.location.neigborhood = {
+      name: nb.name || '',
+      delivery_price: price,
+      neighborhood_id: nb.neighborhood_id ?? nb.id ?? null,
+      id: nb.id ?? nb.neighborhood_id ?? null,
+      site_id: nb.site_id ?? null
+    }
+    siteStore.current_delivery = price
+  } else {
+    siteStore.location.neigborhood = { name: '', delivery_price: 0, neighborhood_id: null, id: null, site_id: null }
+    siteStore.current_delivery = 0
+  }
 }
 
 function applyRestoredData(restoredData) {
   if (!restoredData) return
 
-  // Site
+  // Site (desde hash)
   if (restoredData.site_location) {
     const prevId = siteStore.location.site?.site_id ?? siteStore.location.site?.id
     const newId = restoredData.site_location?.site_id ?? restoredData.site_location?.id
@@ -179,11 +208,11 @@ function applyRestoredData(restoredData) {
 
   // User
   if (restoredData.user) {
-    const currentIframeState = userStore.user.iframe
+    const currentIframeState = userStore.user?.iframe
     userStore.user = {
       ...userStore.user,
       ...restoredData.user,
-      iframe: (currentIframeState !== undefined) ? currentIframeState : restoredData.user.iframe,
+      iframe: (currentIframeState !== undefined) ? currentIframeState : restoredData.user.iframe
     }
   }
 
@@ -199,55 +228,61 @@ function applyRestoredData(restoredData) {
   }
 
   // Coupons
-  if (restoredData.discount) cartStore.applyCoupon(restoredData.discount)
+  if (restoredData.discount) cartStore.applyCoupon?.(restoredData.discount)
   if (restoredData.coupon_ui && cartStore.setCouponUi) cartStore.setCouponUi(restoredData.coupon_ui)
-  
+
   lastSavedSnapshot = JSON.stringify(generatePayload())
 }
 
-function restoreLocationFromMeta(meta) {
-  if (!meta) return
-  if (meta.city) siteStore.location.city = meta.city
-  if (meta.mode) siteStore.location.mode = meta.mode
-
-  if (meta.mode === 'google') {
-    siteStore.location.formatted_address = meta.formatted_address || ''
-    siteStore.location.place_id = meta.place_id || ''
-    siteStore.location.lat = meta.lat ?? null
-    siteStore.location.lng = meta.lng ?? null
-    siteStore.location.address_details = meta.address_details ?? null
-    const price = meta.delivery_price ?? meta.price ?? 0
-    siteStore.location.neigborhood = { name: '', delivery_price: price, neighborhood_id: null, id: null, site_id: null }
-    siteStore.current_delivery = price
-    return
-  }
-
-  if (meta.neigborhood) {
-    const nb = meta.neigborhood
-    const price = nb.delivery_price ?? meta.delivery_price ?? 0
-    siteStore.location.neigborhood = {
-      name: nb.name || '',
-      delivery_price: price,
-      neighborhood_id: nb.neighborhood_id ?? nb.id ?? null,
-      id: nb.id ?? nb.neighborhood_id ?? null,
-      site_id: nb.site_id ?? null,
-    }
-    siteStore.current_delivery = price
-  } else {
-    siteStore.location.neigborhood = { name: '', delivery_price: 0, neighborhood_id: null, id: null, site_id: null }
-    siteStore.current_delivery = 0
-  }
-}
+// ------------------------------------------------------------------------
+// 4. 👇 NUEVO: SIEMPRE HIDRATAR EL SITE POR SUBDOMINIO (para WhatsApp y demás)
+// ------------------------------------------------------------------------
 
 function getCurrentSubdomain() {
+  // ⚠️ Esto debe correr en client (useSedeFromSubdomain a veces depende de window)
   const sede = useSedeFromSubdomain()
   return typeof sede === 'string' ? sede : sede?.value
 }
 
+async function fetchSiteBySubdomain(currentSede) {
+  if (!currentSede) return null
+
+  try {
+    const response = await fetch(`${URI}/sites/subdomain/${currentSede}`)
+    if (!response.ok) return null
+
+    const data = await response.json()
+    const siteData = data?.[0] || data
+    if (!siteData) return null
+
+    const prevId = siteStore.location.site?.site_id ?? siteStore.location.site?.id
+    const newId = siteData?.site_id ?? siteData?.id
+
+    // ✅ Importante: sobrescribe con la info real del endpoint (teléfono, wsp_link, address, etc.)
+    siteStore.location.site = {
+      ...(siteStore.location.site || {}),
+      ...siteData
+    }
+
+    if (prevId !== newId) siteStore.initStatusWatcher()
+
+    return siteData
+  } catch (err) {
+    console.error('Error fetchSiteBySubdomain:', err)
+    return null
+  }
+}
+
+// ------------------------------------------------------------------------
+// 5. BOOTSTRAP PRINCIPAL
+// ------------------------------------------------------------------------
+
 async function bootstrapFromUrl(reason = 'nav') {
+  if (!process.client) return
   if (running) return
+
   running = true
-  isRestoring = true 
+  isRestoring = true
 
   try {
     const key = JSON.stringify({
@@ -257,16 +292,14 @@ async function bootstrapFromUrl(reason = 'nav') {
       inserted_by: route.query.inserted_by,
       token: route.query.token,
       iframe: route.query.iframe,
-      reason,
+      reason
     })
-    
+
     if (key === lastKey) {
-      isRestoring = false 
+      isRestoring = false
       return
     }
     lastKey = key
-
-    let siteLoaded = false
 
     // 0) Storage Local (Session)
     const storedSession = localStorage.getItem('session_external_data')
@@ -274,20 +307,27 @@ async function bootstrapFromUrl(reason = 'nav') {
       try {
         const parsedSession = JSON.parse(storedSession)
         userStore.user = { ...userStore.user, ...parsedSession }
-      } catch (e) { console.error(e) }
+      } catch (e) {
+        console.error(e)
+      }
     }
 
     const qInsertedBy = route.query.inserted_by
     const qToken = route.query.token
     const qiframe = route.query.iframe
-    
+
     if (qInsertedBy && qToken) {
       const sessionData = { inserted_by: qInsertedBy, token: qToken, iframe: (qiframe === '1') }
       userStore.user = { ...userStore.user, ...sessionData }
       localStorage.setItem('session_external_data', JSON.stringify(sessionData))
     }
 
-    // 1) Carga por HASH 
+    // ✅ subdominio actual (para hidratar site sí o sí)
+    const currentSede = getCurrentSubdomain()
+
+    let siteLoadedFromHash = false
+
+    // 1) Carga por HASH
     const urlHash = route.query.hash
     const storedHash = siteStore.session_hash
     const targetHash = urlHash || storedHash
@@ -301,63 +341,51 @@ async function bootstrapFromUrl(reason = 'nav') {
           const restoredData = jsonResponse?.data || {}
 
           applyRestoredData(restoredData)
-          
-          if (isUrlHash) siteStore.setSessionHash(urlHash)
-          siteLoaded = true
+
+          if (isUrlHash) siteStore.setSessionHash?.(urlHash)
+          siteLoadedFromHash = true
+
+          // ✅ siempre hidratar site por subdominio para arreglar WhatsApp y datos del site
+          await fetchSiteBySubdomain(currentSede)
 
           if (isUrlHash) {
             cleanQueryParams({
               removeHash: true,
               removeCredentials: !!(qInsertedBy && qToken),
-              removeIframe: qiframe !== undefined,
+              removeIframe: qiframe !== undefined
             })
           }
         } else {
           console.warn('Hash inválido o expirado, limpiando store.')
-          siteStore.clearSessionHash()
+          siteStore.clearSessionHash?.()
         }
       } catch (err) {
         console.error('❌ Error restaurando hash:', err)
       }
     }
 
-    // 2) Fallback Subdominio
-    if (!siteLoaded) {
-      try {
-        const currentSede = getCurrentSubdomain()
-        if (currentSede) {
-          const response = await fetch(`${URI}/sites/subdomain/${currentSede}`)
-          if (response.ok) {
-            const data = await response.json()
-            const siteData = data?.[0] || data
-            if (siteData) {
-              const prevId = siteStore.location.site?.site_id ?? siteStore.location.site?.id
-              const newId = siteData?.site_id ?? siteData?.id
-              siteStore.location.site = siteData
-              if (prevId !== newId) siteStore.initStatusWatcher()
-            }
-          }
-        }
-        
-        lastSavedSnapshot = JSON.stringify(generatePayload())
-        
-        const needsCredClean = !!(qInsertedBy && qToken)
-        const needsIframeClean = qiframe !== undefined
-        if (needsCredClean || needsIframeClean) {
-          cleanQueryParams({
-            removeCredentials: needsCredClean,
-            removeIframe: needsIframeClean,
-          })
-        }
-      } catch (err) {
-        console.error('Error cargando sede:', err)
+    // 2) Fallback: si no vino nada del hash, igual carga sede por subdominio
+    if (!siteLoadedFromHash) {
+      await fetchSiteBySubdomain(currentSede)
+
+      lastSavedSnapshot = JSON.stringify(generatePayload())
+
+      const needsCredClean = !!(qInsertedBy && qToken)
+      const needsIframeClean = qiframe !== undefined
+      if (needsCredClean || needsIframeClean) {
+        cleanQueryParams({
+          removeCredentials: needsCredClean,
+          removeIframe: needsIframeClean
+        })
       }
     }
 
+    // 3) Snapshot base
+    lastSavedSnapshot = JSON.stringify(generatePayload())
   } finally {
     await nextTick()
     running = false
-    isRestoring = false 
+    isRestoring = false
   }
 }
 
@@ -368,18 +396,21 @@ function onPopState() {
 onMounted(() => {
   bootstrapFromUrl('mounted')
   startHashSyncer()
-  window.addEventListener('popstate', onPopState)
-})
 
-watch(
-  () => route.fullPath,
-  () => bootstrapFromUrl('route-watch'),
-  { flush: 'post' }
-)
+  window.addEventListener('popstate', onPopState)
+
+  // ✅ mover watch al client para evitar cosas raras SSR
+  stopRouteWatch = watch(
+    () => route.fullPath,
+    () => bootstrapFromUrl('route-watch'),
+    { flush: 'post' }
+  )
+})
 
 onBeforeUnmount(() => {
   if (syncInterval) clearInterval(syncInterval)
   window.removeEventListener('popstate', onPopState)
+  if (stopRouteWatch) stopRouteWatch()
 })
 </script>
 
@@ -388,9 +419,9 @@ onBeforeUnmount(() => {
 .wsp-float {
   position: fixed;
   right: 16px;
-  bottom: 96px; 
+  bottom: 96px;
   width: 48px;
-  height:48px;
+  height: 48px;
   border-radius: 999px;
   background: #25d366;
   color: #fff;
