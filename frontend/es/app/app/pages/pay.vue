@@ -1,71 +1,111 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
-import { storeToRefs } from 'pinia' // 1. Importar storeToRefs
-import { useSitesStore } from '#imports'
-import { useUserStore } from '#imports'
+import { ref, computed, onMounted } from 'vue'
+import { useSedeFromSubdomain } from '#imports'
+import { URI } from '@/service/conection'
 
+const CONFIG_URL = 'https://api.locations.salchimonster.com/data/cities_google_map_status'
 
-const user = useUserStore()
-const siteStore = useSitesStore()
-
-// 2. Extraer 'location' manteniendo la reactividad
-const { location } = storeToRefs(siteStore)
-
-const cityConfig = ref<any[]>([])
 const loading = ref(true)
+const site = ref<any | null>(null)
+const cityConfig = ref<any[]>([])
+const errorMsg = ref<string>('')
 
-const API_URL = 'https://api.locations.salchimonster.com/data/cities_google_map_status'
+// ✅ subdominio fresco
+function getCurrentSubdomain() {
+  const sede = useSedeFromSubdomain()
+  return typeof sede === 'string' ? sede : sede?.value
+}
+
+// ✅ fetch con timeout para que nunca se quede pegado
+async function fetchWithTimeout(url: string, ms = 8000) {
+  const controller = new AbortController()
+  const t = setTimeout(() => controller.abort(), ms)
+  try {
+    const res = await fetch(url, { signal: controller.signal })
+    return res
+  } finally {
+    clearTimeout(t)
+  }
+}
+
+async function loadSiteBySubdomain(subdomain: string) {
+  const res = await fetchWithTimeout(`${URI}/sites/subdomain/${subdomain}`, 8000)
+  if (!res.ok) throw new Error(`No pude cargar sede (${res.status})`)
+  const data = await res.json()
+  return data?.[0] || data || null
+}
+
+async function loadCityConfig() {
+  const res = await fetchWithTimeout(CONFIG_URL, 8000)
+  if (!res.ok) throw new Error(`No pude cargar config ciudades (${res.status})`)
+  const json = await res.json()
+  return json?.data?.cities || []
+}
 
 onMounted(async () => {
+  loading.value = true
+  errorMsg.value = ''
   try {
-    const res = await fetch(API_URL)
-    const json = await res.json()
-    if (json?.data?.cities) {
-      cityConfig.value = json.data.cities
-    }
-  } catch (error) {
-    console.error('Error cargando configuración de mapas:', error)
+    const sub = getCurrentSubdomain()
+    if (!sub) throw new Error('No hay subdominio')
+
+    // 1) sede
+    site.value = await loadSiteBySubdomain(sub)
+
+    // 2) config
+    cityConfig.value = await loadCityConfig()
+  } catch (e: any) {
+    console.error(e)
+    errorMsg.value = e?.message || 'Error cargando datos'
+    // fallback seguro
+    site.value = site.value || null
+    cityConfig.value = cityConfig.value || []
   } finally {
     loading.value = false
   }
 })
 
-// Computada corregida
-const shouldUseGoogleMaps = computed(() => {
-  // 3. Usamos location.value (ahora es una ref reactiva)
-  // El ?. evita errores si location o site son nulos
-  const currentCityId = location.value?.site?.city_id 
+const currentCityId = computed<number | null>(() => {
+  const id = site.value?.city_id
+  return id != null && id !== '' ? Number(id) : null
+})
 
-  if (!currentCityId) return false 
+const shouldUseGoogleMaps = computed<boolean>(() => {
+  // ✅ fallback: si no hay ciudad o no hay config -> Barrios
+  if (!currentCityId.value) return false
+  if (!cityConfig.value.length) return false
 
-  // Asegurarnos que cityConfig ya cargó
-  if (cityConfig.value.length === 0) return false
+  const cfg = cityConfig.value.find(c => Number(c.city_id) === Number(currentCityId.value))
+  return !!cfg?.user_google_map_status
+})
 
-  const config = cityConfig.value.find(c => Number(c.city_id) === Number(currentCityId))
-
-  return config ? Boolean(config.user_google_map_status) : false
+const viewKey = computed(() => {
+  return `${currentCityId.value ?? 'no-city'}-${shouldUseGoogleMaps.value ? 'gm' : 'nb'}`
 })
 </script>
 
 <template>
-  <div>
-
-
-    <!-- <div style="font-size: 10px; color: gray;">
-       Debug: ID Ciudad: {{ location?.site?.city_id }} | Google: {{ shouldUseGoogleMaps }}
-    </div> -->
-
+  <ClientOnly>
     <div v-if="loading" class="loading-container">
       <p>Cargando...</p>
     </div>
 
     <div v-else>
-      <paycGoogle v-if="shouldUseGoogleMaps" />
-      <paycBarrios v-else />
+      <paycGoogle v-if="shouldUseGoogleMaps" :key="viewKey" />
+      <paycBarrios v-else :key="viewKey" />
+
+      <!-- Debug opcional -->
+      <!--
+      <div style="font-size:11px;color:#777;margin-top:8px;">
+        sub={{ useSedeFromSubdomain() }} |
+        city_id={{ site?.city_id }} |
+        cities={{ cityConfig.length }} |
+        google={{ shouldUseGoogleMaps }} |
+        err={{ errorMsg }}
+      </div>
+      -->
     </div>
-
-
-  </div>
+  </ClientOnly>
 </template>
 
 <style scoped>
@@ -74,6 +114,5 @@ const shouldUseGoogleMaps = computed(() => {
   justify-content: center;
   padding: 2rem;
   color: #666;
-  font-family: 'Inter', sans-serif;
 }
 </style>

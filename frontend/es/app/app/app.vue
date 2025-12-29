@@ -24,9 +24,13 @@ const cartStore = usecartStore()
 const route = useRoute()
 const router = useRouter()
 
-// 🔒 lock para evitar dobles ejecuciones (por watch + replace + hooks)
+// 🔒 lock para evitar dobles ejecuciones
 let running = false
 let lastKey = ''
+
+// 💾 Variables para la sincronización de sesión
+let syncInterval = null
+let lastJsonState = '' // Para comparar si hubo cambios
 
 function cleanQueryParams({ removeHash = false, removeCredentials = false, removeIframe = false } = {}) {
   const q = { ...route.query }
@@ -94,69 +98,181 @@ function restoreLocationFromMeta(meta) {
   }
 }
 
-// ✅ helper: siempre leer subdominio “fresco”, no uno “capturado” al inicio
+// ✅ helper: siempre leer subdominio “fresco”
 function getCurrentSubdomain() {
-  // Si tu composable ya resuelve bien, úsalo, pero llamado “en el momento”
   const sede = useSedeFromSubdomain()
   return typeof sede === 'string' ? sede : sede?.value
 }
 
-async function bootstrapFromUrl(reason = 'nav') {
-  if (running) return
-  running = true
-  try {
-    // clave para evitar repetir exactamente lo mismo
-    const key = JSON.stringify({
-      path: route.fullPath,
-      hash: route.query.hash,
-      inserted_by: route.query.inserted_by,
-      token: route.query.token,
-      iframe: route.query.iframe,
-      host: process.client ? window.location.host : '',
-      reason,
-    })
-    if (key === lastKey) return
-    lastKey = key
-
-    let siteLoadedFromHash = false
-
-    // ======================================================
-    // 0) RECUPERAR SESIÓN (F5 safe)
-    // ======================================================
-    const storedSession = localStorage.getItem('session_external_data')
-    if (storedSession) {
-      try {
-        const parsedSession = JSON.parse(storedSession)
-        userStore.user = { ...userStore.user, ...parsedSession }
-      } catch (e) {
-        console.error('Error leyendo sesión local', e)
-      }
+// 🔄 Construye el payload actual basado en los stores
+function buildSessionPayload() {
+  // Reconstruir location_meta
+  let location_meta = {}
+  
+  if (siteStore.location.mode === 'google') {
+    location_meta = {
+      mode: 'google',
+      city: siteStore.location.city,
+      formatted_address: siteStore.location.formatted_address,
+      place_id: siteStore.location.place_id,
+      lat: siteStore.location.lat,
+      lng: siteStore.location.lng,
+      address_details: siteStore.location.address_details,
+      delivery_price: siteStore.current_delivery
     }
+  } else {
+    // Modo barrio
+    location_meta = {
+      mode: 'neighborhood', // o el modo por defecto
+      city: siteStore.location.city,
+      neigborhood: siteStore.location.neigborhood,
+      delivery_price: siteStore.current_delivery
+    }
+  }
 
+  return {
+    site_location: siteStore.location.site,
+    user: userStore.user,
+    cart: cartStore.cart, // Asumiendo que cartStore.cart tiene items o es el array
+    discount: cartStore.discount || null,
+    coupon_ui: cartStore.coupon_ui || null, // Asegurar nombres correctos del store
+    location_meta: location_meta
+  }
+}
+
+// 📡 Función que se ejecuta cada 5s
+async function syncSession() {
+  // Solo sincronizar si hay un hash activo en el store
+  const hash = siteStore.session_hash
+  
+  // DEBUG: Ver si corre el intervalo
+  console.log(`⏱️ Tick Sync... Hash actual: ${hash ? hash : 'NINGUNO'}`)
+
+  if (!hash) return
+
+  try {
+    const currentData = buildSessionPayload()
+    const currentJson = JSON.stringify(currentData)
+
+    // DEBUG: Comparación
+    if (currentJson === lastJsonState) {
+        console.log('💤 Sync ignorado: El estado es IDÉNTICO al anterior.')
+        return
+    }
+    
+    // DEBUG: Ver diferencia si falla
+    console.log('⚡ CAMBIO DETECTADO. Preparando envío...')
+    console.log('ANTES:', lastJsonState)
+    console.log('AHORA:', currentJson)
+
+    // 🚨 ALERT SOLO CUANDO HAY CAMBIO REAL
+    alert(`🚀 Sincronizando cambios al servidor...\nHash: ${hash}`)
+
+    // Actualizamos el estado local antes de enviar para evitar loops si la red es lenta
+    lastJsonState = currentJson
+
+    const response = await fetch(`${URI}/data/${hash}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: currentJson
+    })
+
+    if (!response.ok) {
+      alert(`❌ Error al guardar en servidor: ${response.statusText}`)
+      console.warn('Error sincronizando sesión:', response.statusText)
+    } else {
+        console.log('✅ Guardado exitoso en servidor')
+    }
+  } catch (error) {
+    alert(`❌ Excepción en Sync: ${error.message}`)
+    console.error('Error en syncSession:', error)
+  }
+}
+
+async function bootstrapFromUrl(reason = 'nav') {
+  if (running) {
+      console.warn(`Bootstrap saltado (ya estaba corriendo). Razón: ${reason}`)
+      return
+  }
+  running = true
+
+  try {
     const qInsertedBy = route.query.inserted_by
     const qToken = route.query.token
     const qiframe = route.query.iframe
     const isIframe = qiframe === '1'
 
+    // ✅ hash: primero URL, si no hay -> store
+    const hashFromQuery = route.query.hash
+    const storedHash = siteStore.session_hash || ''
+    const hashToUse = hashFromQuery || storedHash || ''
+    
+    // 🚨 DEBUG INICIAL
+    // alert(`Bootstrap iniciado (${reason})\nHash URL: ${hashFromQuery}\nHash Store: ${storedHash}`)
+
+    // ✅ persistir hash SOLO si vino por URL
+    if (hashFromQuery) siteStore.setSessionHash(hashFromQuery)
+
+    // clave para evitar repetir exactamente lo mismo
+    const key = JSON.stringify({
+      path: route.fullPath,
+      hashToUse,
+      inserted_by: qInsertedBy,
+      token: qToken,
+      iframe: qiframe,
+      host: process.client ? window.location.host : '',
+      reason,
+    })
+    if (key === lastKey) {
+        console.log('🗝️ Bootstrap saltado: misma key que la anterior')
+        return
+    }
+    lastKey = key
+
+    // ======================================================
+    // 0) RECUPERAR SESIÓN (F5 safe)
+    // ======================================================
+    if (process.client) {
+      const storedSession = localStorage.getItem('session_external_data')
+      if (storedSession) {
+        try {
+          const parsedSession = JSON.parse(storedSession)
+          userStore.user = { ...userStore.user, ...parsedSession }
+        } catch (e) {
+          console.error('Error leyendo sesión local', e)
+        }
+      }
+    }
+
     if (qInsertedBy && qToken) {
       const sessionData = { inserted_by: qInsertedBy, token: qToken, iframe: isIframe }
       userStore.user = { ...userStore.user, ...sessionData }
-      localStorage.setItem('session_external_data', JSON.stringify(sessionData))
+      if (process.client) {
+        localStorage.setItem('session_external_data', JSON.stringify(sessionData))
+      }
     }
 
     // ======================================================
-    // 1) CARGA POR HASH
+    // 1) CARGA POR HASH (URL o STORE)
     // ======================================================
-    const hash = route.query.hash
-    if (hash) {
+    let siteLoadedFromHash = false
+
+    if (hashToUse) {
+      alert(`🔎 Buscando datos para Hash: ${hashToUse}`) // DEBUG
       try {
-        const response = await fetch(`${URI}/data/${hash}`)
+        const response = await fetch(`${URI}/data/${hashToUse}`)
         if (response.ok) {
           const jsonResponse = await response.json()
           const restoredData = jsonResponse?.data || {}
+          
+          alert('✅ Datos recibidos del servidor. Restaurando estado...') // DEBUG
 
+          // Guardamos el estado inicial tal cual vino del servidor para no disparar un PUT inmediato innecesario
+          // (aunque si los stores formatean la data distinto, el primer sync la corregirá, lo cual es bueno)
+          
           if (restoredData.site_location) {
-            // 🔁 solo re-init si cambia la sede
             const prevId = siteStore.location.site?.site_id ?? siteStore.location.site?.id
             const newId = restoredData.site_location?.site_id ?? restoredData.site_location?.id
             siteStore.location.site = restoredData.site_location
@@ -189,22 +305,31 @@ async function bootstrapFromUrl(reason = 'nav') {
 
           if (restoredData.discount) cartStore.applyCoupon(restoredData.discount)
           if (restoredData.coupon_ui && cartStore.setCouponUi) cartStore.setCouponUi(restoredData.coupon_ui)
+          
+          // DEBUG: Establecer lastJsonState para que no salte sync inmediato si es igual
+          // lastJsonState = JSON.stringify(buildSessionPayload()); 
 
-          // 👇 OJO: esto dispara navegación interna (router.replace),
-          // por eso tenemos lock + lastKey arriba.
-          cleanQueryParams({
-            removeHash: true,
-            removeCredentials: !!(qInsertedBy && qToken),
-            removeIframe: qiframe !== undefined,
-          })
+          // ✅ limpiar query SOLO si venía el hash en URL
+          if (hashFromQuery || qInsertedBy || qToken || qiframe !== undefined) {
+            cleanQueryParams({
+              removeHash: !!hashFromQuery,
+              removeCredentials: !!(qInsertedBy && qToken),
+              removeIframe: qiframe !== undefined,
+            })
+          }
+        } else {
+          alert('❌ El hash existe pero el servidor devolvió error (404/500)') // DEBUG
+          // si el hash guardado ya no sirve, lo limpiamos
+          if (!hashFromQuery) siteStore.clearSessionHash()
         }
       } catch (err) {
+        alert(`❌ Error restaurando hash: ${err.message}`)
         console.error('❌ Error restaurando hash:', err)
       }
     }
 
     // ======================================================
-    // 2) CARGA NORMAL (Subdominio)
+    // 2) CARGA NORMAL (Subdominio) si no se cargó por hash
     // ======================================================
     if (!siteLoadedFromHash) {
       try {
@@ -237,25 +362,27 @@ async function bootstrapFromUrl(reason = 'nav') {
       }
     }
   } finally {
-    // mini-delay para evitar re-entradas por route.replace + watchers
     await nextTick()
     running = false
   }
 }
 
 function onPopState() {
-  // back/forward del navegador
   bootstrapFromUrl('popstate')
 }
 
 onMounted(() => {
+  // Alert inicial
+  alert('🏁 App Montada. Iniciando bootstrap...')
   bootstrapFromUrl('mounted')
-
-  // ✅ back/forward
   window.addEventListener('popstate', onPopState)
+
+  // ⏱️ INICIO DEL INTERVALO DE 5 SEGUNDOS
+  syncInterval = setInterval(() => {
+    syncSession()
+  }, 5000)
 })
 
-// ✅ cualquier navegación interna (incluye botón atrás dentro de SPA)
 watch(
   () => route.fullPath,
   () => bootstrapFromUrl('route-watch'),
@@ -264,5 +391,11 @@ watch(
 
 onBeforeUnmount(() => {
   window.removeEventListener('popstate', onPopState)
+  
+  // 🧹 LIMPIEZA DEL INTERVALO
+  if (syncInterval) {
+    clearInterval(syncInterval)
+    syncInterval = null
+  }
 })
 </script>

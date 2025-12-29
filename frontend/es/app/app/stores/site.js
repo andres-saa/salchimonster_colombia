@@ -3,7 +3,6 @@ import { ref, watch } from 'vue'
 import { URI } from '../service/conection'
 
 export const useSitesStore = defineStore('site-d3sddfs422', () => {
-  
   // 1. HELPER
   const emptyNeighborhood = () => ({
     name: '',
@@ -13,7 +12,35 @@ export const useSitesStore = defineStore('site-d3sddfs422', () => {
     site_id: null,
   })
 
-  // 2. STATE
+  // ✅ SOLO ESTO SE PERSISTE
+  const HASH_STORAGE_KEY = 'site-session-hash'
+  const session_hash = ref('')
+
+  const initHashStorage = () => {
+    if (typeof window === 'undefined') return
+    const stored = localStorage.getItem(HASH_STORAGE_KEY)
+    if (stored) session_hash.value = stored
+  }
+
+  if (typeof window !== 'undefined') initHashStorage()
+
+  watch(session_hash, (val) => {
+    if (typeof window === 'undefined') return
+    try {
+      if (val) localStorage.setItem(HASH_STORAGE_KEY, val)
+      else localStorage.removeItem(HASH_STORAGE_KEY)
+    } catch (e) {}
+  })
+
+  function setSessionHash(hash) {
+    session_hash.value = (hash || '').toString()
+  }
+
+  function clearSessionHash() {
+    session_hash.value = ''
+  }
+
+  // 2. STATE (VOLÁTIL - NO SE PERSISTE)
   const location = ref({
     city: null,
     site: {
@@ -39,7 +66,6 @@ export const useSitesStore = defineStore('site-d3sddfs422', () => {
     mode: 'barrios',
   })
 
-  // ✅ AQUÍ ESTABA EL PROBLEMA: Asegurarse de definir 'visibles'
   const visibles = ref({
     currentSite: false,
     loading: false,
@@ -52,77 +78,11 @@ export const useSitesStore = defineStore('site-d3sddfs422', () => {
     next_opening_time: null,
     networks: null,
   })
-  
+
   let statusTimer = null
 
-  // ───────────── PERSISTENCIA MANUAL (SSR SAFE) ─────────────
-  
-  const getStorageKey = (siteId) => `site-data-${siteId}`
-
-  // Inicializar storage solo en cliente
-  const initStorage = () => {
-    if (typeof window === 'undefined') return
-    const currentId = location.value.site?.site_id
-    if (!currentId) return
-
-    const stored = localStorage.getItem(getStorageKey(currentId))
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored)
-        location.value = {
-          ...location.value,
-          ...parsed,
-          // Merge profundo defensivo
-          site: { ...location.value.site, ...(parsed.site || {}) },
-          neigborhood: { ...emptyNeighborhood(), ...(parsed.neigborhood || {}) }
-        }
-      } catch (e) { console.error(e) }
-    }
-  }
-
-  if (typeof window !== 'undefined') {
-    initStorage()
-  }
-
-  // Watcher: Cambio de Sitio (Cargar datos de ese sitio)
-  watch(
-    () => location.value.site?.site_id,
-    (newId, oldId) => {
-      if (typeof window === 'undefined') return
-      if (!newId || newId === oldId) return
-
-      const key = getStorageKey(newId)
-      const storedData = localStorage.getItem(key)
-
-      if (storedData) {
-        try {
-          const parsed = JSON.parse(storedData)
-          location.value = { ...location.value, ...parsed, site: { ...parsed.site, site_id: newId } }
-        } catch (e) { console.error(e) }
-      } else {
-        // Sitio nuevo: limpiar barrio
-        location.value.neigborhood = emptyNeighborhood()
-      }
-    }
-  )
-
-  // Watcher: Guardar cambios en el sitio actual
-  watch(
-    location,
-    (newVal) => {
-      if (typeof window === 'undefined') return
-      const currentId = newVal.site?.site_id
-      if (currentId) {
-        try {
-          localStorage.setItem(getStorageKey(currentId), JSON.stringify(newVal))
-        } catch (e) {}
-      }
-    },
-    { deep: true }
-  )
-
   // ───────────── ACTIONS ─────────────
-  
+
   function setLocation(newLocation) {
     location.value = {
       ...location.value,
@@ -245,8 +205,13 @@ export const useSitesStore = defineStore('site-d3sddfs422', () => {
     { immediate: true },
   )
 
-  // ✅ IMPORTANTE: Retornar 'visibles' para que el componente pueda leerlo
   return {
+    // ✅ persisted
+    session_hash,
+    setSessionHash,
+    clearSessionHash,
+
+    // ✅ volatile
     location,
     visibles,
     current_delivery,
@@ -260,4 +225,3 @@ export const useSitesStore = defineStore('site-d3sddfs422', () => {
     initStatusWatcher,
   }
 })
-// NO usar { persist: ... } aquí
