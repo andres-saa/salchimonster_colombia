@@ -1,64 +1,160 @@
 <script setup>
-import { ref, onMounted, onBeforeUnmount, computed, watch } from 'vue'
+import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
+import { useUserStore } from '#imports'
 import { formatoPesosColombianos } from '~/service/utils/formatoPesos'
+
 const props = defineProps({
   product: { type: Object, required: true },
   categoryId: { type: [Number, String], required: true },
   imageBaseUrl: { type: String, required: true },
-  setProductRef: { type: Function, required: true },
-  lang: { type: String, default: 'es' }
+  setProductRef: { type: Function, required: true }
 })
 
 const emit = defineEmits(['click', 'add-to-cart'])
+
+const userStore = useUserStore()
+
 const rootEl = ref(null)
-const imgRef = ref(null) // Referencia directa a la etiqueta img
+const imgRef = ref(null)
 const imgLoaded = ref(false)
 
-// === Utils y Computadas Básicas ===
-const normalizeSpaces = (str) => String(str || '').replace(/\s*,\s*/g, ', ').replace(/([\p{L}\p{N}])\+([\p{L}\p{N}])/gu, '$1 + $2').replace(/ {2,}/g, ' ').replace(/ \,/g, ',').trim()
-const currentLang = computed(() => (props.lang || 'es').toLowerCase())
- 
+// === Idioma desde store ===
+const langKey = computed(() =>
+  String(
+    userStore.lang?.name ||
+      userStore.user?.lang?.name ||
+      'es'
+  ).toLowerCase()
+)
+const isEnglish = computed(() => langKey.value === 'en')
+
+// === Utils ===
+const normalizeSpaces = (str) =>
+  String(str || '')
+    .replace(/\s*,\s*/g, ', ')
+    .replace(/([\p{L}\p{N}])\+([\p{L}\p{N}])/gu, '$1 + $2')
+    .replace(/ {2,}/g, ' ')
+    .replace(/ \,/g, ',')
+    .trim()
+
+// ✅ Todo texto a minúscula desde JS (para que CSS capitalize haga el trabajo visual)
+const toLower = (str) => String(str || '').toLocaleLowerCase()
+
+const normalizeLower = (str) => toLower(normalizeSpaces(str))
+
+// ✅ EN: usa inglés si existe, si no ES | ES: usa ES si existe, si no EN
+const pickByLang = (esValue, enValue) => {
+  const es = String(esValue || '')
+  const en = String(enValue || '')
+  return isEnglish.value ? (en || es) : (es || en)
+}
+
+// ✅ Textos UI del card (en minúscula)
+const ui = computed(() => {
+  if (isEnglish.value) {
+    return {
+      no_description: 'no description',
+      combo: 'combo',
+      off: 'off',
+      flavor_suffix: 'flav.'
+    }
+  }
+  return {
+    no_description: 'sin descripción',
+    combo: 'combo',
+    off: 'off',
+    flavor_suffix: 'sab.'
+  }
+})
+
+// === Nombre / Descripción con fallback ES/EN (en minúscula) ===
 const displayName = computed(() => {
-  const p = props.product
-  if (currentLang.value === 'es') return normalizeSpaces(p.productogeneral_descripcion || p.product_name || p.productogeneral_descripcionweb || '')
-  return normalizeSpaces(p.english_name || p.product_name || '')
+  const p = props.product || {}
+
+  const esName =
+    p.productogeneral_descripcion ||
+    p.productogeneral_descripcionweb ||
+    p.product_name ||
+    ''
+
+  const enName =
+    p.english_name ||
+    p.product_name ||
+    ''
+
+  return normalizeLower(pickByLang(esName, enName))
 })
+
 const rawDescription = computed(() => {
-  const p = props.product
-  if (currentLang.value === 'es') return p.productogeneral_descripcionadicional || p.productogeneral_descripcionweb || ''
-  return p.english_description || p.productogeneral_descripcionweb || ''
+  const p = props.product || {}
+
+  const esDesc =
+    p.productogeneral_descripcionadicional ||
+    p.productogeneral_descripcionweb ||
+    ''
+
+  const enDesc =
+    p.english_description ||
+    ''
+
+  const picked = pickByLang(esDesc, enDesc) || (p.productogeneral_descripcionweb || '')
+  return toLower(picked)
 })
+
 const truncatedDescription = computed(() => {
   const desc = String(rawDescription.value || '')
-  if (!desc) return currentLang.value === 'es' ? 'Sin descripción' : 'No description'
+  if (!desc) return ui.value.no_description
   return desc.length > 100 ? desc.substring(0, 100) + '...' : desc
 })
 
-// Precios y lógica
-const discountAmount = computed(() => Number(props.product.discount_amount || 0))
-const discountPercent = computed(() => Number(props.product.discount_percent || 0))
+// === Precios y lógica ===
+const discountAmount = computed(() => Number(props.product?.discount_amount || 0))
+const discountPercent = computed(() => Number(props.product?.discount_percent || 0))
 const hasDiscount = computed(() => discountAmount.value > 0 && discountPercent.value > 0)
+
 const basePrice = computed(() => {
-  const p = props.product
+  const p = props.product || {}
   const presentationPrice = Number(p.lista_presentacion?.[0]?.producto_precio ?? 0)
   if (presentationPrice > 0) return presentationPrice
+
   const generalPrice = Number(p.productogeneral_precio ?? 0)
   if (generalPrice > 0) return generalPrice
+
   return Number(p.price ?? 0)
 })
+
 const finalPrice = computed(() => {
   const base = basePrice.value
   const disc = discountAmount.value
   return (base - disc) > 0 ? (base - disc) : base
 })
+
 const showOriginalPrice = computed(() => hasDiscount.value && basePrice.value > 0)
-const isCombo = computed(() => props.product.is_combo != null ? !!props.product.is_combo : String(props.product.productogeneral_escombo || '') === '1')
-const maxFlavor = computed(() => Number(props.product.max_flavor || 0))
 
+const isCombo = computed(() =>
+  props.product?.is_combo != null
+    ? !!props.product.is_combo
+    : String(props.product?.productogeneral_escombo || '') === '1'
+)
 
-// === OPTIMIZACIÓN DE IMAGEN ===
+const maxFlavor = computed(() => Number(props.product?.max_flavor || 0))
+
+const discountLabel = computed(() => {
+  if (!hasDiscount.value) return ''
+  // en minúscula, luego CSS capitalize lo muestra “bonito”
+  return isEnglish.value
+    ? toLower(`${discountPercent.value}% ${ui.value.off}`)
+    : toLower(`-${discountPercent.value}%`)
+})
+
+const flavorsLabel = computed(() => {
+  if (!(maxFlavor.value > 1)) return ''
+  return toLower(`${maxFlavor.value} ${ui.value.flavor_suffix}`)
+})
+
+// === Imagen ===
 const imageSrc = computed(() => {
-  const p = props.product
+  const p = props.product || {}
   if (p.productogeneral_urlimagen) return `https://img.restpe.com/${p.productogeneral_urlimagen}`
   if (p.image_url?.startsWith('http')) return p.image_url
   if (p.image_url) return `${props.imageBaseUrl}/${p.image_url}`
@@ -67,8 +163,8 @@ const imageSrc = computed(() => {
 })
 
 const imageSrcSet = computed(() => {
-  const p = props.product
-  if (!p.img_identifier || p.productogeneral_urlimagen || p.image_url) return '' 
+  const p = props.product || {}
+  if (!p.img_identifier || p.productogeneral_urlimagen || p.image_url) return ''
   return `
     ${props.imageBaseUrl}/read-photo-product/${p.img_identifier}/200 200w,
     ${props.imageBaseUrl}/read-photo-product/${p.img_identifier}/400 400w,
@@ -76,17 +172,12 @@ const imageSrcSet = computed(() => {
   `
 })
 
-// --- FIX: MANEJO DE ESTADOS DE CARGA ---
+const onImgLoad = () => { imgLoaded.value = true }
 
-const onImgLoad = () => {
-  imgLoaded.value = true
-}
-
-// NUEVO: Si da error, quitamos el skeleton y mostramos placeholder
 const onImgError = (event) => {
-  imgLoaded.value = true // Quitamos el skeleton
-  event.target.removeAttribute('srcset') // Evitamos bucles
-  event.target.src = `${props.imageBaseUrl}/placeholder.png` // Fallback
+  imgLoaded.value = true
+  event.target?.removeAttribute?.('srcset')
+  event.target.src = `${props.imageBaseUrl}/placeholder.png`
 }
 
 // === Handlers ===
@@ -95,16 +186,10 @@ const handleKeyUp = (event) => { if (event.key === 'Enter') emit('click') }
 
 onMounted(() => {
   if (rootEl.value) props.setProductRef(props.product.id, props.categoryId, rootEl.value)
-  
-  // FIX: Verificamos si la imagen ya estaba en caché al montar
+
   if (imgRef.value && imgRef.value.complete) {
-    if (imgRef.value.naturalWidth > 0) {
-        onImgLoad()
-    } else {
-        // Si complete es true pero width es 0, suele ser error
-        // Pero dejamos que el evento @error lo maneje o forzamos loaded
-        imgLoaded.value = true 
-    }
+    if (imgRef.value.naturalWidth > 0) onImgLoad()
+    else imgLoaded.value = true
   }
 })
 
@@ -153,13 +238,15 @@ onBeforeUnmount(() => {
 
         <div class="menu-product-card__badges">
           <span v-if="hasDiscount" class="menu-product-card__tag menu-product-card__tag--discount">
-            {{ currentLang === 'es' ? `-${discountPercent}%` : `${discountPercent}% Off` }}
+            {{ discountLabel }}
           </span>
+
           <span v-else-if="isCombo" class="menu-product-card__tag menu-product-card__tag--combo">
-            Combo
+            {{ ui.combo }}
           </span>
+
           <span v-else-if="maxFlavor > 1" class="menu-product-card__tag menu-product-card__tag--flavors">
-            {{ maxFlavor }} sab.
+            {{ flavorsLabel }}
           </span>
         </div>
       </div>
@@ -168,7 +255,10 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+/* ✅ Capitalize visual para TODO el texto del componente */
 .menu-product-card {
+  text-transform: capitalize;
+
   background: #ffffff;
   border-radius: 0.3rem;
   border: 1px solid #e5e7eb;
@@ -192,7 +282,6 @@ onBeforeUnmount(() => {
   aspect-ratio: 1 / 1;
   overflow: hidden;
   background: #f3f4f6;
-  /* Animación de carga */
   background-image: linear-gradient(90deg, #f3f4f6 0px, #e5e7eb 50%, #f3f4f6 100%);
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
@@ -215,17 +304,14 @@ onBeforeUnmount(() => {
   height: 100%;
   object-fit: cover;
   display: block;
-  /* IMPORTANTE: Iniciamos opacidad en 0 para que no se vea el "corte" de carga */
-  opacity: 0; 
+  opacity: 0;
   transition: opacity 0.3s ease-in;
 }
 
-/* Una vez cargado, mostramos la imagen */
 .menu-product-card__image-wrapper.is-loaded .menu-product-card__image {
   opacity: 1;
 }
 
-/* Resto de estilos igual... */
 .menu-product-card__body { padding: 0.7rem; display: flex; flex-direction: column; gap: 0.35rem; flex: 1; }
 .menu-product-card__name { margin: 0; font-size: 0.95rem; font-weight: 600; color: #111; }
 .menu-product-card__desc { margin: 0; font-size: 0.78rem; color: #666; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }

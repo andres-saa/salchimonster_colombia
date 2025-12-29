@@ -14,10 +14,8 @@
       </div>
     </Transition>
 
-    <!-- ✅ App-like shell: sin scroll global, todo ocurre dentro -->
     <div class="vicio-page" :class="{ 'is-map-collapsed': shouldCollapseMap }">
       <ClientOnly>
-        <!-- ✅ Shell para animar el alto del mapa sin destruir Leaflet -->
         <div class="vicio-map-shell">
           <div id="vicio-map" class="vicio-map"></div>
         </div>
@@ -25,7 +23,6 @@
 
       <div class="vicio-sidebar">
         <header class="sidebar-header">
-          <!-- ✅ Header + Language selector -->
           <div class="sidebar-header-top">
             <h2 class="sidebar-title">{{ t('choose_nearest') }}</h2>
 
@@ -54,7 +51,6 @@
             </div>
           </div>
 
-          <!-- CIUDAD (PrimeVue Select) -->
           <div class="city-select-wrapper">
             <label class="city-label" for="city-filter">{{ t('city') }}</label>
 
@@ -73,7 +69,6 @@
             />
           </div>
 
-          <!-- GOOGLE CITY: AUTOCOMPLETE DIRECCION -->
           <div class="search-wrapper" v-if="selectedCityId && isGoogleCity">
             <AutoComplete
               v-model="addressQuery"
@@ -96,7 +91,6 @@
             </AutoComplete>
           </div>
 
-          <!-- PARAMS CITY: BARRIOS + DIRECCION EXACTA -->
           <div v-if="selectedCityId && isParamsCity" class="params-box">
             <div class="form-group">
               <label class="city-label">{{ t('neighborhood_sector') }}</label>
@@ -138,7 +132,6 @@
           </div>
         </header>
 
-        <!-- RESULTADO GOOGLE -->
         <section v-if="coverageResult && isGoogleCity" class="coverage-card">
           <div class="coverage-header">
             <Icon name="mdi:map-marker-check" size="1.4em" class="coverage-icon" />
@@ -189,7 +182,6 @@
           </div>
         </section>
 
-        <!-- RESULTADO PARAMS -->
         <section v-if="isParamsCity && selectedNeighborhood" class="coverage-card">
           <div class="coverage-header">
             <Icon name="mdi:home-map-marker" size="1.4em" class="coverage-icon" />
@@ -224,7 +216,6 @@
           </div>
         </section>
 
-        <!-- LISTA SEDES (✅ scroll interno, no global) -->
         <main class="stores-list">
           <article
             v-for="store in filteredStores"
@@ -257,7 +248,6 @@
                 {{ store.address }} – {{ store.city }}
               </p>
 
-              <!-- ✅ estado + whatsapp -->
               <div class="store-actions-row">
                 <button class="store-action" :data-status="store.status || 'unknown'">
                   <span v-if="store.status === 'open'" class="status-flex">
@@ -266,16 +256,15 @@
                   <span v-else class="status-flex">{{ t('closed') }}</span>
                 </button>
 
-                <button
-                  class="store-whatsapp"
-                  type="button"
-                  :disabled="!store.site_phone"
-                  @click.stop="openWhatsApp(store)"
-                  :title="store.site_phone ? t('write_whatsapp') : t('no_whatsapp')"
-                >
-                  <Icon name="mdi:whatsapp" size="1.15em" />
-                  <span>{{ t('whatsapp') }}</span>
-                </button>
+<button
+  class="store-whatsapp"
+  type="button"
+  :disabled="!store.site_phone"
+  @click.stop="openWhatsApp(store)" :title="store.site_phone ? t('write_whatsapp') : t('no_whatsapp')"
+>
+  <Icon name="mdi:whatsapp" size="1.15em" />
+  <span>{{ t('whatsapp') }}</span>
+</button>
               </div>
             </div>
 
@@ -286,7 +275,6 @@
         </main>
       </div>
 
-      <!-- MODAL (PrimeVue Dialog) -->
       <Dialog
         v-model:visible="isModalOpen"
         modal
@@ -300,29 +288,24 @@
             <Icon name="mdi:close" size="1.5em" />
           </button>
 
-          <!-- STEP 1 -->
           <div v-if="modalStep === 1">
             <h3 class="modal-title">{{ t('how_want_order') }}</h3>
             <p class="modal-subtitle">
               {{ t('store_label') }}: <strong>{{ modalStore.name }}</strong>
             </p>
 
-            <!-- ✅ WhatsApp en el modal -->
-            <div class="modal-whatsapp-row">
-              <Button
-                class="btn-action btn-whatsapp full-width"
-                severity="secondary"
-                :disabled="!modalStore.site_phone"
-                @click="openWhatsApp(modalStore)"
-              >
-                <template #icon>
-                  <Icon name="mdi:whatsapp" size="1.25em" />
-                </template>
-                 <Icon name="mdi:whatsapp" size="1.5em" />
-                <span>{{ t('write_whatsapp') }}</span>
-                
-              </Button>
-            </div>
+                <div class="modal-whatsapp-row">
+                  <Button
+                    class="btn-action btn-whatsapp full-width"
+                    severity="secondary"
+                    :disabled="!modalStore.site_phone"
+                    @click.stop="openWhatsApp(modalStore)" >
+                    <template #icon>
+                      <Icon name="mdi:whatsapp" size="1.25em" />
+                    </template>
+                    <span>{{ t('write_whatsapp') }}</span>
+                  </Button>
+                </div>
 
             <div class="modal-actions">
               <Button
@@ -339,7 +322,6 @@
             </div>
           </div>
 
-          <!-- STEP 2 -->
           <div v-else-if="modalStep === 2">
             <div class="modal-header-nav">
               <Button text class="modal-back-btn" @click="setModalStep(1)">
@@ -348,7 +330,6 @@
               </Button>
             </div>
 
-            <!-- GOOGLE MODAL -->
             <div v-if="isGoogleCity">
               <h3 class="modal-title">{{ t('where_are_you') }}</h3>
 
@@ -376,7 +357,6 @@
               <div v-if="modalAddressError" class="modal-error">{{ modalAddressError }}</div>
             </div>
 
-            <!-- PARAMS MODAL -->
             <div v-else class="params-flow-modal">
               <h3 class="modal-title">{{ t('delivery_details') }}</h3>
 
@@ -388,7 +368,7 @@
                   :suggestions="modalNbSuggestions"
                   optionLabel="name"
                   class="w-full"
-                  :placeholder="t('type_to_search')"
+                  :placeholder="t('type_to_search') "
                   :minLength="1"
                   style="width:100%;"
                   :delay="150"
@@ -433,13 +413,11 @@
             </div>
           </div>
 
-          <!-- STEP 3 -->
           <div v-else-if="modalStep === 3" class="modal-loading-view">
             <ProgressSpinner style="width:48px;height:48px" />
             <p>{{ t('validating_coverage') }}</p>
           </div>
 
-          <!-- STEP 4 -->
           <div v-else-if="modalStep === 4 && modalCoverageResult">
             <div class="modal-header-nav">
               <Button text class="modal-back-btn" @click="setModalStep(2)">
@@ -583,8 +561,6 @@ const I18N = {
     redirecting_to: 'Te estamos llevando a',
     starting_experience: 'Iniciando tu experiencia...',
     na: 'N/A',
-
-    // ✅ WhatsApp
     whatsapp: 'WhatsApp',
     write_whatsapp: 'Escribir por WhatsApp',
     no_whatsapp: 'Esta sede no tiene WhatsApp',
@@ -631,8 +607,6 @@ const I18N = {
     redirecting_to: 'Taking you to',
     starting_experience: 'Starting your experience...',
     na: 'N/A',
-
-    // ✅ WhatsApp
     whatsapp: 'WhatsApp',
     write_whatsapp: 'Message on WhatsApp',
     no_whatsapp: 'This store has no WhatsApp',
@@ -676,41 +650,47 @@ const isRedirecting = ref(false)
 const targetSiteName = ref('')
 
 /* =======================
-   ✅ WhatsApp helper
+   ✅ WhatsApp helper (CORREGIDO Y BLINDADO)
    ======================= */
 function normalizeWhatsAppPhone(phone) {
   if (!phone) return ''
-  // deja solo dígitos
-  let digits = String(phone).replace(/[^\d]/g, '')
-  // si viene como 322xxxxxxx (10 dígitos), asumimos CO y prefijamos 57
-  if (digits.length === 10) digits = `57${digits}`
+  let digits = String(phone).replace(/\D/g, '')
+  if (digits.length === 10) return `57${digits}`
   return digits
 }
 
 function buildWhatsAppLink(store, customText = '') {
   const digits = normalizeWhatsAppPhone(store?.site_phone)
-  if (!digits) return ''
-  const text =
-    (customText && String(customText).trim())
+  if (!digits || digits.length < 7) return ''
+  
+  const text = (customText && String(customText).trim())
       ? String(customText).trim()
       : t('whatsapp_default_msg')
 
-  // wa.me requiere URL encode
   const q = encodeURIComponent(text)
   return `https://wa.me/${digits}?text=${q}`
 }
 
 function openWhatsApp(store) {
   const url = buildWhatsAppLink(store, `${t('whatsapp_default_msg')} (${store?.name || ''})`)
-  if (!url) return
-  try {
-    window.open(url, '_blank', 'noopener,noreferrer')
-  } catch {
-    // fallback
+  
+  if (!url) {
+    console.warn('Número de WhatsApp inválido para la sede:', store?.name)
+    return
+  }
+  
+  // ✅ CORRECCIÓN CLAVE:
+  // En móviles, window.open suele dar problemas de "doble disparo" o bloqueo.
+  // Es mejor usar location.href directo, lo cual abre la app de WhatsApp nativa.
+  if (isMobile.value) {
     window.location.href = url
+  } else {
+    // En Desktop, abrimos pestaña nueva.
+    const win = window.open(url)
+    // Solo hacemos fallback si estamos SEGUROS de que falló estrepitosamente en desktop
+    if (!win) window.location.href = url
   }
 }
-
 /* =======================
    ✅ App-like: bloquear scroll global + zoom del navegador
    ======================= */
@@ -771,7 +751,7 @@ onBeforeUnmount(() => {
 })
 
 /* =======================
-   CITY OPTIONS (con “Todas”)
+   CITY OPTIONS
    ======================= */
 const orderedCities = computed(() => {
   return [...cities.value.filter((s) => ![18, 15, 19].includes(Number(s.city_id)))]
@@ -1177,7 +1157,8 @@ async function loadStores() {
         subdomain: s.subdomain,
         img_id: s.img_id,
         status: 'unknown',
-        site_phone: s.site_phone || null // ✅ AQUI
+        // ✅ AQUI: Limpiamos el teléfono desde la carga. Si viene vacío o solo espacios, se vuelve null
+        site_phone: (s.site_phone && String(s.site_phone).trim().length > 5) ? String(s.site_phone).trim() : null
       }))
   } catch {}
 }

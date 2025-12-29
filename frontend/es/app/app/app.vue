@@ -5,8 +5,9 @@
     </NuxtLayout>
 
     <ToastContainer />
- <a
-     
+    
+    <a
+      v-if="showWhatsappFloat"
       :href="whatsappFloatUrl"
       target="_blank"
       rel="noopener"
@@ -16,13 +17,14 @@
     >
       <Icon size="xx-large" name="mdi:whatsapp" class="wsp-icon" />
     </a>
+
     <CartBar />
     <MenuSearchModal />
   </div>
 </template>
 
 <script setup>
-import { onMounted, onBeforeUnmount, watch, nextTick } from '#imports'
+import { onMounted, onBeforeUnmount, watch, nextTick, computed } from '#imports'
 import { useRoute, useRouter } from '#imports'
 import { useSitesStore, useUserStore, usecartStore } from '#imports'
 import { useSedeFromSubdomain } from '#imports'
@@ -40,13 +42,12 @@ let lastKey = ''
 
 // 🔄 Variables para la Sincronización (Sync)
 let syncInterval = null
-let lastSavedSnapshot = '' // Para comparar cambios
-let isRestoring = true // 🛡️ Bloqueo inicial para no guardar datos vacíos sobre el hash
+let lastSavedSnapshot = '' 
+let isRestoring = true 
 
 // ------------------------------------------------------------------------
-// 1. LÓGICA DE SINCRONIZACIÓN (PUT)
+// 1. LÓGICA DE WHATSAPP (CORREGIDA)
 // ------------------------------------------------------------------------
-
 
 function cleanPhone(raw) {
   if (!raw) return null
@@ -54,26 +55,38 @@ function cleanPhone(raw) {
   return digits.length >= 10 ? digits : null
 }
 
-const whatsappPhone = computed(() => cleanPhone(siteStore.location?.site?.site_phone))
+// Usamos computed para que reaccione cuando siteStore.location.site cambie
+const whatsappPhone = computed(() => {
+  return cleanPhone(siteStore.location?.site?.site_phone)
+})
 
 const showWhatsappFloat = computed(() => {
-  // si estás en iframe y no quieres mostrarlo:
+  // 1. Si estás en iframe y no quieres mostrarlo:
   if (userStore.user?.iframe) return false
+  
+  // 2. Solo mostrar si hay un teléfono válido
   return !!whatsappPhone.value
 })
 
 const whatsappFloatUrl = computed(() => {
+  if (!whatsappPhone.value) return '#'
+
   const baseUrl = 'https://api.whatsapp.com/send'
-  const phone = whatsappPhone.value || ''
+  const phone = whatsappPhone.value
 
+  // Usamos process.client para evitar errores de hidratación en SSR
   const pageUrl = process.client ? window.location.href : ''
-  const siteName = siteStore.location?.site?.site_name || 'la sede'
-
+  
+  // Mensaje predeterminado
   const text = `Hola 😊 Tengo una duda con ${pageUrl ? `\n\nLink: ${pageUrl}` : ''}`
 
   const params = new URLSearchParams({ phone, text })
   return `${baseUrl}?${params.toString()}`
 })
+
+// ------------------------------------------------------------------------
+// 2. LÓGICA DE SINCRONIZACIÓN (PUT)
+// ------------------------------------------------------------------------
 
 /**
  * Genera el objeto JSON exacto que espera el backend
@@ -82,7 +95,6 @@ function generatePayload() {
   return {
     site_location: siteStore.location.site,
     user: userStore.user,
-    // Construimos location_meta basándonos en lo que 'restoreLocationFromMeta' espera leer
     location_meta: {
       city: siteStore.location.city,
       mode: siteStore.location.mode,
@@ -94,8 +106,8 @@ function generatePayload() {
       neigborhood: siteStore.location.neigborhood,
       delivery_price: siteStore.current_delivery
     },
-    cart: cartStore.cart, // Asumiendo que es un array o objeto serializable
-    discount: cartStore.coupon || null, // Ajusta según tu store de carrito
+    cart: cartStore.cart, 
+    discount: cartStore.coupon || null, 
     coupon_ui: cartStore.coupon_ui || null
   }
 }
@@ -104,28 +116,20 @@ function generatePayload() {
  * Revisa cada 3 segundos si hay cambios y envía PUT
  */
 function startHashSyncer() {
-  // Limpiamos intervalo previo si existe
   if (syncInterval) clearInterval(syncInterval)
 
   syncInterval = setInterval(async () => {
-    // 1. Si no hay hash en el store, no hay nada que actualizar en el servidor
     const currentHash = siteStore.session_hash
     if (!currentHash) return
 
-    // 2. Si todavía estamos restaurando datos (bootstrap), NO guardar para evitar sobrescribir
     if (isRestoring || running) return
 
-    // 3. Generar "Snapshot" actual
     const currentData = generatePayload()
     const currentSnapshot = JSON.stringify(currentData)
 
-    // 4. Comparar con el último guardado. Si son iguales, no hacer nada.
     if (currentSnapshot === lastSavedSnapshot) return
 
-    // 5. Detectamos cambio -> ENVIAR PUT
     try {
-      // console.log('🔄 Detectados cambios locales, sincronizando hash...', currentHash)
-      
       const res = await fetch(`${URI}/data/${currentHash}`, {
         method: 'PUT',
         headers: {
@@ -135,7 +139,6 @@ function startHashSyncer() {
       })
 
       if (res.ok) {
-        // Actualizamos la referencia del último snapshot guardado
         lastSavedSnapshot = currentSnapshot
       } else {
         console.warn('Error sincronizando hash:', res.status)
@@ -144,11 +147,11 @@ function startHashSyncer() {
       console.error('Error de red al sincronizar hash:', e)
     }
 
-  }, 3000) // ⏱️ Cada 3 segundos
+  }, 3000) 
 }
 
 // ------------------------------------------------------------------------
-// 2. LÓGICA DE RESTAURACIÓN Y CARGA (GET)
+// 3. LÓGICA DE RESTAURACIÓN Y CARGA (GET)
 // ------------------------------------------------------------------------
 
 function cleanQueryParams({ removeHash = false, removeCredentials = false, removeIframe = false } = {}) {
@@ -199,8 +202,6 @@ function applyRestoredData(restoredData) {
   if (restoredData.discount) cartStore.applyCoupon(restoredData.discount)
   if (restoredData.coupon_ui && cartStore.setCouponUi) cartStore.setCouponUi(restoredData.coupon_ui)
   
-  // 🔥 Importante: Actualizamos el snapshot inicial para que el watcher no crea que hubo un cambio 
-  // inmediatamente después de cargar los datos del servidor.
   lastSavedSnapshot = JSON.stringify(generatePayload())
 }
 
@@ -246,7 +247,7 @@ function getCurrentSubdomain() {
 async function bootstrapFromUrl(reason = 'nav') {
   if (running) return
   running = true
-  isRestoring = true // 🔴 Iniciando carga, bloquear sync
+  isRestoring = true 
 
   try {
     const key = JSON.stringify({
@@ -260,7 +261,7 @@ async function bootstrapFromUrl(reason = 'nav') {
     })
     
     if (key === lastKey) {
-      isRestoring = false // Si salimos por cache key, habilitar sync
+      isRestoring = false 
       return
     }
     lastKey = key
@@ -286,7 +287,7 @@ async function bootstrapFromUrl(reason = 'nav') {
       localStorage.setItem('session_external_data', JSON.stringify(sessionData))
     }
 
-    // 1) Carga por HASH (URL o Store)
+    // 1) Carga por HASH 
     const urlHash = route.query.hash
     const storedHash = siteStore.session_hash
     const targetHash = urlHash || storedHash
@@ -338,7 +339,6 @@ async function bootstrapFromUrl(reason = 'nav') {
           }
         }
         
-        // Si cargamos de cero (sin hash), definimos el snapshot actual como base
         lastSavedSnapshot = JSON.stringify(generatePayload())
         
         const needsCredClean = !!(qInsertedBy && qToken)
@@ -357,7 +357,7 @@ async function bootstrapFromUrl(reason = 'nav') {
   } finally {
     await nextTick()
     running = false
-    isRestoring = false // 🟢 Carga terminada, el sync puede trabajar
+    isRestoring = false 
   }
 }
 
@@ -367,7 +367,7 @@ function onPopState() {
 
 onMounted(() => {
   bootstrapFromUrl('mounted')
-  startHashSyncer() // ✅ Iniciamos el "cron" de 3 segundos
+  startHashSyncer()
   window.addEventListener('popstate', onPopState)
 })
 
@@ -378,18 +378,17 @@ watch(
 )
 
 onBeforeUnmount(() => {
-  if (syncInterval) clearInterval(syncInterval) // 🧹 Limpieza
+  if (syncInterval) clearInterval(syncInterval)
   window.removeEventListener('popstate', onPopState)
 })
 </script>
-
 
 <style scoped>
 /* ✅ Botón flotante WhatsApp */
 .wsp-float {
   position: fixed;
   right: 16px;
-  bottom: 96px; /* deja espacio por CartBar */
+  bottom: 96px; 
   width: 48px;
   height:48px;
   border-radius: 999px;
@@ -412,7 +411,6 @@ onBeforeUnmount(() => {
   transform: scale(0.98);
 }
 
-/* NuxtIcon suele renderizar svg dentro */
 .wsp-icon :deep(svg) {
   width: 40px;
   height: 28px;

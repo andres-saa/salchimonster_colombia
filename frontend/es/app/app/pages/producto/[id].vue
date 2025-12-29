@@ -1,36 +1,58 @@
 <template>
   <div class="page-wrapper">
-    <button class="nav-btn nav-btn--back" @click="goBack" aria-label="Volver">
+    <button
+      class="nav-btn nav-btn--back"
+      @click="goBack"
+      :aria-label="tl('back_aria', 'volver', 'back')"
+    >
       <Icon name="mdi:arrow-left" size="24" />
     </button>
 
     <div v-if="loading" class="loading-overlay">
       <div class="spinner-container">
         <Icon name="mdi:loading" class="spin-icon" size="60" />
-        <p class="loading-text">Cargando detalles...</p>
+        <p class="loading-text">
+          {{ tl('loading_details', 'cargando detalles...', 'loading details...') }}
+        </p>
       </div>
     </div>
 
     <div v-else-if="currentProduct" class="product-container animate-fade-in">
-      
       <div class="gallery-column">
         <div class="image-wrapper">
           <div v-if="!imageLoaded && !previewUrl" class="skeleton-loader"></div>
-          <img v-if="previewUrl" :src="previewUrl" alt="" class="img-preview" aria-hidden="true" />
-          <img 
+
+          <img
+            v-if="previewUrl"
+            :src="previewUrl"
+            alt=""
+            class="img-preview"
+            aria-hidden="true"
+          />
+
+          <img
             ref="mainImageRef"
-            :src="highResUrl" 
-            :alt="displayName" 
+            :src="highResUrl"
+            :alt="displayName"
             class="img-main"
             :class="{ 'is-loaded': imageLoaded }"
             loading="eager"
             @load="onImageLoad"
           />
+
           <div class="desktop-nav-controls">
-            <button @click="goToPrev" class="nav-arrow" title="Anterior">
+            <button
+              @click="goToPrev"
+              class="nav-arrow"
+              :title="tl('prev', 'anterior', 'previous')"
+            >
               <Icon name="mdi:chevron-left" size="30" />
             </button>
-            <button @click="goToNext" class="nav-arrow" title="Siguiente">
+            <button
+              @click="goToNext"
+              class="nav-arrow"
+              :title="tl('next', 'siguiente', 'next')"
+            >
               <Icon name="mdi:chevron-right" size="30" />
             </button>
           </div>
@@ -40,52 +62,83 @@
       <div class="details-column">
         <header class="product-header">
           <h1 class="product-title">{{ displayName }}</h1>
+
           <div class="price-block">
-            <span v-if="showOriginalPrice" class="price-old">{{ formatoPesosColombianos(basePrice) }}</span>
-            <span class="price-current">{{ formatoPesosColombianos(finalPrice) }}</span>
+            <span v-if="showOriginalPrice" class="price-old">
+              {{ formatoPesosColombianos(basePrice) }}
+            </span>
+            <span class="price-current">
+              {{ formatoPesosColombianos(finalPrice) }}
+            </span>
           </div>
+
           <p class="product-description">{{ productDescription }}</p>
         </header>
 
         <hr class="divider" />
 
-        <section v-if="(currentProduct.lista_productobase || []).length > 0" class="section-block">
-          <h3 class="section-title">INCLUYE</h3>
+        <section
+          v-if="(currentProduct.lista_productobase || []).length > 0"
+          class="section-block"
+        >
+          <h3 class="section-title">
+            {{ tl('includes_title', 'incluye', 'includes') }}
+          </h3>
+
           <div class="base-products-grid">
-            <div v-for="base in currentProduct.lista_productobase" :key="base.producto_id" class="base-item-card">
+            <div
+              v-for="base in currentProduct.lista_productobase"
+              :key="base.producto_id"
+              class="base-item-card"
+            >
               <div class="base-item-img">
-                <img :src="`https://img.restpe.com/${base.producto_urlimagen}`" alt="foto" loading="lazy" />
+                <img
+                  :src="`https://img.restpe.com/${base.producto_urlimagen}`"
+                  :alt="tl('photo_alt', 'foto', 'photo')"
+                  loading="lazy"
+                />
               </div>
+
               <div class="base-item-info">
                 <div class="base-qty-badge">{{ Math.round(base.productocombo_cantidad) }}x</div>
-                <span class="base-name">{{ base.producto_descripcion }}</span>
+                <span class="base-name">{{ displayBaseName(base) }}</span>
               </div>
-              <button v-if="base.lista_productoCambio?.length > 0" class="btn-change-base" @click="changeProductBase(base)">
-                Cambiar
+
+              <button
+                v-if="base.lista_productoCambio?.length > 0"
+                class="btn-change-base"
+                @click="changeProductBase(base)"
+              >
+                {{ tl('change', 'cambiar', 'change') }}
               </button>
             </div>
           </div>
+
           <hr class="divider" />
         </section>
 
-        <section v-for="group in currentProduct.lista_agrupadores || []" :key="group.modificador_id" class="section-block">
+        <section
+          v-for="group in currentProduct.lista_agrupadores || []"
+          :key="group.modificador_id"
+          class="section-block"
+        >
           <div class="group-header">
-            <h3 class="section-title">{{ group.modificador_nombre }}</h3>
+            <h3 class="section-title">{{ displayGroupName(group) }}</h3>
             <span class="group-requirements">{{ getGroupRequirementText(group) }}</span>
           </div>
 
           <div class="modifiers-list">
-            <div 
-              v-for="mod in group.listaModificadores || []" 
+            <div
+              v-for="mod in group.listaModificadores || []"
               :key="mod.modificadorseleccion_id"
               class="modifier-row"
               :class="{ 'is-selected': isSelected(mod, group.modificador_id) }"
               @click="handleRowClick(mod, group.modificador_id)"
             >
               <div class="modifier-input-wrapper">
-                <div 
-                  class="custom-check" 
-                  :class="{ 
+                <div
+                  class="custom-check"
+                  :class="{
                     'type-radio': Number(group.modificador_esmultiple) === 0,
                     'checked': isSelected(mod, group.modificador_id)
                   }"
@@ -93,15 +146,25 @@
               </div>
 
               <div class="modifier-info">
-                <span class="modifier-name">{{ mod.modificadorseleccion_nombre }}</span>
-                <span v-if="Number(mod.modificadorseleccion_precio) > 0" class="modifier-price">
+                <span class="modifier-name">{{ displayModifierName(mod) }}</span>
+
+                <span
+                  v-if="Number(mod.modificadorseleccion_precio) > 0"
+                  class="modifier-price"
+                >
                   +{{ formatoPesosColombianos(Number(mod.modificadorseleccion_precio)) }}
                 </span>
               </div>
 
-              <div v-if="Number(group.modificador_esmultiple) === 1 && checkedAddition[mod.modificadorseleccion_id]" class="modifier-qty-control" @click.stop>
+              <div
+                v-if="Number(group.modificador_esmultiple) === 1 && checkedAddition[mod.modificadorseleccion_id]"
+                class="modifier-qty-control"
+                @click.stop
+              >
                 <button class="qty-btn-mini" @click="decrement(mod, group.modificador_id)">−</button>
-                <span class="qty-val-mini">{{ selectedAdditions[mod.modificadorseleccion_id]?.modificadorseleccion_cantidad || 1 }}</span>
+                <span class="qty-val-mini">
+                  {{ selectedAdditions[mod.modificadorseleccion_id]?.modificadorseleccion_cantidad || 1 }}
+                </span>
                 <button class="qty-btn-mini" @click="increment(mod, group.modificador_id)">+</button>
               </div>
             </div>
@@ -113,80 +176,111 @@
     </div>
 
     <div v-else class="product-container animate-fade-in">
-      <p style="padding: 2rem; text-align: center;">Cargando...</p>
+      <p style="padding: 2rem; text-align: center;">
+        {{ tl('loading_short', 'cargando...', 'loading...') }}
+      </p>
     </div>
 
     <footer class="sticky-footer" v-if="currentProduct">
       <div class="footer-inner">
         <div class="main-qty-control">
-          <button class="qty-btn-main" @click="quantity > 1 ? quantity-- : null" :disabled="quantity <= 1">
+          <button
+            class="qty-btn-main"
+            @click="quantity > 1 ? quantity-- : null"
+            :disabled="quantity <= 1"
+            :aria-label="tl('decrease_qty_aria', 'disminuir cantidad', 'decrease quantity')"
+          >
             <Icon name="mdi:minus" />
           </button>
+
           <span class="qty-val-main">{{ quantity }}</span>
-          <button class="qty-btn-main" @click="quantity++">
+
+          <button
+            class="qty-btn-main"
+            @click="quantity++"
+            :aria-label="tl('increase_qty_aria', 'aumentar cantidad', 'increase quantity')"
+          >
             <Icon name="mdi:plus" />
           </button>
         </div>
 
         <button class="add-cart-btn btn-mobile-only" @click="processAddToCart('ask')">
           <div class="btn-content">
-            <span>Agregar</span>
+            <span>{{ tl('Add', 'Agregar', 'Add') }}</span>
             <span class="btn-total">{{ formatoPesosColombianos(calculateTotal()) }}</span>
           </div>
         </button>
 
         <div class="desktop-actions btn-desktop-only">
           <button class="add-cart-btn btn-secondary" @click="processAddToCart('menu')">
-            Agregar y seguir comprando
+            {{ tl('add_and_keep_shopping', 'Agregar y seguir comprando', 'Add and keep shopping') }}
           </button>
+
           <button class="add-cart-btn btn-primary" @click="processAddToCart('pay')">
             <div class="btn-content-pc">
-              <span class="btn-total-pc"> Ir a pagar {{ formatoPesosColombianos(calculateTotal()) }}</span>
+              <span class="btn-total-pc">
+                {{ tl('go_pay', 'ir a pagar', 'go to pay') }}
+                {{ formatoPesosColombianos(calculateTotal()) }}
+              </span>
             </div>
           </button>
         </div>
-
       </div>
     </footer>
 
+    <!-- Cambiar base -->
     <div v-if="showChangeDialog" class="modal-backdrop" @click.self="showChangeDialog = false">
       <div class="modal-card">
         <header class="modal-header">
-          <h3>Cambiar {{ productBaseToChange?.producto_descripcion }}</h3>
-          <button class="close-modal-btn" @click="showChangeDialog = false">✕</button>
+          <h3>
+            {{ tl('change', 'cambiar', 'change') }}
+            {{ displayBaseName(productBaseToChange) }}
+          </h3>
+          <button class="close-modal-btn" @click="showChangeDialog = false">
+            ✕
+          </button>
         </header>
+
         <div class="modal-body grid-options">
-          <button v-for="option in productBaseToChange?.lista_productoCambio || []" :key="option.producto_id" class="option-card" @click="selectAlternative(option)">
+          <button
+            v-for="option in productBaseToChange?.lista_productoCambio || []"
+            :key="option.producto_id"
+            class="option-card"
+            @click="selectAlternative(option)"
+          >
             <img :src="`https://img.restpe.com/${option.producto_urlimagen}`" alt="" loading="lazy" />
-            <span>{{ option.producto_descripcion }}</span>
+            <span>{{ displayBaseName(option) }}</span>
           </button>
         </div>
       </div>
     </div>
 
+    <!-- Modal post add (móvil) -->
     <div v-if="showPostActionModal" class="modal-backdrop" @click.self="completeMobileAction('menu')">
       <div class="modal-card modal-center-text">
         <header class="modal-header">
           <h3 class="success-title">
-            <Icon name="mdi:check-circle" color="#10b981" size="24" style="margin-right: 5px;"/> 
-            ¡Agregado con éxito!
+            <Icon name="mdi:check-circle" color="#10b981" size="24" style="margin-right: 5px;" />
+            {{ tl('added_success', '¡agregado con éxito!', 'added successfully!') }}
           </h3>
           <button class="close-modal-btn" @click="completeMobileAction('menu')">✕</button>
         </header>
+
         <div class="modal-body flex-column-actions">
-          <p class="modal-msg">¿Qué te gustaría hacer ahora?</p>
-          
+          <p class="modal-msg">
+            {{ tl('what_next', '¿qué te gustaría hacer ahora?', 'what would you like to do now?') }}
+          </p>
+
           <button class="action-btn btn-go-pay" @click="completeMobileAction('pay')">
-            Ir a pagar
+            {{ tl('Go Pay', 'Ir A Pagar', 'go to pay') }}
           </button>
-          
+
           <button class="action-btn btn-keep-shopping" @click="completeMobileAction('menu')">
-            Agregar más cosas
+            {{ tl('Add more', 'Agregar Más Cosas', 'add more items') }}
           </button>
         </div>
       </div>
     </div>
-
   </div>
 </template>
 
@@ -194,7 +288,7 @@
 import { ref, computed, watch, onMounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { formatoPesosColombianos } from '@/service/utils/formatoPesos'
-import { usecartStore, useFetch, useHead, useSitesStore, useState } from '#imports'
+import { usecartStore, useFetch, useHead, useSitesStore, useState, useUserStore, texts } from '#imports'
 import { useToast } from '@/composables/useToast'
 import { URI } from '~/service/conection'
 
@@ -203,6 +297,68 @@ const router = useRouter()
 const store = usecartStore()
 const { showToast } = useToast()
 const sitesStore = useSitesStore()
+const userStore = useUserStore()
+
+// ==========================
+// ✅ Lower en JS + Capitalize en CSS
+// ==========================
+const toLower = (str) => String(str ?? '').toLocaleLowerCase()
+
+// ==========================
+// Idioma / textos UI
+// ==========================
+const langKey = computed(() =>
+  String(
+    userStore.lang?.name ||
+      userStore.user?.lang?.name ||
+      'es'
+  ).toLowerCase()
+)
+
+const isEnglish = computed(() => langKey.value === 'en')
+
+// Diccionario (opcional). Si no existe, cae a fallback.
+const t = computed(() => texts?.[langKey.value]?.product_view || {})
+
+// ✅ Helper para UI text: usa diccionario si existe, si no fallback, y SIEMPRE lowercase.
+const tl = (key, fallbackEs, fallbackEn) => {
+  const dict = t.value || {}
+  const v = dict?.[key]
+  if (v) return toLower(v)
+  return isEnglish.value ? toLower(fallbackEn) : toLower(fallbackEs)
+}
+
+// EN: usa inglés si existe, si no ES | ES: usa ES si existe, si no EN
+const pickByLang = (esValue, enValue) => {
+  const es = String(esValue || '')
+  const en = String(enValue || '')
+  return isEnglish.value ? (en || es) : (es || en)
+}
+
+const displayBaseName = (base) => {
+  if (!base) return ''
+  return toLower(pickByLang(base.producto_descripcion, base.english_name || base.english_description || ''))
+}
+
+const displayGroupName = (group) => {
+  if (!group) return ''
+  return toLower(
+    pickByLang(
+      group.modificador_nombre,
+      group.english_name || group.modificador_nombre_en || ''
+    )
+  )
+}
+
+const displayModifierName = (mod) => {
+  if (!mod) return ''
+  return toLower(
+    pickByLang(
+      mod.modificadorseleccion_nombre,
+      mod.english_name || mod.modificadorseleccion_nombre_en || ''
+    )
+  )
+}
 
 // --- ESTADOS Y STORES ---
 const siteId = computed(() => (sitesStore?.location?.site?.site_id) || 1)
@@ -217,30 +373,27 @@ const showPostActionModal = ref(false)
 
 // Estado de carga de imagen para transición
 const imageLoaded = ref(false)
-const mainImageRef = ref(null) 
+const mainImageRef = ref(null)
 
 const onImageLoad = () => { imageLoaded.value = true }
 const checkImageState = () => { if (mainImageRef.value?.complete) imageLoaded.value = true }
 
 // =======================
-// ✅ CACHE MENU (NUEVO)
+// ✅ CACHE MENU
 // =======================
 const menuCache = useState('menu-cache', () => ({}))
 
 const menuCacheKey = computed(() => `menu-data-${siteId.value}`)
 const cachedMenu = computed(() => menuCache.value[menuCacheKey.value] || null)
 
-// useFetch ya NO corre automáticamente.
-// - si hay cache => usamos cache (no red)
-// - si no hay cache => refresh() (1 vez) y guardamos
 const { data: rawCategoriesData, pending: loading, refresh } = useFetch(
   () => `${URI}/tiendas/${siteId.value}/products`,
-  { 
+  {
     key: () => menuCacheKey.value,
     server: false,
     lazy: true,
     immediate: false,
-    default: () => cachedMenu.value // ✅ pinta instantáneo si vienes desde la Card
+    default: () => cachedMenu.value
   }
 )
 
@@ -253,7 +406,6 @@ const ensureMenuLoaded = async () => {
     return
   }
 
-  // Solo cliente
   if (typeof window === 'undefined') return
 
   await refresh()
@@ -267,41 +419,70 @@ onMounted(async () => {
   await ensureMenuLoaded()
 })
 
-// Si el siteId cambia (por ejemplo, se carga Pinia/localStorage después),
-// usamos cache si existe o pedimos UNA sola vez.
 watch(siteId, async (newVal, oldVal) => {
   if (newVal === oldVal) return
   await ensureMenuLoaded()
 })
 
-// --- RESTO DEL CÓDIGO (idéntico) ---
+// --- Productos ---
 const currentProductId = computed(() => Number(route.params.id))
+
 const flatProducts = computed(() => {
   const raw = rawCategoriesData.value
   if (!raw || !raw.categorias) return []
+
   const list = []
   raw.categorias.forEach((cat) => {
     if (cat.visible && cat.products) {
       cat.products.forEach((prod) => {
-        list.push({ ...prod, categoryName: cat.categoria_descripcion })
+        list.push({
+          ...prod,
+          categoryName: toLower(pickByLang(cat.categoria_descripcion, cat.english_name || ''))
+        })
       })
     }
   })
+
   return list
 })
 
-const currentProduct = computed(() => flatProducts.value.find((p) => Number(p.producto_id) === currentProductId.value) || null)
+const currentProduct = computed(() =>
+  flatProducts.value.find((p) => Number(p.producto_id) === currentProductId.value) || null
+)
 
 const basePrice = computed(() => {
   if (!currentProduct.value) return 0
   const p = currentProduct.value
   return Number(p.lista_presentacion?.[0]?.producto_precio || p.productogeneral_precio || p.price || 0)
 })
+
 const discountAmount = computed(() => Number(currentProduct.value?.discount_amount || 0))
-const finalPrice = computed(() => basePrice.value - discountAmount.value)
+const finalPrice = computed(() => {
+  const v = basePrice.value - discountAmount.value
+  return v > 0 ? v : basePrice.value
+})
 const showOriginalPrice = computed(() => discountAmount.value > 0)
-const displayName = computed(() => currentProduct.value?.productogeneral_descripcion || currentProduct.value?.product_name || '')
-const productDescription = computed(() => currentProduct.value?.productogeneral_descripcionadicional || currentProduct.value?.productogeneral_descripcionweb || 'Sin descripción detallada.')
+
+const displayName = computed(() => {
+  const p = currentProduct.value
+  if (!p) return ''
+  const esName = p.productogeneral_descripcion || p.product_name || ''
+  const enName = p.english_name || p.product_name || ''
+  return toLower(pickByLang(esName, enName))
+})
+
+const productDescription = computed(() => {
+  const p = currentProduct.value
+  if (!p) return ''
+  const esDesc = p.productogeneral_descripcionadicional || p.productogeneral_descripcionweb || ''
+  const enDesc = p.english_description || ''
+  const picked = pickByLang(esDesc, enDesc)
+
+  if (picked) return toLower(picked)
+  return isEnglish.value
+    ? toLower('no detailed description.')
+    : toLower('sin descripción detallada.')
+})
 
 const previewUrl = computed(() => {
   const p = currentProduct.value
@@ -311,6 +492,7 @@ const previewUrl = computed(() => {
   if (p.image_url) return p.image_url
   return ''
 })
+
 const highResUrl = computed(() => {
   const p = currentProduct.value
   if (!p) return '/placeholder.png'
@@ -324,13 +506,18 @@ const highResUrl = computed(() => {
 const groupLimits = computed(() => {
   const p = currentProduct.value
   if (!p || !Array.isArray(p.lista_agrupadores)) return {}
+
   const limits = {}
   p.lista_agrupadores.forEach((g) => {
     const key = String(g.modificador_id)
     limits[key] = {
       min: Number(g.modificador_cantidadminima ?? 0),
       multiple: Number(g.modificador_esmultiple ?? 0) === 1,
-      max: g.listaModificadores?.reduce((acc, m) => acc + Number(m.productogeneralmodificador_cantidadmaxima || 0), 0) || 0
+      max:
+        g.listaModificadores?.reduce(
+          (acc, m) => acc + Number(m.productogeneralmodificador_cantidadmaxima || 0),
+          0
+        ) || 0
     }
   })
   return limits
@@ -339,21 +526,35 @@ const groupLimits = computed(() => {
 const getGroupRequirementText = (group) => {
   const limits = groupLimits.value[String(group.modificador_id)]
   if (!limits) return ''
-  if (limits.min > 0 && limits.max > 0) return `Elige ${limits.min} (Máx ${limits.max})`
-  if (limits.min > 0) return `Elige al menos ${limits.min}`
-  return 'Opcional'
+
+  const choose = tl('choose', 'elige', 'choose')
+  const maxTxt = tl('max', 'máx', 'max')
+  const atLeast = tl('choose_at_least', 'elige al menos', 'choose at least')
+  const optional = tl('optional', 'opcional', 'optional')
+
+  if (limits.min > 0 && limits.max > 0) return toLower(`${choose} ${limits.min} (${maxTxt} ${limits.max})`)
+  if (limits.min > 0) return toLower(`${atLeast} ${limits.min}`)
+  return optional
 }
 
 const isSelected = (mod, groupId) => !!selectedAdditions.value[mod.modificadorseleccion_id]
+
 const groupCount = (groupId) => {
   const idStr = String(groupId)
-  return Object.values(selectedAdditions.value).reduce((acc, it) => String(it.modificador_id) === idStr ? acc + Number(it.modificadorseleccion_cantidad || 0) : acc, 0)
+  return Object.values(selectedAdditions.value).reduce((acc, it) =>
+    String(it.modificador_id) === idStr
+      ? acc + Number(it.modificadorseleccion_cantidad || 0)
+      : acc
+  , 0)
 }
 
 const calculateTotal = () => {
   let total = finalPrice.value * quantity.value
   Object.values(selectedAdditions.value).forEach((item) => {
-    total += Number(item.modificadorseleccion_precio || 0) * Number(item.modificadorseleccion_cantidad || 1) * quantity.value
+    total +=
+      Number(item.modificadorseleccion_precio || 0) *
+      Number(item.modificadorseleccion_cantidad || 1) *
+      quantity.value
   })
   return total
 }
@@ -372,21 +573,35 @@ const handleRowClick = (mod, groupId) => {
 const handleAdditionChange = (item, groupId) => {
   const key = String(groupId)
   const limits = groupLimits.value[key]
-  
+
   if (!limits.multiple) {
     Object.keys(selectedAdditions.value).forEach((k) => {
       if (selectedAdditions.value[k].modificador_id === groupId) delete selectedAdditions.value[k]
     })
     exclusive.value[groupId] = item.modificadorseleccion_id
-    selectedAdditions.value[item.modificadorseleccion_id] = { ...item, modificadorseleccion_cantidad: 1, modificador_id: groupId }
+    selectedAdditions.value[item.modificadorseleccion_id] = {
+      ...item,
+      modificadorseleccion_cantidad: 1,
+      modificador_id: groupId
+    }
   } else {
     if (checkedAddition.value[item.modificadorseleccion_id]) {
       if (limits.max > 0 && groupCount(key) + 1 > limits.max) {
         checkedAddition.value[item.modificadorseleccion_id] = false
-        showToast({ title: 'Límite alcanzado', message: `Máximo ${limits.max} opciones`, severity: 'warn' })
+
+        showToast({
+          title: tl('limit_reached_title', 'límite alcanzado', 'limit reached'),
+          message: toLower(`${tl('max_options_prefix', 'máximo', 'maximum')} ${limits.max} ${tl('max_options_suffix', 'opciones', 'options')}`),
+          severity: 'warn'
+        })
         return
       }
-      selectedAdditions.value[item.modificadorseleccion_id] = { ...item, modificadorseleccion_cantidad: 1, modificador_id: groupId }
+
+      selectedAdditions.value[item.modificadorseleccion_id] = {
+        ...item,
+        modificadorseleccion_cantidad: 1,
+        modificador_id: groupId
+      }
     } else {
       delete selectedAdditions.value[item.modificadorseleccion_id]
     }
@@ -396,10 +611,16 @@ const handleAdditionChange = (item, groupId) => {
 const increment = (item, groupId) => {
   const key = String(groupId)
   const limits = groupLimits.value[key]
+
   if (limits.max > 0 && groupCount(key) + 1 > limits.max) {
-    showToast({ title: 'Límite', message: 'Máximo alcanzado', severity: 'warn' })
+    showToast({
+      title: tl('limit_title', 'límite', 'limit'),
+      message: tl('max_reached', 'máximo alcanzado', 'maximum reached'),
+      severity: 'warn'
+    })
     return
   }
+
   selectedAdditions.value[item.modificadorseleccion_id].modificadorseleccion_cantidad++
 }
 
@@ -425,8 +646,10 @@ const selectAlternative = (option) => {
     producto_descripcion: current.producto_descripcion,
     producto_precio: current.producto_precio,
     producto_urlimagen: current.producto_urlimagen,
-    producto_cambio_id: current.producto_id
+    producto_cambio_id: current.producto_id,
+    english_name: current.english_name
   }
+
   const list = current.lista_productoCambio || []
   const idx = list.findIndex((i) => i.producto_id === option.producto_id)
   if (idx !== -1) list.splice(idx, 1, backup)
@@ -436,8 +659,10 @@ const selectAlternative = (option) => {
     producto_id: option.producto_id,
     producto_descripcion: option.producto_descripcion,
     producto_precio: option.producto_precio,
-    producto_urlimagen: option.producto_urlimagen
+    producto_urlimagen: option.producto_urlimagen,
+    english_name: option.english_name
   })
+
   showChangeDialog.value = false
 }
 
@@ -451,32 +676,41 @@ const validateMinMaximums = () => {
 
 const processAddToCart = (mode) => {
   if (!currentProduct.value) return
-  
+
   if (!validateMinMaximums()) {
-    showToast({ title: 'Faltan opciones', message: 'Por favor completa las opciones obligatorias.', severity: 'error' })
+    showToast({
+      title: tl('missing_options_title', 'faltan opciones', 'missing options'),
+      message: tl('complete_required', 'por favor completa las opciones obligatorias.', 'please complete the required options.'),
+      severity: 'error'
+    })
     return
   }
 
   store.addProductToCart(currentProduct.value, quantity.value, Object.values(selectedAdditions.value))
-  
+
   if (mode === 'ask') {
     showPostActionModal.value = true
   } else if (mode === 'pay') {
-    showToast({ title: 'Agregado', message: 'Yendo a pagar...', severity: 'success' })
+    showToast({
+      title: tl('added_title', 'agregado', 'added'),
+      message: tl('going_to_pay', 'yendo a pagar...', 'going to pay...'),
+      severity: 'success'
+    })
     router.push('/pay')
   } else {
-    showToast({ title: 'Agregado', message: 'Producto agregado al carrito', severity: 'success' })
+    showToast({
+      title: tl('added_title', 'agregado', 'added'),
+      message: tl('added_to_cart', 'producto agregado al carrito', 'product added to cart'),
+      severity: 'success'
+    })
     router.push('/')
   }
 }
 
 const completeMobileAction = (destination) => {
   showPostActionModal.value = false
-  if (destination === 'pay') {
-    router.push('/pay')
-  } else {
-    router.push('/')
-  }
+  if (destination === 'pay') router.push('/pay')
+  else router.push('/')
 }
 
 const goBack = () => router.push('/')
@@ -488,34 +722,44 @@ const goToRelative = (step) => {
   const nextIdx = (idx + step + list.length) % list.length
   router.replace(`/producto/${list[nextIdx].producto_id}`)
 }
+
 const goToNext = () => goToRelative(1)
 const goToPrev = () => goToRelative(-1)
 
 watch(currentProduct, async (newVal) => {
   if (newVal) {
-    imageLoaded.value = false 
+    imageLoaded.value = false
     quantity.value = 1
     selectedAdditions.value = {}
     checkedAddition.value = {}
     exclusive.value = {}
-    
+
     newVal.lista_agrupadores?.forEach((g) => {
       const lim = groupLimits.value[String(g.modificador_id)]
       if (lim && lim.min > 0 && !lim.multiple && g.listaModificadores?.length > 0) {
         handleAdditionChange(g.listaModificadores[0], g.modificador_id)
       }
     })
+
     await nextTick()
     checkImageState()
   }
 }, { immediate: true })
 
-useHead({ title: computed(() => currentProduct.value ? `${displayName.value} - Menú` : 'Cargando...') })
+useHead({
+  title: computed(() => {
+    // (esto es meta, no visible; igual lo dejamos normal)
+    if (!currentProduct.value) return tl('loading_short', 'cargando...', 'loading...')
+    return `${displayName.value} - ${tl('menu_title', 'menú', 'menu')}`
+  })
+})
 </script>
 
 <style scoped>
-/* ✅ NO CAMBIÉ NADA AQUÍ (es tu mismo CSS) */
+/* ✅ Capitalize visual para TODO el texto visible del componente */
 .page-wrapper {
+  text-transform: capitalize;
+
   min-height: 100vh;
   padding-bottom: 90px;
   max-width: 1300px;
@@ -524,6 +768,7 @@ useHead({ title: computed(() => currentProduct.value ? `${displayName.value} - M
   color: var(--text-main, #1f2937);
   position: relative;
 }
+
 .loading-overlay {
   position: fixed; inset: 0; background: var(--bg-page, #f9fafb);
   z-index: 40; display: flex; align-items: center; justify-content: center;
@@ -558,7 +803,7 @@ useHead({ title: computed(() => currentProduct.value ? `${displayName.value} - M
 .skeleton-loader {
   position: absolute; inset: 0; background: #f3f4f6;
   background-image: linear-gradient(90deg, #f3f4f6 0px, #e5e7eb 50%, #f3f4f6 100%);
-  background-size: 200% 100%; animation: shimmer 1.5s infinite linear; z-index: 5; 
+  background-size: 200% 100%; animation: shimmer 1.5s infinite linear; z-index: 5;
 }
 @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 
@@ -594,7 +839,9 @@ useHead({ title: computed(() => currentProduct.value ? `${displayName.value} - M
 .details-column { padding: 20px; background: white; }
 @media (min-width: 1024px) { .details-column { padding: 1rem; background: transparent; } }
 
-.product-title { font-size: 1.5rem; font-weight: 800; text-transform: uppercase; margin-bottom: 0.5rem; line-height: 1.2; }
+/* ✅ antes estaba uppercase; lo dejamos en capitalize por tu requerimiento */
+.product-title { font-size: 1.5rem; font-weight: 800; text-transform: capitalize; margin-bottom: 0.5rem; line-height: 1.2; }
+
 .price-block { margin-bottom: 1rem; display: flex; align-items: baseline; gap: 10px; }
 .price-current { font-size: 1.5rem; font-weight: 700; color: var(--primary, #dc2626); }
 .price-old { font-size: 1rem; text-decoration: line-through; color: var(--text-light, #6b7280); }
@@ -602,7 +849,9 @@ useHead({ title: computed(() => currentProduct.value ? `${displayName.value} - M
 .divider { border: 0; border-top: 1px solid var(--border, #e5e7eb); margin: 1.5rem 0; }
 
 .section-block { margin-bottom: 2rem; }
-.section-title { font-size: 1rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin: 0; }
+/* ✅ antes estaba uppercase; lo dejamos en capitalize por tu requerimiento */
+.section-title { font-size: 1rem; font-weight: 700; text-transform: capitalize; letter-spacing: 0.5px; margin: 0; }
+
 .group-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
 .group-requirements { font-size: 0.75rem; background: #eee; padding: 2px 8px; border-radius: 10px; color: #555; font-weight: 600; }
 
@@ -682,4 +931,8 @@ useHead({ title: computed(() => currentProduct.value ? `${displayName.value} - M
 .option-card:hover { transform: scale(1.03); border-color: #ccc; }
 .option-card img { width: 80px !important; height: 80px !important; object-fit: contain; margin-bottom: 8px; display: block; }
 .option-card span { font-size: 0.85rem; line-height: 1.2; }
+
+* {
+  text-transform: capitalize;
+}
 </style>
