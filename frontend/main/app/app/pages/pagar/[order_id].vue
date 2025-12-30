@@ -1,29 +1,37 @@
 <template>
   <ClientOnly>
     <div class="page-container">
-      
       <div v-if="order && order.order_id" class="receipt-card">
-        
         <header class="receipt-header">
           <h2 class="client-name">
-            🤩 {{ (order.pe_json?.cliente?.cliente_nombres || '').toUpperCase() }} {{ (order.pe_json?.cliente?.cliente_apellidos || '').toUpperCase() }} 🤩
+            🤩 {{ (order.pe_json?.cliente?.cliente_nombres || '').toUpperCase() }}
+            {{ (order.pe_json?.cliente?.cliente_apellidos || '').toUpperCase() }} 🤩
           </h2>
           <p class="subtitle-msg">👇 CONFIRMA TU PEDIDO AQUÍ 👇</p>
         </header>
 
         <div class="receipt-body">
-          
           <div class="order-meta-section">
             <div class="order-id-box">
               <span class="label">ORDEN ID:</span>
               <span class="value">{{ order.order_id }}</span>
             </div>
-            
+
             <div class="order-dates">
-              <p>{{ order.user_name }} {{ order.second_name }} {{ order.first_last_name }} {{ order.second_last_name }}</p>
+              <p>
+                {{ order.user_name }} {{ order.second_name }}
+                {{ order.first_last_name }} {{ order.second_last_name }}
+              </p>
               <small>
-                <b>Fecha:</b> {{ (order.latest_status_timestamp || '').split('T')[0] }} | 
-                <b>Hora:</b> {{ (order.latest_status_timestamp || '').split('T')[1]?.split(':').slice(0,2).join(':') }}
+                <b>Fecha:</b> {{ (order.latest_status_timestamp || '').split('T')[0] }} |
+                <b>Hora:</b>
+                {{
+                  (order.latest_status_timestamp || '')
+                    .split('T')[1]
+                    ?.split(':')
+                    .slice(0, 2)
+                    .join(':')
+                }}
               </small>
             </div>
           </div>
@@ -35,8 +43,11 @@
             </div>
 
             <div class="table-body">
-              <div v-for="(product, idx) in order.pe_json?.listaPedidos" :key="idx" class="product-item-group">
-                
+              <div
+                v-for="(product, idx) in order.pe_json?.listaPedidos"
+                :key="idx"
+                class="product-item-group"
+              >
                 <div class="product-row">
                   <div class="product-desc">
                     <span v-if="order.site_id === 32">
@@ -46,8 +57,13 @@
                       <b>({{ product.pedido_cantidad }})</b> {{ product.pedido_nombre_producto }}
                     </span>
                   </div>
+
                   <div class="product-total">
-                    {{ formatCurrency((product.pedido_base_price || product.pedido_precio) * product.pedido_cantidad) }}
+                    {{
+                      formatCurrency(
+                        (product.pedido_base_price || product.pedido_precio) * product.pedido_cantidad
+                      )
+                    }}
                   </div>
                 </div>
 
@@ -59,12 +75,21 @@
                 </div>
 
                 <div v-if="product.modificadorseleccionList?.length" class="details-block">
-                  <div v-for="(mod, m) in product.modificadorseleccionList" :key="m" class="modifier-row">
+                  <div
+                    v-for="(mod, m) in product.modificadorseleccionList"
+                    :key="m"
+                    class="modifier-row"
+                  >
                     <span class="detail-item">
-                      - ({{ product.pedido_cantidad }}) <b>{{ mod.modificadorseleccion_cantidad }}</b> {{ mod.modificadorseleccion_nombre }}
+                      - ({{ product.pedido_cantidad }}) <b>{{ mod.modificadorseleccion_cantidad }}</b>
+                      {{ mod.modificadorseleccion_nombre }}
                     </span>
                     <span class="modifier-price">
-                        {{ formatCurrency(mod.pedido_precio * mod.modificadorseleccion_cantidad * product.pedido_cantidad) }}
+                      {{
+                        formatCurrency(
+                          mod.pedido_precio * mod.modificadorseleccion_cantidad * product.pedido_cantidad
+                        )
+                      }}
                     </span>
                   </div>
                 </div>
@@ -75,12 +100,20 @@
           </div>
 
           <div class="totals-section">
-              <div class="total-row">
+            <div class="total-row">
               <span>Subtotal</span>
-              <b>{{ formatCurrency((order.pe_json.delivery.delivery_pagocon || 0) + (order.pe_json.delivery.total_descuento || 0) - (order.pe_json.delivery.delivery_costoenvio || 0)) }}</b>
+              <b>
+                {{
+                  formatCurrency(
+                    (order.pe_json?.delivery?.delivery_pagocon || 0) +
+                      (order.pe_json?.delivery?.total_descuento || 0) -
+                      (order.pe_json?.delivery?.delivery_costoenvio || 0)
+                  )
+                }}
+              </b>
             </div>
 
-            <div v-if="order.pe_json?.delivery?.total_descuento > 0" class="total-row discount-text">
+            <div v-if="(order.pe_json?.delivery?.total_descuento || 0) > 0" class="total-row discount-text">
               <span>Descuento</span>
               <b>- {{ formatCurrency(order.pe_json.delivery.total_descuento) }}</b>
             </div>
@@ -92,7 +125,7 @@
 
             <div class="total-row final-total">
               <span>TOTAL A PAGAR</span>
-              <span>{{ formatCurrency(order.pe_json.delivery.delivery_pagocon) }}</span>
+              <span>{{ formatCurrency(order.pe_json?.delivery?.delivery_pagocon) }}</span>
             </div>
           </div>
 
@@ -103,7 +136,7 @@
                 <span class="label">Nombre:</span>
                 <span class="val">{{ order.user_name }} {{ order.first_last_name }}</span>
               </div>
-              
+
               <div class="info-row" v-if="order.cedula_nit">
                 <span class="label">CC/NIT:</span>
                 <span class="val">{{ order.cedula_nit }}</span>
@@ -123,7 +156,7 @@
                 <span class="label">Método Pago:</span>
                 <span class="val capitalize">{{ (order.payment_method || '').toLowerCase() }}</span>
               </div>
-              
+
               <div class="info-row">
                 <span class="label">Entrega:</span>
                 <span class="val">{{ order.order_type }}</span>
@@ -131,102 +164,110 @@
 
               <div class="info-notes" v-if="order.order_notes">
                 <span class="label">Notas:</span>
-                <p class="notes-text">{{ (order.order_notes).toLowerCase() }}</p>
+                <p class="notes-text">{{ (order.order_notes || '').toLowerCase() }}</p>
               </div>
             </div>
           </div>
-
         </div>
 
+        <!-- ✅ Footer: solo botón de pagar (WhatsApp va flotante como el otro componente) -->
         <footer class="receipt-footer">
-          <a :href="whatsappUrl" target="_blank" class="full-width-link">
-              <button class="btn btn-whatsapp">
-                <i class="pi pi-whatsapp"></i> Dudas?
-              </button>
-          </a>
-          
-          <button 
-            @click="pay" 
-            class="btn btn-pay" 
-            :disabled="loadingPay"
-          >
+          <button @click="pay" class="btn btn-pay" :disabled="loadingPay">
             <i class="pi" :class="loadingPay ? 'pi-spin pi-spinner' : 'pi-ticket'"></i>
             {{ loadingPay ? 'Procesando...' : 'Pagar' }}
           </button>
         </footer>
-
       </div>
 
       <div v-else class="loading-state">
-         <div v-if="isLoading" class="spinner"></div>
-         <h2 v-if="isLoading">Cargando pedido...</h2>
-         <h2 v-else class="error-msg">No se encontró el pedido o hubo un error.</h2>
+        <div v-if="isLoading" class="spinner"></div>
+        <h2 v-if="isLoading">Cargando pedido...</h2>
+        <h2 v-else class="error-msg">No se encontró el pedido o hubo un error.</h2>
       </div>
 
+      <!-- ✅ WhatsApp flotante como el que me diste -->
+      <a
+        v-if="showWhatsappFloat"
+        :href="whatsappFloatUrl"
+        target="_blank"
+        rel="noopener"
+        class="wsp-float"
+        aria-label="Abrir WhatsApp"
+        title="¿Tienes dudas? Escríbenos"
+      >
+        <Icon size="xx-large" name="mdi:whatsapp" class="wsp-icon" />
+      </a>
     </div>
   </ClientOnly>
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from "vue";
-import { useRoute, useRuntimeConfig, useHead } from "#imports";
-import { URI, SELF_URI } from "~/service/conection";
+import { ref, onMounted, computed } from 'vue'
+import { useRoute, useRuntimeConfig, useHead } from '#imports'
+import { URI, SELF_URI } from '~/service/conection'
 
 // --- Configuración ePayco ---
-const config = useRuntimeConfig();
-const epaycoPublicKey = config.public.epaycoPublicKey || 'ad3bfbac4531d3b82ece35e36bdf320a'; 
+const config = useRuntimeConfig()
+const epaycoPublicKey = config.public.epaycoPublicKey || 'ad3bfbac4531d3b82ece35e36bdf320a'
 
 useHead({
   script: [{ src: 'https://checkout.epayco.co/checkout.js', async: true, defer: true }]
-});
+})
 
 // --- Estado ---
-const route = useRoute();
-const isLoading = ref(true);
-const loadingPay = ref(false);
-const order = ref(null);
+const route = useRoute()
+const isLoading = ref(true)
+const loadingPay = ref(false)
+const order = ref(null)
 
 // --- Utils ---
 const formatCurrency = (value) => {
-    return new Intl.NumberFormat('es-CO', {
-        style: 'currency',
-        currency: 'COP',
-        maximumFractionDigits: 0
-    }).format(value || 0);
-};
+  return new Intl.NumberFormat('es-CO', {
+    style: 'currency',
+    currency: 'COP',
+    maximumFractionDigits: 0
+  }).format(value || 0)
+}
+
+function cleanPhone(raw) {
+  if (!raw) return null
+  const digits = String(raw).replace(/\D/g, '')
+  // permitimos 10+ (Colombia) o 11+ (ej 1xxxxxxxxxx). Solo aseguramos que no quede corto
+  return digits.length >= 10 ? digits : null
+}
 
 // --- Carga de Datos ---
 onMounted(async () => {
-  const orderId = route.params.order_id || route.query.order_id;
-  
+  const orderId = route.params.order_id || route.query.order_id
+
   if (!orderId) {
-    isLoading.value = false;
-    return;
+    isLoading.value = false
+    return
   }
 
   try {
-    const data = await $fetch(`${URI}/order-by-id/${orderId}`);
+    const data = await $fetch(`${URI}/order-by-id/${orderId}`)
     if (data && data.order_id) {
-      order.value = data;
+      order.value = data
     }
   } catch (error) {
-    console.error("Error cargando pedido:", error);
+    console.error('Error cargando pedido:', error)
   } finally {
-    isLoading.value = false;
+    isLoading.value = false
   }
-});
+})
 
 // --- Lógica de Pago ---
 const pay = () => {
-  loadingPay.value = true;
-  setTimeout(() => payWithEpayco(order.value.order_id), 300);
-};
+  loadingPay.value = true
+  setTimeout(() => payWithEpayco(order.value.order_id), 300)
+}
 
 const payWithEpayco = (id) => {
   if (typeof window === 'undefined' || !window.ePayco) {
-    alert("Cargando pasarela de pagos, intenta nuevamente.");
-    loadingPay.value = false;
-    return;
+    alert('Cargando pasarela de pagos, intenta nuevamente.')
+    loadingPay.value = false
+    return
   }
 
   const handler = window.ePayco.checkout.configure({
@@ -234,50 +275,53 @@ const payWithEpayco = (id) => {
     test: false,
     response_type: 'redirect',
     onClosed: () => {
-        console.log("Modal cerrado");
-        loadingPay.value = false;
+      console.log('Modal cerrado')
+      loadingPay.value = false
     }
-  });
+  })
 
-  const delivery = order.value.pe_json.delivery;
-  const client = order.value.pe_json.cliente;
+  const delivery = order.value.pe_json.delivery
+  const client = order.value.pe_json.cliente
 
   handler.open({
     name: id,
     description: `Pedido ${id}`,
     amount: delivery.delivery_pagocon,
-    currency: "cop",
+    currency: 'cop',
     invoice: id,
-    country: "co",
-    lang: "es",
-    external: "false",
+    country: 'co',
+    lang: 'es',
+    external: 'false',
     confirmation: `${URI}/confirmacion-epayco`,
     response: `${SELF_URI}/gracias-epayco`,
     name_billing: `${client.cliente_nombres} ${client.cliente_apellidos}`,
     address_billing: client.cliente_direccion || 'No especificada',
-    type_doc_billing: "cc",
+    type_doc_billing: 'cc',
     mobilephone_billing: client.cliente_telefono,
-    methodsDisable: ["SP", "CASH"]
-  });
-};
+    methodsDisable: ['SP', 'CASH']
+  })
+}
 
-// --- Whatsapp Link ---
-const whatsappUrl = computed(() => {
-  const baseUrl = "https://api.whatsapp.com/send";
-  let phone = 573053447255;
-  
-  if (order.value?.order_id) {
-      const prefix = order.value.order_id.split('-')[0];
-      if (['NEW', 'NEK', 'FIL', 'NYK'].includes(prefix)) {
-          phone = 13477929350;
-      }
-  }
-  const params = new URLSearchParams({ 
-    phone: phone, 
-    text: `Hola, tengo dudas sobre el pago de mi orden #${order.value?.order_id}` 
-  });
-  return `${baseUrl}?${params.toString()}`;
-});
+// ------------------------------------------------------------------------
+// ✅ WhatsApp flotante: el número viene en order.site_phone
+// ------------------------------------------------------------------------
+const whatsappPhone = computed(() => cleanPhone(order.value?.site_phone))
+
+const showWhatsappFloat = computed(() => {
+  // si quieres ocultarlo en iframe, descomenta y asegúrate de tener esa bandera
+  // if (route.query.iframe === '1') return false
+  return !!whatsappPhone.value
+})
+
+const whatsappFloatUrl = computed(() => {
+  const phone = whatsappPhone.value
+  if (!phone) return '#'
+
+  const baseUrl = 'https://api.whatsapp.com/send'
+  const text = `Hola 😊 Tengo una duda sobre mi orden #${order.value?.order_id || ''}`
+  const params = new URLSearchParams({ phone, text })
+  return `${baseUrl}?${params.toString()}`
+})
 </script>
 
 <style scoped>
@@ -289,12 +333,12 @@ const whatsappUrl = computed(() => {
 /* --- Layout de PÁGINA (Ya no es Modal) --- */
 .page-container {
   min-height: 100vh;
-  background-color: #f3f4f6; /* Fondo gris claro */
+  background-color: #f3f4f6;
   display: flex;
   justify-content: center;
-  align-items: flex-start; /* Alineado arriba para permitir scroll nativo */
+  align-items: flex-start;
   padding: 2rem 1rem;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
 }
 
 /* --- Tarjeta Estilo Recibo --- */
@@ -302,7 +346,6 @@ const whatsappUrl = computed(() => {
   background: #fff;
   width: 100%;
   max-width: 480px;
-  /* Se eliminaron max-height y overflow para permitir crecimiento natural */
   border-radius: 0.75rem;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
   display: flex;
@@ -313,13 +356,14 @@ const whatsappUrl = computed(() => {
 
 /* Borde dentado decorativo (Estilo Ticket) */
 .receipt-card::before {
-  content: "";
+  content: '';
   position: absolute;
   top: -5px;
   left: 0;
   width: 100%;
   height: 5px;
-  background: radial-gradient(circle, transparent, transparent 50%, #fff 50%, #fff 100%) -7px -8px / 16px 16px repeat-x;
+  background: radial-gradient(circle, transparent, transparent 50%, #fff 50%, #fff 100%) -7px -8px /
+    16px 16px repeat-x;
 }
 
 /* --- Encabezado --- */
@@ -369,7 +413,12 @@ const whatsappUrl = computed(() => {
   font-size: 0.85rem;
   color: #555;
 }
-.order-dates p { margin: 0; font-weight: 600; font-size: 1rem; color: #000; }
+.order-dates p {
+  margin: 0;
+  font-weight: 600;
+  font-size: 1rem;
+  color: #000;
+}
 
 /* --- Tabla Productos --- */
 .table-header {
@@ -396,8 +445,15 @@ const whatsappUrl = computed(() => {
   font-size: 0.95rem;
 }
 
-.product-desc { line-height: 1.3; flex: 1; padding-right: 0.5rem; }
-.product-total { font-weight: 600; white-space: nowrap; }
+.product-desc {
+  line-height: 1.3;
+  flex: 1;
+  padding-right: 0.5rem;
+}
+.product-total {
+  font-weight: 600;
+  white-space: nowrap;
+}
 
 .details-block {
   padding-left: 1rem;
@@ -405,14 +461,25 @@ const whatsappUrl = computed(() => {
   color: #555;
   margin-bottom: 0.25rem;
 }
-.details-title { font-weight: 700; font-size: 0.75rem; margin: 0.2rem 0; }
-.detail-item { margin: 0; }
+.details-title {
+  font-weight: 700;
+  font-size: 0.75rem;
+  margin: 0.2rem 0;
+}
+.detail-item {
+  margin: 0;
+}
 
 .modifier-row {
   display: flex;
   justify-content: space-between;
 }
-.separator { height: 1px; background: #eee; margin-top: 0.5rem; margin-bottom: 0.5rem; }
+.separator {
+  height: 1px;
+  background: #eee;
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+}
 
 /* --- Totales --- */
 .totals-section {
@@ -435,7 +502,9 @@ const whatsappUrl = computed(() => {
   margin-top: 0.5rem;
 }
 
-.discount-text { color: #dc2626; }
+.discount-text {
+  color: #dc2626;
+}
 
 /* --- Información Cliente --- */
 .info-section {
@@ -460,11 +529,19 @@ const whatsappUrl = computed(() => {
   grid-template-columns: 100px 1fr;
   align-items: baseline;
 }
-.info-row .label { font-weight: 700; color: #444; }
-.info-notes { margin-top: 0.5rem; }
-.notes-box { border: 1px solid #ddd; padding: 0.5rem; background: #f9f9f9; }
-.notes-text { margin: 0; }
-.capitalize { text-transform: capitalize; }
+.info-row .label {
+  font-weight: 700;
+  color: #444;
+}
+.info-notes {
+  margin-top: 0.5rem;
+}
+.notes-text {
+  margin: 0;
+}
+.capitalize {
+  text-transform: capitalize;
+}
 
 /* --- Footer --- */
 .receipt-footer {
@@ -476,8 +553,6 @@ const whatsappUrl = computed(() => {
   align-items: center;
   border-radius: 0 0 0.75rem 0.75rem;
 }
-
-.full-width-link { flex: 1; text-decoration: none; }
 
 .btn {
   border: none;
@@ -493,16 +568,14 @@ const whatsappUrl = computed(() => {
   width: 100%;
   transition: transform 0.1s;
 }
-.btn:active { transform: scale(0.98); }
-
-.btn-whatsapp {
-  background-color: #25D366;
-  color: #fff;
+.btn:active {
+  transform: scale(0.98);
 }
+
 .btn-pay {
   background-color: #000;
   color: #fff;
-  flex: 1; 
+  flex: 1;
 }
 .btn-pay:disabled {
   background-color: #555;
@@ -530,9 +603,48 @@ const whatsappUrl = computed(() => {
 }
 
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
-.error-msg { color: #dc2626; }
+.error-msg {
+  color: #dc2626;
+}
+
+/* ✅ WhatsApp flotante (igual al otro) */
+.wsp-float {
+  position: fixed;
+  right: 16px;
+  bottom: 80px;
+  width: 48px;
+  height: 48px;
+  border-radius: 999px;
+  background: #25d366;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.18);
+  z-index: 9999;
+  transition: transform 0.12s ease, opacity 0.2s ease;
+}
+
+.wsp-float:hover {
+  transform: scale(1.05);
+}
+
+.wsp-float:active {
+  transform: scale(0.98);
+}
+
+.wsp-icon :deep(svg) {
+  width: 40px;
+  height: 28px;
+  display: block;
+}
 </style>
