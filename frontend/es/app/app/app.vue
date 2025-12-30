@@ -46,25 +46,24 @@ const requestURL = useRequestURL()
 let running = false
 let lastKey = ''
 
-// 🔄 Variables para la Sincronización (Sync)
+// 🔄 Sync
 let syncInterval = null
 let lastSavedSnapshot = ''
 let isRestoring = true
 let isSyncing = false
+let syncDebounce = null
 
 let stopRouteWatch = null
+let stopQuickWatchers = []
 
 // ------------------------------------------------------------------------
 // 0. UTILIDAD: GENERAR UUID V4 (Cliente)
 // ------------------------------------------------------------------------
 function getUUID() {
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-    return crypto.randomUUID()
-  }
-  // Fallback para navegadores antiguos
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID()
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
-    var r = (Math.random() * 16) | 0,
-      v = c == 'x' ? r : (r & 0x3) | 0x8
+    const r = (Math.random() * 16) | 0
+    const v = c === 'x' ? r : (r & 0x3) | 0x8
     return v.toString(16)
   })
 }
@@ -86,10 +85,7 @@ const showWhatsappFloat = computed(() => {
 })
 
 // ✅ URL actual SSR-safe y reactivo a navegación interna
-const currentPageUrl = computed(() => {
-  // requestURL.origin funciona en SSR y cliente
-  return `${requestURL.origin}${route.fullPath}`
-})
+const currentPageUrl = computed(() => `${requestURL.origin}${route.fullPath}`)
 
 const whatsappFloatUrl = computed(() => {
   const phone = whatsappPhone.value
@@ -101,7 +97,7 @@ const whatsappFloatUrl = computed(() => {
 })
 
 // ------------------------------------------------------------------------
-// 2. LÓGICA DE SINCRONIZACIÓN (PUT SIEMPRE)
+// 2. PAYLOAD (FUENTE ÚNICA DE VERDAD PARA SYNC)
 // ------------------------------------------------------------------------
 function generatePayload() {
   return {
@@ -124,58 +120,86 @@ function generatePayload() {
   }
 }
 
+// ------------------------------------------------------------------------
+// 3. SYNC AHORA (PUT INMEDIATO) + SCHEDULE (DEBOUNCE)
+// ------------------------------------------------------------------------
+async function syncNow() {
+  if (!process.client) return
+  if (isRestoring || running || isSyncing) return
+
+  let currentHash = siteStore.session_hash
+
+  // 🆕 si no hay hash aún, lo generamos y lo guardamos en store
+  if (!currentHash) {
+    currentHash = getUUID()
+    siteStore.setSessionHash?.(currentHash)
+    // console.log('✨ Nuevo Hash Generado (Local):', currentHash)
+  }
+
+  const currentData = generatePayload()
+  const currentSnapshot = JSON.stringify(currentData)
+
+  // sin cambios
+  if (currentSnapshot === lastSavedSnapshot) return
+
+  isSyncing = true
+  try {
+    const res = await fetch(`${URI}/data/${currentHash}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: currentSnapshot
+    })
+
+    if (res.ok) {
+      lastSavedSnapshot = currentSnapshot
+      // console.log('✅ Sync PUT exitoso:', currentHash)
+    } else {
+      console.warn('⚠️ Error en Sync PUT:', res.status)
+    }
+  } catch (e) {
+    console.error('❌ Error de red Sync PUT:', e)
+  } finally {
+    isSyncing = false
+  }
+}
+
+function scheduleSync(ms = 150) {
+  clearTimeout(syncDebounce)
+  syncDebounce = setTimeout(() => {
+    syncNow()
+  }, ms)
+}
+
+// Mantén tu interval como “backup”
 function startHashSyncer() {
   if (syncInterval) clearInterval(syncInterval)
 
   syncInterval = setInterval(async () => {
-    // Si estamos restaurando o ya hay una petición en vuelo, esperamos
     if (isRestoring || running || isSyncing) return
-
-    // 1. Obtener o Generar Hash Localmente
-    let currentHash = siteStore.session_hash
-
-    // 🆕 SI NO HAY HASH: Lo creamos nosotros (Cliente), lo guardamos y seguimos
-    if (!currentHash) {
-      currentHash = getUUID()
-      // Guardamos en el store inmediatamente para que el usuario ya tenga sesión
-      if (siteStore.setSessionHash) {
-        siteStore.setSessionHash(currentHash)
-        console.log('✨ Nuevo Hash Generado (Local):', currentHash)
-      }
-    }
-
-    // 2. Preparar payload
-    const currentData = generatePayload()
-    const currentSnapshot = JSON.stringify(currentData)
-
-    // 3. Validar cambios
-    if (currentSnapshot === lastSavedSnapshot) return
-
-    // 4. Enviar PUT (Creación o Actualización es lo mismo para el Back)
-    isSyncing = true
-    try {
-      const res = await fetch(`${URI}/data/${currentHash}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: currentSnapshot
-      })
-
-      if (res.ok) {
-        lastSavedSnapshot = currentSnapshot
-        // console.log('✅ Sync PUT exitoso:', currentHash)
-      } else {
-        console.warn('⚠️ Error en Sync PUT:', res.status)
-      }
-    } catch (e) {
-      console.error('❌ Error de red Sync PUT:', e)
-    } finally {
-      isSyncing = false
-    }
+    await syncNow()
   }, 3000)
 }
 
+// Guardado al salir (para que no se pierda dirección si recargas muy rápido)
+function syncOnUnload() {
+  try {
+    const currentHash = siteStore.session_hash
+    if (!currentHash) return
+
+    const payload = JSON.stringify(generatePayload())
+
+    // keepalive suele funcionar bien en beforeunload
+    fetch(`${URI}/data/${currentHash}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: payload,
+      keepalive: true
+    })
+  } catch (e) {}
+}
+
 // ------------------------------------------------------------------------
-// 3. RESTAURACIÓN Y CARGA (GET)
+// 4. RESTAURACIÓN Y LIMPIEZA DE QUERY
 // ------------------------------------------------------------------------
 function cleanQueryParams({ removeHash = false, removeCredentials = false, removeIframe = false } = {}) {
   const q = { ...route.query }
@@ -280,9 +304,7 @@ function applyRestoredData(restoredData) {
 
   // Cart
   if (restoredData.cart) {
-    const cartItems = Array.isArray(restoredData.cart)
-      ? restoredData.cart
-      : restoredData.cart.items || []
+    const cartItems = Array.isArray(restoredData.cart) ? restoredData.cart : restoredData.cart.items || []
     if (cartItems.length > 0) {
       cartStore.cart = Array.isArray(restoredData.cart) ? restoredData.cart : restoredData.cart
     }
@@ -296,7 +318,7 @@ function applyRestoredData(restoredData) {
 }
 
 // ------------------------------------------------------------------------
-// 4. HIDRATACIÓN DEL SITE
+// 5. HIDRATACIÓN DEL SITE (SUBDOMAIN)
 // ------------------------------------------------------------------------
 function getCurrentSubdomain() {
   const sede = useSedeFromSubdomain()
@@ -323,7 +345,6 @@ async function fetchSiteBySubdomain(currentSede) {
     }
 
     if (prevId !== newId) siteStore.initStatusWatcher()
-
     return siteData
   } catch (err) {
     console.error('Error fetchSiteBySubdomain:', err)
@@ -332,7 +353,7 @@ async function fetchSiteBySubdomain(currentSede) {
 }
 
 // ------------------------------------------------------------------------
-// 5. BOOTSTRAP PRINCIPAL
+// 6. BOOTSTRAP PRINCIPAL (CORREGIDO: NO RESTAURA EN NAVEGACIÓN INTERNA)
 // ------------------------------------------------------------------------
 async function bootstrapFromUrl(reason = 'nav') {
   if (!process.client) return
@@ -382,13 +403,19 @@ async function bootstrapFromUrl(reason = 'nav') {
     const currentSede = getCurrentSubdomain()
     let siteLoadedFromHash = false
 
-    // 1) Carga por HASH
+    // ✅ Solo restaurar desde backend cuando tiene sentido:
+    // - primer load / refresh (mounted)
+    // - back/forward (popstate)
+    // - viene un hash explícito en la URL (?hash=...)
     const urlHash = route.query.hash
+    const shouldRestoreFromBackend = reason === 'mounted' || reason === 'popstate' || !!urlHash
+
     const storedHash = siteStore.session_hash
     const targetHash = urlHash || storedHash
     const isUrlHash = !!urlHash
 
-    if (targetHash) {
+    // 1) GET desde backend SOLO cuando toca (evita pisar carrito en navegación interna)
+    if (shouldRestoreFromBackend && targetHash) {
       try {
         const response = await fetch(`${URI}/data/${targetHash}`)
         if (response.ok) {
@@ -402,6 +429,7 @@ async function bootstrapFromUrl(reason = 'nav') {
 
           await fetchSiteBySubdomain(currentSede)
 
+          // limpia hash SOLO si venía en URL (link compartido)
           if (isUrlHash) {
             cleanQueryParams({
               removeHash: true,
@@ -418,13 +446,13 @@ async function bootstrapFromUrl(reason = 'nav') {
       }
     }
 
-    // 2) Fallback
+    // 2) Fallback / Navegación interna: NO pisar estado, solo hidratar sede y limpiar credenciales si aplica
     if (!siteLoadedFromHash) {
       await fetchSiteBySubdomain(currentSede)
-      lastSavedSnapshot = JSON.stringify(generatePayload())
 
       const needsCredClean = !!(qInsertedBy && qToken)
       const needsIframeClean = qiframe !== undefined
+
       if (needsCredClean || needsIframeClean) {
         cleanQueryParams({
           removeCredentials: needsCredClean,
@@ -446,11 +474,61 @@ function onPopState() {
   bootstrapFromUrl('popstate')
 }
 
+// ------------------------------------------------------------------------
+// 7. QUICK WATCHERS PARA SYNC INMEDIATO (CARRITO/DIRECCIÓN/CUPÓN)
+// ------------------------------------------------------------------------
+function setupQuickSyncWatchers() {
+  // Limpia watchers previos
+  stopQuickWatchers.forEach((fn) => fn && fn())
+  stopQuickWatchers = []
+
+  // Carrito (deep)
+  stopQuickWatchers.push(
+    watch(
+      () => cartStore.cart,
+      () => scheduleSync(120),
+      { deep: true, flush: 'post' }
+    )
+  )
+
+  // Cupón / UI cupón / delivery
+  stopQuickWatchers.push(
+    watch(
+      () => [cartStore.coupon, cartStore.coupon_ui, siteStore.current_delivery],
+      () => scheduleSync(120),
+      { deep: true, flush: 'post' }
+    )
+  )
+
+  // Dirección (google/manual)
+  stopQuickWatchers.push(
+    watch(
+      () => [
+        siteStore.location.mode,
+        siteStore.location.formatted_address,
+        siteStore.location.place_id,
+        siteStore.location.lat,
+        siteStore.location.lng,
+        siteStore.location.neigborhood?.id,
+        siteStore.location.neigborhood?.neighborhood_id,
+        siteStore.location.neigborhood?.delivery_price
+      ],
+      () => scheduleSync(120),
+      { flush: 'post' }
+    )
+  )
+}
+
+// ------------------------------------------------------------------------
+// 8. LIFECYCLE
+// ------------------------------------------------------------------------
 onMounted(() => {
   bootstrapFromUrl('mounted')
   startHashSyncer()
+  setupQuickSyncWatchers()
 
   window.addEventListener('popstate', onPopState)
+  window.addEventListener('beforeunload', syncOnUnload)
 
   stopRouteWatch = watch(
     () => route.fullPath,
@@ -461,8 +539,11 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   if (syncInterval) clearInterval(syncInterval)
+  clearTimeout(syncDebounce)
   window.removeEventListener('popstate', onPopState)
+  window.removeEventListener('beforeunload', syncOnUnload)
   if (stopRouteWatch) stopRouteWatch()
+  stopQuickWatchers.forEach((fn) => fn && fn())
 })
 </script>
 

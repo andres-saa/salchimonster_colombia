@@ -117,8 +117,9 @@
           <hr class="divider" />
         </section>
 
+        <!-- ✅ radios primero (obligatorios) -->
         <section
-          v-for="group in currentProduct.lista_agrupadores || []"
+          v-for="group in sortedGroups || []"
           :key="group.modificador_id"
           class="section-block"
         >
@@ -450,6 +451,12 @@ const currentProduct = computed(() =>
   flatProducts.value.find((p) => Number(p.producto_id) === currentProductId.value) || null
 )
 
+// ✅ radios primero en UI (para que el cliente seleccione lo obligatorio de una)
+const sortedGroups = computed(() => {
+  const groups = currentProduct.value?.lista_agrupadores || []
+  return [...groups].sort((a, b) => Number(a.modificador_esmultiple) - Number(b.modificador_esmultiple))
+})
+
 const basePrice = computed(() => {
   if (!currentProduct.value) return 0
   const p = currentProduct.value
@@ -503,6 +510,7 @@ const highResUrl = computed(() => {
 })
 
 // --- LÓGICA DE GRUPOS ---
+// ✅ radios NO son opcionales: min=1 y max=1
 const groupLimits = computed(() => {
   const p = currentProduct.value
   if (!p || !Array.isArray(p.lista_agrupadores)) return {}
@@ -510,16 +518,21 @@ const groupLimits = computed(() => {
   const limits = {}
   p.lista_agrupadores.forEach((g) => {
     const key = String(g.modificador_id)
+    const multiple = Number(g.modificador_esmultiple ?? 0) === 1
+
+    const maxMultiple =
+      g.listaModificadores?.reduce(
+        (acc, m) => acc + Number(m.productogeneralmodificador_cantidadmaxima || 0),
+        0
+      ) || 0
+
     limits[key] = {
-      min: Number(g.modificador_cantidadminima ?? 0),
-      multiple: Number(g.modificador_esmultiple ?? 0) === 1,
-      max:
-        g.listaModificadores?.reduce(
-          (acc, m) => acc + Number(m.productogeneralmodificador_cantidadmaxima || 0),
-          0
-        ) || 0
+      multiple,
+      min: multiple ? Number(g.modificador_cantidadminima ?? 0) : 1, // ✅ radio obligatorio
+      max: multiple ? maxMultiple : 1 // ✅ radio solo 1
     }
   })
+
   return limits
 })
 
@@ -561,10 +574,12 @@ const calculateTotal = () => {
 
 const handleRowClick = (mod, groupId) => {
   const limits = groupLimits.value[String(groupId)]
-  if (!limits.multiple) {
+  if (!limits?.multiple) {
+    // ✅ radio: siempre deja 1 seleccionado (cuando el usuario hace click)
     handleAdditionChange(mod, groupId)
     return
   }
+
   const isChecked = checkedAddition.value[mod.modificadorseleccion_id]
   checkedAddition.value[mod.modificadorseleccion_id] = !isChecked
   handleAdditionChange(mod, groupId)
@@ -573,10 +588,12 @@ const handleRowClick = (mod, groupId) => {
 const handleAdditionChange = (item, groupId) => {
   const key = String(groupId)
   const limits = groupLimits.value[key]
+  if (!limits) return
 
   if (!limits.multiple) {
+    // ✅ radio: limpia el grupo y setea 1
     Object.keys(selectedAdditions.value).forEach((k) => {
-      if (selectedAdditions.value[k].modificador_id === groupId) delete selectedAdditions.value[k]
+      if (String(selectedAdditions.value[k].modificador_id) === key) delete selectedAdditions.value[k]
     })
     exclusive.value[groupId] = item.modificadorseleccion_id
     selectedAdditions.value[item.modificadorseleccion_id] = {
@@ -612,7 +629,7 @@ const increment = (item, groupId) => {
   const key = String(groupId)
   const limits = groupLimits.value[key]
 
-  if (limits.max > 0 && groupCount(key) + 1 > limits.max) {
+  if (limits?.max > 0 && groupCount(key) + 1 > limits.max) {
     showToast({
       title: tl('limit_title', 'límite', 'limit'),
       message: tl('max_reached', 'máximo alcanzado', 'maximum reached'),
@@ -626,6 +643,8 @@ const increment = (item, groupId) => {
 
 const decrement = (item) => {
   const entry = selectedAdditions.value[item.modificadorseleccion_id]
+  if (!entry) return
+
   if (entry.modificadorseleccion_cantidad > 1) {
     entry.modificadorseleccion_cantidad--
   } else {
@@ -641,6 +660,8 @@ const changeProductBase = (base) => {
 
 const selectAlternative = (option) => {
   const current = productBaseToChange.value
+  if (!current) return
+
   const backup = {
     producto_id: current.producto_id,
     producto_descripcion: current.producto_descripcion,
@@ -669,7 +690,7 @@ const selectAlternative = (option) => {
 // --- ADD TO CART & NAV ---
 const validateMinMaximums = () => {
   for (const [gId, lim] of Object.entries(groupLimits.value)) {
-    if (groupCount(gId) < lim.min) return false
+    if (groupCount(gId) < Number(lim.min || 0)) return false
   }
   return true
 }
@@ -726,6 +747,7 @@ const goToRelative = (step) => {
 const goToNext = () => goToRelative(1)
 const goToPrev = () => goToRelative(-1)
 
+// ✅ cuando cambia el producto: reset + autoselección de radios (SOLO si hay opción de precio 0)
 watch(currentProduct, async (newVal) => {
   if (newVal) {
     imageLoaded.value = false
@@ -734,12 +756,20 @@ watch(currentProduct, async (newVal) => {
     checkedAddition.value = {}
     exclusive.value = {}
 
-    newVal.lista_agrupadores?.forEach((g) => {
-      const lim = groupLimits.value[String(g.modificador_id)]
-      if (lim && lim.min > 0 && !lim.multiple && g.listaModificadores?.length > 0) {
-        handleAdditionChange(g.listaModificadores[0], g.modificador_id)
-      }
-    })
+    // ✅ radios obligatorios:
+    // - si hay opción con precio 0 => selecciona la primera de precio 0
+    // - si todas > 0 => no selecciones ninguna (para no alterar el precio)
+    newVal.lista_agrupadores
+      ?.filter((g) => Number(g.modificador_esmultiple) === 0)
+      .forEach((g) => {
+        const opts = g.listaModificadores || []
+        if (!opts.length) return
+
+        const zeroOption = opts.find((m) => Number(m.modificadorseleccion_precio ?? 0) === 0)
+        if (!zeroOption) return // ✅ si no hay 0, NO autoselecciona
+
+        handleAdditionChange(zeroOption, g.modificador_id)
+      })
 
     await nextTick()
     checkImageState()
@@ -748,7 +778,6 @@ watch(currentProduct, async (newVal) => {
 
 useHead({
   title: computed(() => {
-    // (esto es meta, no visible; igual lo dejamos normal)
     if (!currentProduct.value) return tl('loading_short', 'cargando...', 'loading...')
     return `${displayName.value} - ${tl('menu_title', 'menú', 'menu')}`
   })
@@ -839,7 +868,6 @@ useHead({
 .details-column { padding: 20px; background: white; }
 @media (min-width: 1024px) { .details-column { padding: 1rem; background: transparent; } }
 
-/* ✅ antes estaba uppercase; lo dejamos en capitalize por tu requerimiento */
 .product-title { font-size: 1.5rem; font-weight: 800; text-transform: capitalize; margin-bottom: 0.5rem; line-height: 1.2; }
 
 .price-block { margin-bottom: 1rem; display: flex; align-items: baseline; gap: 10px; }
@@ -849,7 +877,6 @@ useHead({
 .divider { border: 0; border-top: 1px solid var(--border, #e5e7eb); margin: 1.5rem 0; }
 
 .section-block { margin-bottom: 2rem; }
-/* ✅ antes estaba uppercase; lo dejamos en capitalize por tu requerimiento */
 .section-title { font-size: 1rem; font-weight: 700; text-transform: capitalize; letter-spacing: 0.5px; margin: 0; }
 
 .group-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
@@ -865,7 +892,7 @@ useHead({
 .btn-change-base { background: black; color: white; border: none; font-size: 0.75rem; padding: 6px 12px; border-radius: 20px; font-weight: 600; cursor: pointer; }
 
 .modifiers-list { display: flex; flex-direction: column; gap: 12px; }
-.modifier-row { display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--border, #e5e7eb); border-radius: 12px; background: white; cursor: pointer; transition: all 0.2s ease; }
+.modifier-row { display: flex; align-items: center; gap: 12px; padding: .3rem .5rem; border: 1px solid var(--border, #e5e7eb); border-radius: .3rem; background: white; cursor: pointer; transition: all 0.2s ease; }
 .modifier-row:hover { border-color: #ccc; }
 .modifier-row.is-selected { border-color: var(--primary, #dc2626); background-color: #fff5f5; }
 
@@ -879,8 +906,8 @@ useHead({
 .modifier-price { font-weight: 600; font-size: 0.9rem; color: var(--text-light, #6b7280); }
 
 .modifier-qty-control { display: flex; align-items: center; background: white; border: 1px solid var(--border, #e5e7eb); border-radius: 8px; overflow: hidden; }
-.qty-btn-mini { background: #f9fafb; border: none; padding: 5px 10px; cursor: pointer; font-weight: bold; }
-.qty-val-mini { padding: 0 5px; font-size: 0.85rem; font-weight: 600; }
+.qty-btn-mini { background:var(--primary);color:white; border: none; padding: 5px 10px; cursor: pointer; font-weight: bold; }
+.qty-val-mini { padding: 0 1rem; font-size: 0.85rem; font-weight: 600; }
 
 /* FOOTER */
 .sticky-footer { position: fixed; bottom: 0; left: 0; width: 100%; background: white; padding: 15px 20px; box-shadow: 0 -4px 20px rgba(0,0,0,0.08); z-index: 100; }
