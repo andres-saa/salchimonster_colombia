@@ -1,4 +1,5 @@
 <template>
+
   <div class="vicio-root">
     <Transition name="fade">
       <div v-if="isRedirecting" class="redirect-overlay">
@@ -460,7 +461,9 @@
         </div>
       </Dialog>
     </div>
+
   </div>
+
 </template>
 
 <script setup>
@@ -1790,6 +1793,7 @@ onMounted(async () => {
   justify-content: center;
   transition: all 0.2s ease;
 }
+
 .store-item:hover .store-arrow {
   background: #f1f5f9;
   color: #334155;
@@ -1870,4 +1874,5 @@ onMounted(async () => {
 }
 
 * { transition: all .2s ease-out; }
+
 </style>

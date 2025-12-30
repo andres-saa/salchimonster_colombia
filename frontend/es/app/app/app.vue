@@ -88,8 +88,8 @@ const whatsappFloatUrl = computed(() => {
 
   const baseUrl = 'https://api.whatsapp.com/send'
   const phone = whatsappPhone.value
-  const pageUrl = process.client ? window.location.href : ''
-  const text = `Hola 😊 Tengo una duda con ${pageUrl ? `\n\nLink: ${pageUrl}` : ''}`
+  const pageUrl =  window.location.href  
+  const text = `Hola 😊 Tengo una duda  ${pageUrl ? `\n\nLink: ${pageUrl}` : ''}`
 
   const params = new URLSearchParams({ phone, text })
   return `${baseUrl}?${params.toString()}`
