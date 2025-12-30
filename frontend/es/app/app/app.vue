@@ -83,17 +83,23 @@ const showWhatsappFloat = computed(() => {
   return !!whatsappPhone.value
 })
 
-const whatsappFloatUrl = computed(() => {
-  if (!whatsappPhone.value) return '#'
 
-  const baseUrl = 'https://api.whatsapp.com/send'
-  const phone = whatsappPhone.value
-  const pageUrl =  window.location.href  
-  const text = `Hola 😊 Tengo una duda  ${pageUrl ? `\n\nLink: ${pageUrl}` : ''}`
 
-  const params = new URLSearchParams({ phone, text })
-  return `${baseUrl}?${params.toString()}`
+
+const currentPageUrl = computed(() => {
+  if (!process.client) return ''
+  return `${window.location.origin}${route.fullPath}`
 })
+
+const whatsappFloatUrl = computed(() => {
+  const phone = whatsappPhone.value
+  if (!phone) return '#'
+
+  const text = `Hola 😊 Tengo una duda${currentPageUrl.value ? `\n\nLink: ${currentPageUrl.value}` : ''}`
+  const params = new URLSearchParams({ phone, text })
+  return `https://api.whatsapp.com/send?${params.toString()}`
+})
+
 
 // ------------------------------------------------------------------------
 // 2. LÓGICA DE SINCRONIZACIÓN (PUT SIEMPRE)
