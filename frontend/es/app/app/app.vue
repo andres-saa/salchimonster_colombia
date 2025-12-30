@@ -1,7 +1,8 @@
 <template>
   <div>
     <SiteDialog />
-    <SiteDialogRecoger></SiteDialogRecoger>
+    <SiteDialogRecoger />
+
     <NuxtLayout>
       <NuxtPage />
     </NuxtLayout>
@@ -27,7 +28,7 @@
 
 <script setup>
 import { onMounted, onBeforeUnmount, watch, nextTick, computed } from '#imports'
-import { useRoute, useRouter } from '#imports'
+import { useRoute, useRouter, useRequestURL } from '#imports'
 import { useSitesStore, useUserStore, usecartStore } from '#imports'
 import { useSedeFromSubdomain } from '#imports'
 import { URI } from './service/conection'
@@ -37,6 +38,9 @@ const userStore = useUserStore()
 const cartStore = usecartStore()
 const route = useRoute()
 const router = useRouter()
+
+// ✅ URL SSR-safe (no se pierde en refresh)
+const requestURL = useRequestURL()
 
 // 🔒 Control de ejecución
 let running = false
@@ -58,37 +62,33 @@ function getUUID() {
     return crypto.randomUUID()
   }
   // Fallback para navegadores antiguos
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-    var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8)
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+    var r = (Math.random() * 16) | 0,
+      v = c == 'x' ? r : (r & 0x3) | 0x8
     return v.toString(16)
   })
 }
 
 // ------------------------------------------------------------------------
-// 1. LÓGICA DE WHATSAPP
+// 1. LÓGICA DE WHATSAPP (REACTIVO + NO SE PIERDE EN REFRESH)
 // ------------------------------------------------------------------------
-
 function cleanPhone(raw) {
   if (!raw) return null
   const digits = String(raw).replace(/\D/g, '')
   return digits.length >= 10 ? digits : null
 }
 
-const whatsappPhone = computed(() => {
-  return cleanPhone(siteStore.location?.site?.site_phone)
-})
+const whatsappPhone = computed(() => cleanPhone(siteStore.location?.site?.site_phone))
 
 const showWhatsappFloat = computed(() => {
   if (userStore.user?.iframe) return false
   return !!whatsappPhone.value
 })
 
-
-
-
+// ✅ URL actual SSR-safe y reactivo a navegación interna
 const currentPageUrl = computed(() => {
-  if (!process.client) return ''
-  return `${window.location.origin}${route.fullPath}`
+  // requestURL.origin funciona en SSR y cliente
+  return `${requestURL.origin}${route.fullPath}`
 })
 
 const whatsappFloatUrl = computed(() => {
@@ -100,11 +100,9 @@ const whatsappFloatUrl = computed(() => {
   return `https://api.whatsapp.com/send?${params.toString()}`
 })
 
-
 // ------------------------------------------------------------------------
 // 2. LÓGICA DE SINCRONIZACIÓN (PUT SIEMPRE)
 // ------------------------------------------------------------------------
-
 function generatePayload() {
   return {
     site_location: siteStore.location.site,
@@ -173,26 +171,36 @@ function startHashSyncer() {
     } finally {
       isSyncing = false
     }
-
   }, 3000)
 }
 
 // ------------------------------------------------------------------------
 // 3. RESTAURACIÓN Y CARGA (GET)
 // ------------------------------------------------------------------------
-
 function cleanQueryParams({ removeHash = false, removeCredentials = false, removeIframe = false } = {}) {
   const q = { ...route.query }
   let changed = false
 
-  if (removeHash && q.hash !== undefined) { delete q.hash; changed = true }
-
-  if (removeCredentials) {
-    if (q.inserted_by !== undefined) { delete q.inserted_by; changed = true }
-    if (q.token !== undefined) { delete q.token; changed = true }
+  if (removeHash && q.hash !== undefined) {
+    delete q.hash
+    changed = true
   }
 
-  if (removeIframe && q.iframe !== undefined) { delete q.iframe; changed = true }
+  if (removeCredentials) {
+    if (q.inserted_by !== undefined) {
+      delete q.inserted_by
+      changed = true
+    }
+    if (q.token !== undefined) {
+      delete q.token
+      changed = true
+    }
+  }
+
+  if (removeIframe && q.iframe !== undefined) {
+    delete q.iframe
+    changed = true
+  }
 
   if (changed) router.replace({ query: q })
 }
@@ -211,7 +219,13 @@ function restoreLocationFromMeta(meta) {
     siteStore.location.address_details = meta.address_details ?? null
 
     const price = meta.delivery_price ?? meta.price ?? 0
-    siteStore.location.neigborhood = { name: '', delivery_price: price, neighborhood_id: null, id: null, site_id: null }
+    siteStore.location.neigborhood = {
+      name: '',
+      delivery_price: price,
+      neighborhood_id: null,
+      id: null,
+      site_id: null
+    }
     siteStore.current_delivery = price
     return
   }
@@ -229,7 +243,13 @@ function restoreLocationFromMeta(meta) {
     }
     siteStore.current_delivery = price
   } else {
-    siteStore.location.neigborhood = { name: '', delivery_price: 0, neighborhood_id: null, id: null, site_id: null }
+    siteStore.location.neigborhood = {
+      name: '',
+      delivery_price: 0,
+      neighborhood_id: null,
+      id: null,
+      site_id: null
+    }
     siteStore.current_delivery = 0
   }
 }
@@ -251,7 +271,7 @@ function applyRestoredData(restoredData) {
     userStore.user = {
       ...userStore.user,
       ...restoredData.user,
-      iframe: (currentIframeState !== undefined) ? currentIframeState : restoredData.user.iframe
+      iframe: currentIframeState !== undefined ? currentIframeState : restoredData.user.iframe
     }
   }
 
@@ -260,7 +280,9 @@ function applyRestoredData(restoredData) {
 
   // Cart
   if (restoredData.cart) {
-    const cartItems = Array.isArray(restoredData.cart) ? restoredData.cart : (restoredData.cart.items || [])
+    const cartItems = Array.isArray(restoredData.cart)
+      ? restoredData.cart
+      : restoredData.cart.items || []
     if (cartItems.length > 0) {
       cartStore.cart = Array.isArray(restoredData.cart) ? restoredData.cart : restoredData.cart
     }
@@ -276,7 +298,6 @@ function applyRestoredData(restoredData) {
 // ------------------------------------------------------------------------
 // 4. HIDRATACIÓN DEL SITE
 // ------------------------------------------------------------------------
-
 function getCurrentSubdomain() {
   const sede = useSedeFromSubdomain()
   return typeof sede === 'string' ? sede : sede?.value
@@ -313,7 +334,6 @@ async function fetchSiteBySubdomain(currentSede) {
 // ------------------------------------------------------------------------
 // 5. BOOTSTRAP PRINCIPAL
 // ------------------------------------------------------------------------
-
 async function bootstrapFromUrl(reason = 'nav') {
   if (!process.client) return
   if (running) return
@@ -354,7 +374,7 @@ async function bootstrapFromUrl(reason = 'nav') {
     const qiframe = route.query.iframe
 
     if (qInsertedBy && qToken) {
-      const sessionData = { inserted_by: qInsertedBy, token: qToken, iframe: (qiframe === '1') }
+      const sessionData = { inserted_by: qInsertedBy, token: qToken, iframe: qiframe === '1' }
       userStore.user = { ...userStore.user, ...sessionData }
       localStorage.setItem('session_external_data', JSON.stringify(sessionData))
     }
