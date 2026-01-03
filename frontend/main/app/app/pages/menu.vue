@@ -128,9 +128,9 @@ const normalize = (s) => String(s || '').toLowerCase().normalize('NFD').replace(
 // 2. Encontrar el objeto de datos para Colombia
 const activeMenu = computed(() => {
   if (!menuData.value.length) return null
-  // Busca ID "colombia" o nombre "Colombia"
-  return menuData.value.find(m => m.id === 'es-general' || normalize(m.name).includes('España')) || null
+  return menuData.value.find(m => m.id === 'es-general' || normalize(m.name).includes('colombia')) || null
 })
+
 
 // Variable reactiva para controlar estilos según la orientación elegida
 const isHorizontalLayout = ref(false)
