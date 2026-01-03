@@ -434,7 +434,7 @@ const scrollToCategoryId = (id) => {
   isProgrammaticScroll.value = true
   if (programmaticScrollTimer) window.clearTimeout(programmaticScrollTimer)
 
-  window.scrollTo({ top: y, })
+  window.scrollTo({ top: y, behavior: 'smooth' })
 
   programmaticScrollTimer = window.setTimeout(() => {
     isProgrammaticScroll.value = false
