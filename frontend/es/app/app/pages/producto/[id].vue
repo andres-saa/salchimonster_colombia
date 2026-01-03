@@ -117,7 +117,7 @@
           <hr class="divider" />
         </section>
 
-        <!-- ✅ radios primero (obligatorios) -->
+        <!-- ✅ radios primero (obligatorios SOLO si existe opción gratis) -->
         <section
           v-for="group in sortedGroups || []"
           :key="group.modificador_id"
@@ -451,7 +451,7 @@ const currentProduct = computed(() =>
   flatProducts.value.find((p) => Number(p.producto_id) === currentProductId.value) || null
 )
 
-// ✅ radios primero en UI (para que el cliente seleccione lo obligatorio de una)
+// ✅ radios primero en UI
 const sortedGroups = computed(() => {
   const groups = currentProduct.value?.lista_agrupadores || []
   return [...groups].sort((a, b) => Number(a.modificador_esmultiple) - Number(b.modificador_esmultiple))
@@ -509,8 +509,16 @@ const highResUrl = computed(() => {
   return '/placeholder.png'
 })
 
+// =====================
+// ✅ REGLA: NUNCA OBLIGAR A PAGAR EXTRA
+// =====================
+const hasFreeOptionInGroup = (group) => {
+  const opts = group?.listaModificadores || []
+  return opts.some((m) => Number(m?.modificadorseleccion_precio ?? 0) === 0)
+}
+
 // --- LÓGICA DE GRUPOS ---
-// ✅ radios NO son opcionales: min=1 y max=1
+// ✅ min=0 si NO hay opción gratis (aunque config diga obligatorio)
 const groupLimits = computed(() => {
   const p = currentProduct.value
   if (!p || !Array.isArray(p.lista_agrupadores)) return {}
@@ -519,6 +527,7 @@ const groupLimits = computed(() => {
   p.lista_agrupadores.forEach((g) => {
     const key = String(g.modificador_id)
     const multiple = Number(g.modificador_esmultiple ?? 0) === 1
+    const hasFree = hasFreeOptionInGroup(g)
 
     const maxMultiple =
       g.listaModificadores?.reduce(
@@ -526,10 +535,16 @@ const groupLimits = computed(() => {
         0
       ) || 0
 
+    // ✅ si todo cuesta >0 => nunca obligar
+    const effectiveMin = hasFree
+      ? (multiple ? Number(g.modificador_cantidadminima ?? 0) : 1)
+      : 0
+
     limits[key] = {
       multiple,
-      min: multiple ? Number(g.modificador_cantidadminima ?? 0) : 1, // ✅ radio obligatorio
-      max: multiple ? maxMultiple : 1 // ✅ radio solo 1
+      min: effectiveMin,
+      max: multiple ? maxMultiple : 1,
+      hasFree
     }
   })
 
@@ -545,6 +560,7 @@ const getGroupRequirementText = (group) => {
   const atLeast = tl('choose_at_least', 'elige al menos', 'choose at least')
   const optional = tl('optional', 'opcional', 'optional')
 
+  if (Number(limits.min || 0) <= 0) return optional
   if (limits.min > 0 && limits.max > 0) return toLower(`${choose} ${limits.min} (${maxTxt} ${limits.max})`)
   if (limits.min > 0) return toLower(`${atLeast} ${limits.min}`)
   return optional
@@ -572,10 +588,30 @@ const calculateTotal = () => {
   return total
 }
 
+const clearGroupSelections = (groupId) => {
+  const key = String(groupId)
+  Object.keys(selectedAdditions.value).forEach((k) => {
+    if (String(selectedAdditions.value[k].modificador_id) === key) {
+      // por si acaso estaba marcado en checkbox
+      checkedAddition.value[k] = false
+      delete selectedAdditions.value[k]
+    }
+  })
+  exclusive.value[groupId] = null
+}
+
 const handleRowClick = (mod, groupId) => {
   const limits = groupLimits.value[String(groupId)]
-  if (!limits?.multiple) {
-    // ✅ radio: siempre deja 1 seleccionado (cuando el usuario hace click)
+  if (!limits) return
+
+  if (!limits.multiple) {
+    // ✅ radio:
+    // - si el grupo es opcional (min=0), permite deseleccionar haciendo click de nuevo
+    const alreadySelected = isSelected(mod, groupId)
+    if (alreadySelected && Number(limits.min || 0) === 0) {
+      clearGroupSelections(groupId)
+      return
+    }
     handleAdditionChange(mod, groupId)
     return
   }
@@ -592,9 +628,8 @@ const handleAdditionChange = (item, groupId) => {
 
   if (!limits.multiple) {
     // ✅ radio: limpia el grupo y setea 1
-    Object.keys(selectedAdditions.value).forEach((k) => {
-      if (String(selectedAdditions.value[k].modificador_id) === key) delete selectedAdditions.value[k]
-    })
+    clearGroupSelections(groupId)
+
     exclusive.value[groupId] = item.modificadorseleccion_id
     selectedAdditions.value[item.modificadorseleccion_id] = {
       ...item,
@@ -756,9 +791,7 @@ watch(currentProduct, async (newVal) => {
     checkedAddition.value = {}
     exclusive.value = {}
 
-    // ✅ radios obligatorios:
-    // - si hay opción con precio 0 => selecciona la primera de precio 0
-    // - si todas > 0 => no selecciones ninguna (para no alterar el precio)
+    // ✅ radios obligatorios SOLO si existe opción gratis:
     newVal.lista_agrupadores
       ?.filter((g) => Number(g.modificador_esmultiple) === 0)
       .forEach((g) => {

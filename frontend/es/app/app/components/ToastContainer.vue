@@ -70,7 +70,7 @@ const { toasts, removeToast } = useToast()
   position: fixed;
   right: 1rem;      /* esquina superior izquierda */
   top: 1rem;
-  z-index: 9999;
+  z-index: 9999999999;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
