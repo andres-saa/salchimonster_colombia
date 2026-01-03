@@ -29,7 +29,7 @@
             'horizontal-layout': isHorizontalLayout,
             'vertical-layout': !isHorizontalLayout
           }"
-          @click="openZoom(bigUrl(card.img_identifier))"
+     
         >
           <div v-if="imageStates[card.id] !== 'loaded'" class="skeleton-loader"></div>
 

@@ -25,7 +25,6 @@
           :key="card.id"
           class="image-wrapper"
           :class="{ 'is-loaded': imageStates[card.id] === 'loaded' }"
-          @click="openZoom(bigUrl(card.img_identifier))"
         >
           <div v-if="imageStates[card.id] !== 'loaded'" class="skeleton-loader"></div>
 
