@@ -1,6 +1,6 @@
 <script setup>
 import { ref, watch, nextTick, onMounted, onBeforeUnmount, computed } from 'vue'
-import { useSitesStore } from '#imports'
+import { useSitesStore, useUserStore, useUIStore} from '#imports' // <-- 1. Importar useUserStore
 
 const props = defineProps({
   categories: { type: Array, default: () => [] },
@@ -10,6 +10,15 @@ const props = defineProps({
 const emit = defineEmits(['select-category'])
 const containerRef = ref(null)
 const siteStore = useSitesStore()
+const userStore = useUserStore() // <-- 2. Instanciar store
+const uistore = useUIStore()
+const handleSearch = () => {
+  uistore.isSearchOpen = true
+}
+// ✅ Detección Iframe
+const isIframeMode = computed(() => {
+  return userStore.user?.iframe && userStore.user?.token
+})
 
 // ✅ 1. Lógica de estado
 const isOpen = computed(() => {
@@ -26,6 +35,10 @@ const ticking = ref(false)
 
 const handleScroll = () => {
   if (typeof window === 'undefined') return
+  
+  // Si es iframe mode, no gastamos recursos calculando scroll para el pin
+  if (isIframeMode.value) return 
+
   if (!ticking.value) {
     window.requestAnimationFrame(() => {
       performScrollLogic()
@@ -41,7 +54,6 @@ const performScrollLogic = () => {
   
   if (Math.abs(delta) < 10) return 
 
-  // Umbral más alto para evitar parpadeos
   if (delta > 0 && currentY > 60) {
     isPinned.value = false
   } else {
@@ -50,10 +62,14 @@ const performScrollLogic = () => {
   lastScrollY.value = currentY
 }
 
-// ✅ 3. Calculamos la posición TOP dinámica (Teletransporte)
+// ✅ 3. Calculamos la posición TOP dinámica
 const categoriesBarTop = computed(() => {
-  if (!isPinned.value) return '0px' // Pegado arriba del todo
-  return isOpen.value ? '3.6rem' : '5.7rem' // En su posición original
+  // SI ES IFRAME: Siempre pegado arriba (0px)
+  if (isIframeMode.value) return '0px'
+
+  // Lógica normal
+  if (!isPinned.value) return '0px'
+  return isOpen.value ? '3.6rem' : '5.7rem'
 })
 
 const formatLabel = (str) => {
@@ -94,10 +110,17 @@ onBeforeUnmount(() => {
 
 <template>
   <div 
-    :key="isPinned"
+    :key="isIframeMode ? 'static-iframe' : isPinned"
     class="menu-categories-bar fade-in-teleport"
     :style="{ top: categoriesBarTop }"
   >
+
+
+        
+
+
+
+
     <div class="menu-categories-bar__scroll" ref="containerRef">
       <button
         v-for="cat in categories"
@@ -115,6 +138,10 @@ onBeforeUnmount(() => {
         > 
         <span class="menu-categories-bar__text">{{ formatLabel(cat.category_name) }}</span>   
       </button>
+
+          <button style="height: 2.5rem;width: 2.5rem;width: 3rem; position: absolute;right: 0;border: none; background:linear-gradient(to left , white 90%, transparent);" type="button" class="action-btn search-btn" @click="handleSearch" title="Buscar">
+            <Icon name="mdi:magnify" class="action-icon" />
+          </button>
     </div>
   </div>
 </template>
@@ -126,26 +153,19 @@ onBeforeUnmount(() => {
   background: #ffffff;
   border-bottom: 1px solid #e5e7eb;
   
-  /* IMPORTANTE: Eliminamos 'transition: top' para que no deslice. 
-     Solo dejamos transiciones de efectos visuales si fueran necesarios */
+  /* IMPORTANTE: Eliminamos 'transition: top' para que no deslice. */
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
   will-change: opacity, transform;
 }
 
-/* CLASE PARA LA ANIMACIÓN DE TELETRANSPORTE 
-   Esta animación se ejecuta cada vez que cambia el :key (isPinned)
-*/
+/* CLASE PARA LA ANIMACIÓN DE TELETRANSPORTE */
 .fade-in-teleport {
   animation: teleportAppear .3s ease ;
 }
 
 @keyframes teleportAppear {
-  0% {
-    opacity: 0;
-  }
-  100% {
-    opacity: 1;
-  }
+  0% { opacity: 0; }
+  100% { opacity: 1; }
 }
 
 .menu-categories-bar__scroll {
@@ -154,10 +174,10 @@ onBeforeUnmount(() => {
   display: flex;
   gap: 0.75rem;
   overflow-x: auto;
-  scrollbar-width: none;
+  /* scrollbar-width: none; */
   scroll-behavior: smooth;
 }
-.menu-categories-bar__scroll::-webkit-scrollbar { display: none; }
+/* .menu-categories-bar__scroll::-webkit-scrollbar { display: none; } */
 
 .menu-categories-bar__item {
   padding: 0.4rem 0.8rem;
@@ -210,4 +230,34 @@ onBeforeUnmount(() => {
   .menu-categories-bar__item { padding: 0.5rem 1rem; font-size: 1rem; }
   .menu-categories-bar__img { height: 1.8rem; width: 1.8rem; }
 }
+
+
+/* --- BOTONES DE ACCIÓN --- */
+.action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: white;
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+  color: #555;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+ 
+}
+
+.action-btn:hover {
+  background-color: rgba(0, 0, 0, 0.04);
+  color: var(--primary-color, #d32f2f);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+.action-btn:active {
+  transform: scale(0.95);
+  background-color: rgba(0, 0, 0, 0.08);
+}
+
+.action-icon { font-size: 1.4rem; }
+
 </style>

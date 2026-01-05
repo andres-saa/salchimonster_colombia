@@ -1,6 +1,7 @@
 <template>
   <div class="app-layout">
     <header
+      v-if="!isIframeMode"
       ref="topbarRef"
       class="app-layout__topbar"
       :style="layoutVars"
@@ -13,18 +14,19 @@
       :class="{ 'app-layout__shell--full': isCartaRoute }"
       :style="layoutVars"
     >
+
       <div style="position: fixed; left: 0; top: 0; z-index: -1;">
         <div style="width: 100vw; height: 100vh;"></div>
       </div>
 
-      <aside class="app-layout__sidebar" >
+      <aside v-if="!isIframeMode" class="app-layout__sidebar" >
         <sidebar />
       </aside>
 
       <main
         class="app-layout__content"
-        :class="{ 'app-layout__content--full': isCartaRoute }"
-      >
+        :class="{ 'app-layout__content--full': isCartaRoute || isIframeMode }"
+      >   
         <slot />
       </main>
     </div>
@@ -33,10 +35,18 @@
 
 <script setup>
 import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
-import { useRoute, useSitesStore } from '#imports'
+import { useRoute, useSitesStore, useUserStore } from '#imports'
 import sidebar from '~/components/sidebar.vue'
+
 const route = useRoute()
 const siteStore = useSitesStore()
+const user = useUserStore()
+
+// ===== LÓGICA IFRAME =====
+const isIframeMode = computed(() => {
+  // Verificamos que user.user exista para evitar errores, y luego las propiedades
+  return user.user?.iframe && user.user?.token
+})
 
 const isOpen = computed(() => {
   const st = siteStore.status
@@ -71,12 +81,17 @@ const topbarH = ref(0)
 let ro = null
 
 const measureTopbar = () => {
+  // Si el topbar está oculto (v-if), ref será null y la altura será 0.
+  // Esto elimina automáticamente el padding-top del shell.
   topbarH.value = topbarRef.value?.offsetHeight || 0
 }
 
 /* CSS vars (transform) */
 const layoutVars = computed(() => {
-  const h = topbarH.value
+  // SI es iframe mode, forzamos altura 0 inmediatamente.
+  // SI NO, usamos la altura medida del ref.
+  const h = isIframeMode.value ? 0 : topbarH.value
+
   return {
     '--topbar-h': `${h}px`,
     '--topbar-y': isPinned.value ? '0px' : `-${h}px`,
@@ -100,6 +115,7 @@ onMounted(() => {
   // ResizeObserver = mantiene altura correcta si cambia por cinta/estado/idioma
   if ('ResizeObserver' in window) {
     ro = new ResizeObserver(measureTopbar)
+    // Solo observamos si existe el elemento (podría no existir en modo iframe)
     if (topbarRef.value) ro.observe(topbarRef.value)
   } else {
     window.addEventListener('resize', measureTopbar, { passive: true })
@@ -115,6 +131,7 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+/* Tus estilos se mantienen igual */
 .app-layout {
   display: flex;
   flex-direction: column;
