@@ -247,8 +247,6 @@ onBeforeUnmount(() => {
               loading="lazy"
             />
 
-            <div class="post-gradient"></div>
-
             <div class="post-overlay" :class="`post-overlay--${post.type}`">
               <span class="cta-button">Ver en {{ networkLabel(post.type) }}</span>
             </div>
@@ -425,14 +423,6 @@ onBeforeUnmount(() => {
 }
 
 .post-item:hover .post-image { transform: scale(1.05); }
-
-.post-gradient {
-  position: absolute;
-  bottom: 0; left: 0; right: 0;
-  height: 40%;
-  background: linear-gradient(to top, rgba(0,0,0,0.6), transparent);
-  pointer-events: none;
-}
 
 .post-overlay {
   position: absolute;

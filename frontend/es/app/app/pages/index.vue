@@ -516,19 +516,39 @@ watch(
 /* ==========================
    SEO / META
    ========================== */
-const pageTitle = computed(() => {
-  const base =
-    tMenu.value.page_title_base ||
-    (isEnglish.value ? 'Salchimonster Menu' : 'Carta Salchimonster')
+const siteName = computed(() => sitesStore?.location?.site?.site_name || '')
 
+const pageTitle = computed(() => {
+  const base = 'DOMICILIOS'
   const categoryQ = route.query.category
-  if (categoryQ && typeof categoryQ === 'string') {
-    return `${formatLabel(categoryQ)} | ${base}`
+  const pageName = categoryQ && typeof categoryQ === 'string'
+    ? `${formatLabel(categoryQ).toUpperCase()} | ${base}`
+    : base
+  
+  if (siteName.value) {
+    return `SM - ${siteName.value.toUpperCase()} | ${pageName}`
   }
-  return base
+  return pageName
 })
 
-useHead(() => ({ title: pageTitle.value }))
+const pageDescription = computed(() => {
+  const site = siteName.value ? ` en ${siteName.value}` : ''
+  return `Pide tu salchipapa favorita a domicilio${site}. Salchimonster - La mejor salchipapa de Colombia.`
+})
+
+useHead(() => ({
+  title: pageTitle.value,
+  meta: [
+    { name: 'description', content: pageDescription.value },
+    { name: 'robots', content: 'index, follow' },
+    { property: 'og:title', content: pageTitle.value },
+    { property: 'og:description', content: pageDescription.value },
+    { property: 'og:type', content: 'website' },
+    { name: 'twitter:card', content: 'summary_large_image' },
+    { name: 'twitter:title', content: pageTitle.value },
+    { name: 'twitter:description', content: pageDescription.value }
+  ]
+}))
 </script>
 
 

@@ -194,34 +194,24 @@ const filteredSedes = computed(() => {
   )
 })
 
-/* IMAGENES CON FALLBACK EN CASCADA */
+/* IMAGENES CON FALLBACK */
 const getOptimizedSrc = (sede) => {
-  // Prioridad 1: Si existe img_id, usamos la ruta de foto de producto
+  // Solo usamos img_id para buscar la foto
   if (sede.img_id) {
     return `${URI}/read-photo-product/${sede.img_id}`
   }
-  // Prioridad 2: Si no hay img_id, intentamos con la ruta basada en site_id
-  return `${URI}/read-product-image/600/site-${sede.site_id}`
+  // Si no hay img_id, usamos el fallback genérico
+  return FALLBACK_IMG
 }
 
 const onImgError = (event, sede) => {
   const imgElement = event.target
-  const secondarySrc = `${URI}/read-product-image/600/site-${sede.site_id}`
-  
-  // Verificamos qué URL es la que falló para decidir el siguiente paso
   
   // Si la imagen actual YA ES el fallback (logo), no hacemos nada para evitar bucles
   if (imgElement.src === FALLBACK_IMG) return
 
-  // Si la imagen que falló es la ruta secundaria (la que usa site-{id}), 
-  // significa que ya fallaron las dos opciones. Vamos al logo.
-  if (imgElement.src.includes(`site-${sede.site_id}`)) {
-    imgElement.src = FALLBACK_IMG
-  } 
-  // Si no era la secundaria (significa que falló la img_id), intentamos la secundaria
-  else {
-    imgElement.src = secondarySrc
-  }
+  // Si falló la imagen con img_id, usamos el fallback genérico
+  imgElement.src = FALLBACK_IMG
 }
 
  
@@ -269,9 +259,25 @@ useHead(() => {
     "url": sede.maps
   }))
 
+  const siteName = sitesStore?.location?.site?.site_name || ''
+  const pageName = 'SEDES'
+  const title = siteName 
+    ? `SM - ${siteName.toUpperCase()} | ${pageName}`
+    : `SM | ${pageName}`
+  const description = 'Encuentra tu restaurante Salchimonster más cercano. Conoce nuestras sedes en Colombia.'
+
   return {
-    title: 'Nuestras Sedes | Salchimonster',
-    meta: [{ name: 'description', content: 'Encuentra tu restaurante Salchimonster más cercano.' }],
+    title,
+    meta: [
+      { name: 'description', content: description },
+      { name: 'robots', content: 'index, follow' },
+      { property: 'og:title', content: title },
+      { property: 'og:description', content: description },
+      { property: 'og:type', content: 'website' },
+      { name: 'twitter:card', content: 'summary_large_image' },
+      { name: 'twitter:title', content: title },
+      { name: 'twitter:description', content: description }
+    ],
     script: [{ type: 'application/ld+json', children: JSON.stringify(structuredData) }]
   }
 })

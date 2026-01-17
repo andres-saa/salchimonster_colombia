@@ -67,9 +67,39 @@
 <script setup>
 import { ref, computed, reactive, onMounted, onBeforeUnmount } from 'vue'
 import { useUserStore } from '@/stores/user'
+import { useSitesStore, useHead } from '#imports'
 
 const user = useUserStore()
+const sitesStore = useSitesStore()
 const URI = 'https://backend.salchimonster.com'
+
+const siteName = computed(() => sitesStore?.location?.site?.site_name || '')
+const pageTitle = computed(() => {
+  const pageName = 'CARTA'
+  if (siteName.value) {
+    return `SM - ${siteName.value.toUpperCase()} | ${pageName}`
+  }
+  return `SM | ${pageName}`
+})
+
+const pageDescription = computed(() => {
+  const site = siteName.value ? ` en ${siteName.value}` : ''
+  return `Carta completa de Salchimonster${site}. Descubre nuestras deliciosas salchipapas, combos y más.`
+})
+
+useHead(() => ({
+  title: pageTitle.value,
+  meta: [
+    { name: 'description', content: pageDescription.value },
+    { name: 'robots', content: 'index, follow' },
+    { property: 'og:title', content: pageTitle.value },
+    { property: 'og:description', content: pageDescription.value },
+    { property: 'og:type', content: 'website' },
+    { name: 'twitter:card', content: 'summary_large_image' },
+    { name: 'twitter:title', content: pageTitle.value },
+    { name: 'twitter:description', content: pageDescription.value }
+  ]
+}))
 
 // --- ESTADOS ---
 const windowWidth = ref(1024)

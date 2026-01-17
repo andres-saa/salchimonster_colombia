@@ -1,8 +1,38 @@
 <script setup>
 import { ref, computed, nextTick, watch } from 'vue'
+import { useHead, useSitesStore } from '#imports'
 
 const route = useRoute()
 const router = useRouter()
+const sitesStore = useSitesStore()
+
+const siteName = computed(() => sitesStore?.location?.site?.site_name || '')
+const pageTitle = computed(() => {
+  const pageName = 'MENÚ'
+  if (siteName.value) {
+    return `SM - ${siteName.value.toUpperCase()} | ${pageName}`
+  }
+  return `SM | ${pageName}`
+})
+
+const pageDescription = computed(() => {
+  const site = siteName.value ? ` en ${siteName.value}` : ''
+  return `Menú completo de Salchimonster${site}. Descubre nuestras deliciosas salchipapas, combos y más.`
+})
+
+useHead(() => ({
+  title: pageTitle.value,
+  meta: [
+    { name: 'description', content: pageDescription.value },
+    { name: 'robots', content: 'index, follow' },
+    { property: 'og:title', content: pageTitle.value },
+    { property: 'og:description', content: pageDescription.value },
+    { property: 'og:type', content: 'website' },
+    { name: 'twitter:card', content: 'summary_large_image' },
+    { name: 'twitter:title', content: pageTitle.value },
+    { name: 'twitter:description', content: pageDescription.value }
+  ]
+}))
 
 // 📡 Traer data real del backend
 const { data: rawCategoriesData } = await useFetch(

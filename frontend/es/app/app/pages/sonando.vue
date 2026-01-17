@@ -327,13 +327,39 @@
 
 <script setup>
 import { ref, reactive, onMounted, onUnmounted, computed, watch } from 'vue'
- import { usecartStore } from '#imports'
+import { usecartStore, useSitesStore, useHead } from '#imports'
 
 const API_BASE = 'https://backend-musica.salchimonster.com'
 const WS_BASE = 'wss://backend-musica.salchimonster.com/ws'
 const SITE_ID = 1
 
 const siteStore = useSitesStore()
+const siteName = computed(() => siteStore?.location?.site?.site_name || '')
+const pageTitle = computed(() => {
+  const pageName = 'SONANDO'
+  if (siteName.value) {
+    return `SM - ${siteName.value.toUpperCase()} | ${pageName}`
+  }
+  return `SM | ${pageName}`
+})
+
+const pageDescription = computed(() => {
+  return 'Escucha lo que está sonando ahora en Salchimonster. Pide tu canción favorita y disfruta de la mejor música mientras comes.'
+})
+
+useHead(() => ({
+  title: pageTitle.value,
+  meta: [
+    { name: 'description', content: pageDescription.value },
+    { name: 'robots', content: 'noindex, nofollow' },
+    { property: 'og:title', content: pageTitle.value },
+    { property: 'og:description', content: pageDescription.value },
+    { property: 'og:type', content: 'website' },
+    { name: 'twitter:card', content: 'summary' },
+    { name: 'twitter:title', content: pageTitle.value },
+    { name: 'twitter:description', content: pageDescription.value }
+  ]
+}))
 
 // Dialog refs
 const dialogPedirTema = ref(false)

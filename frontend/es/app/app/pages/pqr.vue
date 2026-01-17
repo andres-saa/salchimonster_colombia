@@ -313,6 +313,35 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { URI } from '~/service/conection'
+import { useHead, useSitesStore } from '#imports'
+
+const sitesStore = useSitesStore()
+const siteName = computed(() => sitesStore?.location?.site?.site_name || '')
+const pageTitle = computed(() => {
+  const pageName = 'AYUDA'
+  if (siteName.value) {
+    return `SM - ${siteName.value.toUpperCase()} | ${pageName}`
+  }
+  return `SM | ${pageName}`
+})
+
+const pageDescription = computed(() => {
+  return '¿Necesitas ayuda? Contáctanos. Estamos aquí para resolver tus dudas y mejorar tu experiencia en Salchimonster.'
+})
+
+useHead(() => ({
+  title: pageTitle.value,
+  meta: [
+    { name: 'description', content: pageDescription.value },
+    { name: 'robots', content: 'noindex, nofollow' },
+    { property: 'og:title', content: pageTitle.value },
+    { property: 'og:description', content: pageDescription.value },
+    { property: 'og:type', content: 'website' },
+    { name: 'twitter:card', content: 'summary' },
+    { name: 'twitter:title', content: pageTitle.value },
+    { name: 'twitter:description', content: pageDescription.value }
+  ]
+}))
 
 /* --- STATE UI --- */
 const visibleDialog = ref(false)

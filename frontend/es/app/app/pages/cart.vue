@@ -151,13 +151,40 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch, onBeforeMount } from 'vue'
-import { usecartStore, useSitesStore, useUserStore } from '#imports'
+import { ref, onMounted, watch, onBeforeMount, computed } from 'vue'
+import { usecartStore, useSitesStore, useUserStore, useHead } from '#imports'
 import { formatoPesosColombianos } from '@/service/utils/formatoPesos'
 
 const store = usecartStore()
 const siteStore = useSitesStore()
 const user = useUserStore()
+
+const siteName = computed(() => siteStore?.location?.site?.site_name || '')
+const pageTitle = computed(() => {
+  const pageName = 'CARRITO'
+  if (siteName.value) {
+    return `SM - ${siteName.value.toUpperCase()} | ${pageName}`
+  }
+  return `SM | ${pageName}`
+})
+
+const pageDescription = computed(() => {
+  return 'Revisa tu carrito de compras en Salchimonster. Completa tu pedido y disfruta de la mejor salchipapa de Colombia.'
+})
+
+useHead(() => ({
+  title: pageTitle.value,
+  meta: [
+    { name: 'description', content: pageDescription.value },
+    { name: 'robots', content: 'noindex, nofollow' },
+    { property: 'og:title', content: pageTitle.value },
+    { property: 'og:description', content: pageDescription.value },
+    { property: 'og:type', content: 'website' },
+    { name: 'twitter:card', content: 'summary' },
+    { name: 'twitter:title', content: pageTitle.value },
+    { name: 'twitter:description', content: pageDescription.value }
+  ]
+}))
 
 // --- FUNCIÓN HELPER PARA TEXTO (Sentence case) ---
 const formatName = (str) => {

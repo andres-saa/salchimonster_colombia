@@ -235,6 +235,8 @@
                         {{
                           temp_code.status === 'invalid_site'
                             ? (lang === 'en' ? 'Not valid for this site' : 'No válido en esta sede')
+                            : temp_code.status === 'min_purchase'
+                            ? temp_code.detail
                             : (temp_code.detail || (lang === 'en' ? 'Invalid code' : 'Código no válido'))
                         }}
                       </span>
@@ -534,6 +536,25 @@ const validateDiscount = async (code, opts = { silent: false }) => {
       store.removeCoupon()
       return
     }
+    
+    // Validar monto mínimo de compra
+    if (coupon.min_purchase != null && coupon.min_purchase > 0) {
+      const subtotal = store.cartSubtotal
+      if (subtotal < coupon.min_purchase) {
+        const formatCOP = (v) => v === 0 ? 'Gratis' : new Intl.NumberFormat(lang.value === 'en' ? 'en-CO' : 'es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(v)
+        const minPurchaseFormatted = formatCOP(coupon.min_purchase)
+        temp_code.value = { 
+          status: 'min_purchase', 
+          detail: lang.value === 'en' 
+            ? `Minimum purchase required: ${minPurchaseFormatted}` 
+            : `El monto mínimo de compra es: ${minPurchaseFormatted}`,
+          min_purchase: coupon.min_purchase
+        }
+        store.removeCoupon()
+        return
+      }
+    }
+    
     store.applyCoupon(coupon)
     temp_code.value = { ...coupon, status: 'active', discount_name: coupon.discount_name || coupon.name || 'Descuento' }
     store.setCouponUi({ enabled: true, draft_code: coupon.code || finalCode })

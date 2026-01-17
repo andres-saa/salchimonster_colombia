@@ -28,6 +28,37 @@
 </template>
 
 <script setup>
+import { computed } from 'vue'
+import { useHead, useSitesStore } from '#imports'
+
+const sitesStore = useSitesStore()
+const siteName = computed(() => sitesStore?.location?.site?.site_name || '')
+const pageTitle = computed(() => {
+  const pageName = 'COLABORACIONES'
+  if (siteName.value) {
+    return `SM - ${siteName.value.toUpperCase()} | ${pageName}`
+  }
+  return `SM | ${pageName}`
+})
+
+const pageDescription = computed(() => {
+  return 'Descubre las colaboraciones exclusivas de Salchimonster. Salchimonster x Papi Keicy y más contenido especial.'
+})
+
+useHead(() => ({
+  title: pageTitle.value,
+  meta: [
+    { name: 'description', content: pageDescription.value },
+    { name: 'robots', content: 'index, follow' },
+    { property: 'og:title', content: pageTitle.value },
+    { property: 'og:description', content: pageDescription.value },
+    { property: 'og:type', content: 'website' },
+    { name: 'twitter:card', content: 'summary_large_image' },
+    { name: 'twitter:title', content: pageTitle.value },
+    { name: 'twitter:description', content: pageDescription.value }
+  ]
+}))
+
 const videoId = 'VR6N9AhyRVQ' // ID del video
 const embedUrl = `https://www.youtube.com/embed/${videoId}`
 </script>

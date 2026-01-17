@@ -135,7 +135,7 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
-import { useRoute, useRouter, useUserStore, texts } from '#imports'
+import { useRoute, useRouter, useUserStore, texts, useSitesStore, useHead } from '#imports'
 import { URI } from '@/service/conection'
 
 const route = useRoute()
@@ -243,6 +243,35 @@ const firstHistory = computed(() => {
 })
 
 const normalizeStatus = (s) => String(s ?? '').trim().toLowerCase()
+
+// Título de página
+const sitesStore = useSitesStore()
+const siteName = computed(() => sitesStore?.location?.site?.site_name || '')
+const pageTitle = computed(() => {
+  const pageName = 'RASTREAR'
+  if (siteName.value) {
+    return `SM - ${siteName.value.toUpperCase()} | ${pageName}`
+  }
+  return `SM | ${pageName}`
+})
+
+const pageDescription = computed(() => {
+  return 'Rastrea el estado de tu pedido en tiempo real. Ingresa el ID de tu pedido y conoce su ubicación y estado actual.'
+})
+
+useHead(() => ({
+  title: pageTitle.value,
+  meta: [
+    { name: 'description', content: pageDescription.value },
+    { name: 'robots', content: 'noindex, nofollow' },
+    { property: 'og:title', content: pageTitle.value },
+    { property: 'og:description', content: pageDescription.value },
+    { property: 'og:type', content: 'website' },
+    { name: 'twitter:card', content: 'summary' },
+    { name: 'twitter:title', content: pageTitle.value },
+    { name: 'twitter:description', content: pageDescription.value }
+  ]
+}))
 
 /**
  * ✅ Traducción de estados:

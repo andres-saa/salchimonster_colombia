@@ -123,6 +123,10 @@
           <i class="pi pi-clock"></i> Cerrado, abre a las {{ siteStore.status.next_opening_time }}
         </div>
 
+        <div v-if="!minPurchaseValidation.valid && route.path == '/pay'" class="closed-alert" style="background-color: #fef2f2; border-color: #fecaca; color: #b91c1c;">
+          <i class="pi pi-exclamation-triangle"></i> {{ minPurchaseValidation.message }}
+        </div>
+
         <div class="buttons-stack">
 
             <NuxtLink to="/" v-if="route.path.includes('cart')" class="link-wrapper">
@@ -157,7 +161,7 @@
                 v-else-if="route.path == '/pay' && !reportes.loading.visible && siteStore.status?.status !== 'closed' && (isLoggedIn || user.user.payment_method_option?.id != 9)"
                 type="button"
                 class="btn btn-primary"
-                :disabled="reportes.loading.visible"
+                :disabled="reportes.loading.visible || !canProceedToPayment"
                 @click="orderService.sendOrder()"
             >
                 <span v-if="reportes.loading.visible">Procesando...</span>
@@ -170,7 +174,7 @@
                 v-else-if="route.path == '/pay' && !reportes.loading.visible && siteStore.status?.status !== 'closed' && !isLoggedIn && user.user.payment_method_option?.id == 9"
                 type="button"
                 class="btn btn-primary"
-                :disabled="reportes.loading.visible"
+                :disabled="reportes.loading.visible || !canProceedToPayment"
                 @click="pay"
             >
                 <span v-if="reportes.loading.visible">Procesando...</span>
@@ -255,6 +259,29 @@ const formatName = (str) => {
   return lower.charAt(0).toUpperCase() + lower.slice(1)
 }
 
+// Validar monto mínimo de compra del cupón
+const validateMinPurchase = () => {
+  const coupon = store.applied_coupon
+  if (!coupon || !coupon.min_purchase || coupon.min_purchase <= 0) {
+    return { valid: true, message: null }
+  }
+  
+  const subtotal = store.cartSubtotal
+  if (subtotal < coupon.min_purchase) {
+    return {
+      valid: false,
+      message: `El monto mínimo de compra para este cupón es: ${formatoPesosColombianos(coupon.min_purchase)}`
+    }
+  }
+  
+  return { valid: true, message: null }
+}
+
+const minPurchaseValidation = computed(() => validateMinPurchase())
+const canProceedToPayment = computed(() => {
+  return minPurchaseValidation.value.valid
+})
+
 onMounted(() => {
   if (user.user.payment_method_option?.id != 7 && !route.path.includes('reservas')) {
     siteStore.setNeighborhoodPrice()
@@ -263,7 +290,26 @@ onMounted(() => {
   }
 })
 
-watch(() => store.cart, () => {}, { deep: true })
+watch(() => store.cart, () => {
+  // Revalidar cupón si hay uno aplicado y el carrito cambia
+  if (store.applied_coupon && store.applied_coupon.min_purchase) {
+    const validation = validateMinPurchase()
+    if (!validation.valid) {
+      // Si no cumple el mínimo, remover el cupón
+      store.removeCoupon()
+    }
+  }
+}, { deep: true })
+
+watch(() => store.applied_coupon, (newCoupon) => {
+  // Validar cuando se aplica un cupón nuevo
+  if (newCoupon && newCoupon.min_purchase) {
+    const validation = validateMinPurchase()
+    if (!validation.valid) {
+      store.removeCoupon()
+    }
+  }
+}, { deep: true })
 
 const pay = async () => {
   if (typeof window !== 'undefined' && !window.ePayco) {

@@ -169,16 +169,27 @@
 
 <script setup>
 import { ref, onMounted, computed } from "vue";
-import { useRoute, useRuntimeConfig, useHead } from "#imports";
+import { useRoute, useRuntimeConfig, useHead, useSitesStore } from "#imports";
 import { URI, SELF_URI } from "~/service/conection";
 
 // --- Configuración ePayco ---
 const config = useRuntimeConfig();
 const epaycoPublicKey = config.public.epaycoPublicKey || 'ad3bfbac4531d3b82ece35e36bdf320a'; 
 
-useHead({
+const sitesStore = useSitesStore()
+const siteName = computed(() => sitesStore?.location?.site?.site_name || '')
+const pageTitle = computed(() => {
+  const pageName = 'PAGAR'
+  if (siteName.value) {
+    return `SM - ${siteName.value.toUpperCase()} | ${pageName}`
+  }
+  return pageName
+})
+
+useHead(() => ({
+  title: pageTitle.value,
   script: [{ src: 'https://checkout.epayco.co/checkout.js', async: true, defer: true }]
-});
+}));
 
 // --- Estado ---
 const route = useRoute();

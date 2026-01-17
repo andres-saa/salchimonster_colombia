@@ -333,6 +333,8 @@
                         {{
                           temp_code.status === 'invalid_site'
                             ? (lang === 'en' ? 'Not valid for this site' : 'No válido en esta sede')
+                            : temp_code.status === 'min_purchase'
+                            ? temp_code.detail
                             : (temp_code.detail || (lang === 'en' ? 'Invalid code' : 'Código no válido'))
                         }}
                       </span>
@@ -903,6 +905,23 @@ const validateDiscount = async (code, opts = { silent: false }) => {
       temp_code.value = { status: 'invalid_site', detail: lang.value === 'en' ? 'Not valid for this site' : 'No válido en esta sede' }
       store.removeCoupon()
       return
+    }
+
+    // Validar monto mínimo de compra
+    if (coupon.min_purchase != null && coupon.min_purchase > 0) {
+      const subtotal = store.cartSubtotal
+      if (subtotal < coupon.min_purchase) {
+        const minPurchaseFormatted = formatCOP(coupon.min_purchase)
+        temp_code.value = { 
+          status: 'min_purchase', 
+          detail: lang.value === 'en' 
+            ? `Minimum purchase required: ${minPurchaseFormatted}` 
+            : `El monto mínimo de compra es: ${minPurchaseFormatted}`,
+          min_purchase: coupon.min_purchase
+        }
+        store.removeCoupon()
+        return
+      }
     }
 
     store.applyCoupon(coupon)

@@ -809,10 +809,32 @@ watch(currentProduct, async (newVal) => {
   }
 }, { immediate: true })
 
+const siteName = computed(() => sitesStore?.location?.site?.site_name || '')
+
 useHead({
   title: computed(() => {
     if (!currentProduct.value) return tl('loading_short', 'cargando...', 'loading...')
-    return `${displayName.value} - ${tl('menu_title', 'menú', 'menu')}`
+    const productName = displayName.value.toUpperCase()
+    const pageName = `${productName} - MENÚ`
+    if (siteName.value) {
+      return `SM - ${siteName.value.toUpperCase()} | ${pageName}`
+    }
+    return `SM | ${pageName}`
+  }),
+  meta: computed(() => {
+    if (!currentProduct.value) return []
+    const productName = displayName.value.toUpperCase()
+    const description = `Ordena ${displayName.value} en Salchimonster. ${siteName.value ? `Disponible en ${siteName.value}.` : ''} La mejor salchipapa de Colombia.`
+    return [
+      { name: 'description', content: description },
+      { name: 'robots', content: 'index, follow' },
+      { property: 'og:title', content: `SM - ${siteName.value?.toUpperCase() || ''} | ${productName} - MENÚ` },
+      { property: 'og:description', content: description },
+      { property: 'og:type', content: 'product' },
+      { name: 'twitter:card', content: 'summary_large_image' },
+      { name: 'twitter:title', content: `${productName} - MENÚ` },
+      { name: 'twitter:description', content: description }
+    ]
   })
 })
 </script>

@@ -142,7 +142,36 @@
 
 <script setup>
 import { ref, computed } from 'vue'
-import { URI } from '@/service/conection' // si quieres, puedes reemplazar esto por useRuntimeConfig
+import { URI } from '@/service/conection'
+import { useHead, useSitesStore } from '#imports'
+
+const sitesStore = useSitesStore()
+const siteName = computed(() => sitesStore?.location?.site?.site_name || '')
+const pageTitle = computed(() => {
+  const pageName = 'FRANQUICIAS'
+  if (siteName.value) {
+    return `SM - ${siteName.value.toUpperCase()} | ${pageName}`
+  }
+  return `SM | ${pageName}`
+})
+
+const pageDescription = computed(() => {
+  return 'Únete a la familia Salchimonster. Conoce nuestras oportunidades de franquicia y forma parte del imperio de las salchipapas en Colombia.'
+})
+
+useHead(() => ({
+  title: pageTitle.value,
+  meta: [
+    { name: 'description', content: pageDescription.value },
+    { name: 'robots', content: 'index, follow' },
+    { property: 'og:title', content: pageTitle.value },
+    { property: 'og:description', content: pageDescription.value },
+    { property: 'og:type', content: 'website' },
+    { name: 'twitter:card', content: 'summary_large_image' },
+    { name: 'twitter:title', content: pageTitle.value },
+    { name: 'twitter:description', content: pageDescription.value }
+  ]
+}))
 
 const visibleDialog = ref(false)
 const last_id = ref(null)

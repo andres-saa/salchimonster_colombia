@@ -19,6 +19,8 @@
       <ClientOnly>
         <div class="vicio-map-shell">
           <div id="vicio-map" class="vicio-map"></div>
+          <img src="/st-1.png" alt="Sticker 1" class="map-sticker map-sticker--top-left" />
+          <img src="/st-2.png" alt="Sticker 2" class="map-sticker map-sticker--bottom-right" />
         </div>
       </ClientOnly>
 
@@ -469,6 +471,7 @@
 <script setup>
 import { ref, computed, onMounted, nextTick, watch, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
+import { useHead } from '#imports'
 import 'leaflet/dist/leaflet.css'
 
 /* PrimeVue */
@@ -1307,14 +1310,23 @@ function onDispatchParamsDelivery() {
 /* =======================
    IMAGES
    ======================= */
+const FALLBACK_LOGO = 'https://gestion.salchimonster.com/images/logo.png'
 const imgCache = ref({})
-const currentImage = (store) => imgCache.value[store.id] || `${BACKEND_BASE}/read-product-image/96/site-${store.id}`
+const currentImage = (store) => {
+  if (imgCache.value[store.id]) return imgCache.value[store.id]
+  if (store.img_id) return `${BACKEND_BASE}/read-photo-product/${store.img_id}`
+  return FALLBACK_LOGO
+}
 const loadHighResImage = (store) => {
+  if (!store.img_id) return
   const i = new Image()
-  i.src = `${BACKEND_BASE}/read-product-image/600/site-${store.id}`
+  i.src = `${BACKEND_BASE}/read-photo-product/${store.img_id}`
   i.onload = () => { imgCache.value[store.id] = i.src }
 }
-const onImgError = (store) => { imgCache.value[store.id] = `${BACKEND_BASE}/read-product-image/96/site-${store.id}` }
+const onImgError = (store) => {
+  // Si falló la imagen con img_id, usamos el logo como fallback
+  imgCache.value[store.id] = FALLBACK_LOGO
+}
 
 /* =======================
    UTILS + DATA
@@ -1403,12 +1415,12 @@ onMounted(async () => {
     maxBounds: colombiaBounds,
     maxBoundsViscosity: 1.0,
     zoomControl: false,
-    scrollWheelZoom: false,
-    doubleClickZoom: false,
-    touchZoom: false,
+    scrollWheelZoom: true,
+    doubleClickZoom: true,
+    touchZoom: true,
     boxZoom: false,
-    keyboard: false,
-    dragging: false,
+    keyboard: true,
+    dragging: true,
     tap: false
   })
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap' }).addTo(map.value)
@@ -1441,6 +1453,31 @@ onMounted(async () => {
   map.value.on('moveend', updateBounds)
   updateBounds()
 })
+
+/* =======================
+   SEO
+   ======================= */
+const pageTitle = computed(() => {
+  return 'Salchimonster Colombia'
+})
+
+const pageDescription = computed(() => {
+  return 'Elige tu Salchimonster más cercano y pide a domicilio. Encuentra la sede más cercana a tu ubicación en Colombia.'
+})
+
+useHead(() => ({
+  title: pageTitle.value,
+  meta: [
+    { name: 'description', content: pageDescription.value },
+    { name: 'robots', content: 'index, follow' },
+    { property: 'og:title', content: pageTitle.value },
+    { property: 'og:description', content: pageDescription.value },
+    { property: 'og:type', content: 'website' },
+    { name: 'twitter:card', content: 'summary_large_image' },
+    { name: 'twitter:title', content: pageTitle.value },
+    { name: 'twitter:description', content: pageDescription.value }
+  ]
+}))
 </script>
 
 <style scoped>
@@ -1480,7 +1517,40 @@ onMounted(async () => {
   width: 100%;
   height: 100%;
   background: #e2e8f0;
-  touch-action: none;
+  touch-action: pan-x pan-y pinch-zoom;
+}
+
+/* Stickers sobre el mapa */
+.map-sticker {
+  position: absolute;
+  z-index: 1000;
+  pointer-events: none;
+  user-select: none;
+  width: 200px;
+  height: auto;
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.2));
+}
+
+.map-sticker--top-left {
+  top: 20px;
+  left: 10px;
+  transform: rotate(8deg);
+}
+
+.map-sticker--bottom-right {
+  bottom: 20px;
+  right: 10px;
+  transform: rotate(-12deg);
+}
+
+@media (max-width: 900px) {
+  .map-sticker--top-left {
+    left: -10px;
+  }
+  
+  .map-sticker--bottom-right {
+    right: -10px;
+  }
 }
 
 .vicio-sidebar {
