@@ -78,6 +78,9 @@ function preparar_orden() {
   const order_notes = baseNotes || "";
 
   const phone = buildPhone();
+  
+  // Obtener código de descuento si existe
+  const discount_code = cart.applied_coupon?.code || null;
 
   /* -------------------------------------------------------------------------- */
   /* LÓGICA DE DIRECCIÓN MODIFICADA                       */
@@ -123,6 +126,7 @@ function preparar_orden() {
     order_aditionals: [],
     pe_json: order_products,
     address_details: address_details,
+    discount_code: discount_code,
     total: 0,
   };
 
