@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
+import { navigateTo } from '#app'
 import { useSedeFromRoute } from '~/composables/useSedeFromRoute'
 import { useSitesStore } from '~/stores/site'
 import { URI } from '@/service/conection'
@@ -101,16 +102,19 @@ async function loadSiteData() {
         }
       } else {
         const loadedSite = await loadSiteBySlug(slug)
-        if (loadedSite) {
+        if (loadedSite && loadedSite.site_id) {
           site.value = loadedSite
           // Actualizar el store con el site cargado
           sitesStore.location.site = loadedSite
         } else {
           // Si no se encontró por slug, intentar usar el del store
-          if (sitesStore?.location?.site) {
+          if (sitesStore?.location?.site?.site_id) {
             site.value = sitesStore.location.site
           } else {
-            throw new Error(`No se encontró la sede con slug: ${slug}`)
+          // La sede no existe, redirigir al dispatcher
+          console.warn(`[Pay] Sede con slug "${slug}" no encontrada, redirigiendo al dispatcher`)
+          await navigateTo('/', { replace: true })
+          return
           }
         }
       }

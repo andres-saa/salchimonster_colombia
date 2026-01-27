@@ -76,6 +76,7 @@
 <script setup>
 import { ref, computed, nextTick, watch, onMounted, onBeforeUnmount, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
+import { navigateTo } from '#app'
 import CarouselBanners from '~/components/carouselBanners.vue'
 import MenuCategoriesBar from '~/components/MenuCategoriesBar.vue'
 import MenuProductCard from '~/components/MenuProductCard.vue'
@@ -109,7 +110,7 @@ const loadSiteFromUrl = async () => {
     if (response.ok) {
       const data = await response.json()
       const siteData = data?.[0] || data
-      if (siteData) {
+      if (siteData && siteData.site_id) {
         // Actualizar el store con la sede de la URL
         const prevId = sitesStore.location.site?.site_id
         const newId = siteData?.site_id
@@ -122,16 +123,30 @@ const loadSiteFromUrl = async () => {
         if (prevId !== newId) {
           sitesStore.initStatusWatcher()
         }
+      } else {
+        // La sede no existe, redirigir al dispatcher
+        console.warn(`[Sede] Sede "${sedeFromRoute.value}" no encontrada, redirigiendo al dispatcher`)
+        await navigateTo('/', { replace: true })
       }
+    } else {
+      // La respuesta no fue OK (404, etc.), redirigir al dispatcher
+      console.warn(`[Sede] Error al buscar sede "${sedeFromRoute.value}" (${response.status}), redirigiendo al dispatcher`)
+      await navigateTo('/', { replace: true })
     }
   } catch (err) {
     console.error('Error loading site by slug:', err)
+    // En caso de error, redirigir al dispatcher
+    await navigateTo('/', { replace: true })
   }
 }
 
-// Cargar sede desde URL al montar
+// Cargar sede desde URL al montar (validación inmediata)
 if (import.meta.client && sedeFromRoute.value) {
-  loadSiteFromUrl()
+  loadSiteFromUrl().catch((err) => {
+    console.error('[Sede] Error en validación inicial:', err)
+    // Si falla la validación inicial, redirigir al dispatcher
+    navigateTo('/', { replace: true })
+  })
 }
 
 /* ==========================

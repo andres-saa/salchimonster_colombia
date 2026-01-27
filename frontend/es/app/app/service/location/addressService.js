@@ -1,5 +1,5 @@
 // Address validation service using LocationManager API
-const API_BASE_URL = 'http://localhost:8000/api'
+const API_BASE_URL = 'https://location-manager.salchimonster.com/api'
 
 /** 
  * Check address validation
@@ -71,7 +71,7 @@ export async function checkAddress({ address, country = 'colombia', city }) {
     // Si es un error de red (CORS, conexión, etc.)
     if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
       console.error('Error de conexión con el servidor de LocationManager:', error)
-      throw new Error('No se pudo conectar con el servidor de validación de direcciones. Verifica que el servidor esté corriendo en localhost:8000')
+      throw new Error('No se pudo conectar con el servidor de validación de direcciones.')
     }
     console.error('Error checking address:', error)
     throw error
