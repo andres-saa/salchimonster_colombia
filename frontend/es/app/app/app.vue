@@ -30,8 +30,8 @@
 import { onMounted, onBeforeUnmount, watch, nextTick, computed } from '#imports'
 import { useRoute, useRouter, useRequestURL } from '#imports'
 import { useSitesStore, useUserStore, usecartStore } from '#imports'
-import { useSedeFromSubdomain } from '#imports'
 import { URI } from './service/conection'
+// import { preloadAllSitesMenus } from './composables/useMenuPreloader' // Desactivado: ya no se hace prerender de todas las sedes
 
 const siteStore = useSitesStore()
 const userStore = useUserStore()
@@ -318,18 +318,13 @@ function applyRestoredData(restoredData) {
 }
 
 // ------------------------------------------------------------------------
-// 5. HIDRATACIÓN DEL SITE (SUBDOMAIN)
+// 5. HIDRATACIÓN DEL SITE (SLUG)
 // ------------------------------------------------------------------------
-function getCurrentSubdomain() {
-  const sede = useSedeFromSubdomain()
-  return typeof sede === 'string' ? sede : sede?.value
-}
-
-async function fetchSiteBySubdomain(currentSede) {
-  if (!currentSede) return null
+async function fetchSiteBySlug(siteSlug) {
+  if (!siteSlug) return null
 
   try {
-    const response = await fetch(`${URI}/sites/subdomain/${currentSede}`)
+    const response = await fetch(`${URI}/sites/subdomain/${siteSlug}`)
     if (!response.ok) return null
 
     const data = await response.json()
@@ -347,7 +342,7 @@ async function fetchSiteBySubdomain(currentSede) {
     if (prevId !== newId) siteStore.initStatusWatcher()
     return siteData
   } catch (err) {
-    console.error('Error fetchSiteBySubdomain:', err)
+    console.error('Error fetchSiteBySlug:', err)
     return null
   }
 }
@@ -400,21 +395,38 @@ async function bootstrapFromUrl(reason = 'nav') {
       localStorage.setItem('session_external_data', JSON.stringify(sessionData))
     }
 
-    const currentSede = getCurrentSubdomain()
+    // Obtener slug de la URL (ya no usamos subdominios)
+    const { useSedeFromRoute } = await import('./composables/useSedeFromRoute')
+    const sedeFromRoute = useSedeFromRoute()
+    const siteSlug = sedeFromRoute.value
+    
     let siteLoadedFromHash = false
 
+    // ✅ Prioridad: Si hay datos en el store (viene del dispatcher), usarlos directamente
+    // Esto elimina la dependencia del hash para navegación interna
+    const hasStoreData = siteStore.location?.order_type && siteStore.location?.site?.site_id
+    
+    if (hasStoreData && reason !== 'popstate') {
+      // Los datos ya están en el store, solo hidratar sede desde la URL si es necesario
+      if (siteSlug) {
+        await fetchSiteBySlug(siteSlug)
+      }
+      siteLoadedFromHash = true // Marcar como cargado para evitar sobrescritura
+    }
+
     // ✅ Solo restaurar desde backend cuando tiene sentido:
-    // - primer load / refresh (mounted)
+    // - primer load / refresh (mounted) Y no hay datos en store
     // - back/forward (popstate)
-    // - viene un hash explícito en la URL (?hash=...)
+    // - viene un hash explícito en la URL (?hash=...) - para compatibilidad con links compartidos
     const urlHash = route.query.hash
-    const shouldRestoreFromBackend = reason === 'mounted' || reason === 'popstate' || !!urlHash
+    const shouldRestoreFromBackend = !hasStoreData && (reason === 'mounted' || reason === 'popstate' || !!urlHash)
 
     const storedHash = siteStore.session_hash
     const targetHash = urlHash || storedHash
     const isUrlHash = !!urlHash
 
     // 1) GET desde backend SOLO cuando toca (evita pisar carrito en navegación interna)
+    // El hash solo se usa para links compartidos, no como fuente principal de datos
     if (shouldRestoreFromBackend && targetHash) {
       try {
         const response = await fetch(`${URI}/data/${targetHash}`)
@@ -427,7 +439,10 @@ async function bootstrapFromUrl(reason = 'nav') {
           if (isUrlHash) siteStore.setSessionHash?.(urlHash)
           siteLoadedFromHash = true
 
-          await fetchSiteBySubdomain(currentSede)
+          // Hidratar sede desde la URL si hay slug
+          if (siteSlug) {
+            await fetchSiteBySlug(siteSlug)
+          }
 
           // limpia hash SOLO si venía en URL (link compartido)
           if (isUrlHash) {
@@ -446,9 +461,12 @@ async function bootstrapFromUrl(reason = 'nav') {
       }
     }
 
-    // 2) Fallback / Navegación interna: NO pisar estado, solo hidratar sede y limpiar credenciales si aplica
+    // 2) Fallback / Navegación interna: NO pisar estado, solo hidratar sede desde URL y limpiar credenciales si aplica
     if (!siteLoadedFromHash) {
-      await fetchSiteBySubdomain(currentSede)
+      // Hidratar sede desde la URL si hay slug
+      if (siteSlug) {
+        await fetchSiteBySlug(siteSlug)
+      }
 
       const needsCredClean = !!(qInsertedBy && qToken)
       const needsIframeClean = qiframe !== undefined
@@ -535,6 +553,14 @@ onMounted(() => {
     () => bootstrapFromUrl('route-watch'),
     { flush: 'post' }
   )
+
+  // Inicializar prerender de menús para todas las sedes en background
+  // Desactivado: ya no se hace prerender de todas las sedes
+  // if (process.client) {
+  //   preloadAllSitesMenus().catch(err => 
+  //     console.error('[App] Error inicializando prerender de menús:', err)
+  //   )
+  // }
 })
 
 onBeforeUnmount(() => {

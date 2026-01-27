@@ -160,7 +160,7 @@ onBeforeUnmount(() => {
   flex: 1 1 auto;
   min-height: 0;
   width: 100%;
-  max-width: 1600px;
+  max-width: 100vw;
   margin: 0 auto;
   display: flex;
 
@@ -169,7 +169,7 @@ onBeforeUnmount(() => {
 }
 
 @media (min-width: 2049px) {
-  .app-layout__shell { max-width: 1600px; margin: 0 auto; }
+  .app-layout__shell { max-width: 100vw; margin: 0 auto; }
   .app-layout__shell.app-layout__shell--full { max-width: none; margin: 0; }
 }
 

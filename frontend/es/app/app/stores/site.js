@@ -49,6 +49,7 @@ export const useSitesStore = defineStore(
       lat: null,
       lng: null,
       mode: 'barrios',
+      order_type: null, // Tipo de orden (delivery, pickup, etc.)
     })
 
     const visibles = ref({
@@ -110,9 +111,18 @@ export const useSitesStore = defineStore(
         location.value.place_id = data.place_id || ''
       if (data?.lat !== undefined) location.value.lat = data.lat ?? null
       if (data?.lng !== undefined) location.value.lng = data.lng ?? null
+      if (data?.order_type !== undefined) location.value.order_type = data.order_type
 
       current_delivery.value = price ?? 0
       visibles.value.currentSite = false
+    }
+
+    function setOrderType(orderType) {
+      location.value.order_type = orderType
+    }
+
+    function clearOrderType() {
+      location.value.order_type = null
     }
 
     function setVisible(item, value) {
@@ -217,6 +227,8 @@ export const useSitesStore = defineStore(
       setNeighborhoodPriceCero,
       fetchSiteStatus,
       initStatusWatcher,
+      setOrderType,
+      clearOrderType,
     }
   },
   // 3. CONFIGURACIÓN DEL PLUGIN DE PERSISTENCIA

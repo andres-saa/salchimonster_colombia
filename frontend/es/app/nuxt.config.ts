@@ -55,7 +55,15 @@ export default defineNuxtConfig({
         },
       
         components: {
-        include: ['Button', 'DataTable', 'Select']
+        // Solo incluir los componentes que realmente se usan (tree-shaking)
+        include: [
+            'Dialog',
+            'Select', 
+            'AutoComplete',
+            'InputText',
+            'Button',
+            'ProgressSpinner'
+        ]
     }
     },
     

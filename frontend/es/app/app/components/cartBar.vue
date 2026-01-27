@@ -1,6 +1,6 @@
 <template>
   <div
-    v-if="route.path === '/' || route.path === '/kids'"
+    v-if="isMenuPage"
     class="fixed-cart-bar background"
     :style="
       route.path !== '/kids'
@@ -45,14 +45,35 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
-import { useRoute, useRouter } from '#imports'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { useRoute } from '#imports'
 import { usecartStore } from '#imports'
 import { URI } from '@/service/conection'
+import { useSiteRouter } from '~/composables/useSiteRouter'
 
 const store = usecartStore()
 const route = useRoute()
-const router = useRouter()
+const { pushWithSite } = useSiteRouter()
+
+// Determinar si estamos en la página del menú (index de una sede)
+const isMenuPage = computed(() => {
+  const path = route.path || ''
+  
+  // Mostrar en: /, /kids
+  if (path === '/' || path === '/kids') return true
+  
+  // Verificar si es una ruta de sede sin subrutas (ej: /montes/, /montes/index)
+  const pathSegments = path.split('/').filter(Boolean)
+  
+  // Si tiene 1 segmento, es /{sede} - mostrar
+  if (pathSegments.length === 1) return true
+  
+  // Si tiene 2 segmentos y el segundo es 'index', es /{sede}/index - mostrar
+  if (pathSegments.length === 2 && pathSegments[1] === 'index') return true
+  
+  // No mostrar en ninguna otra ruta
+  return false
+})
 
 const showElement = ref(true)
 const vueMenu = ref(false)
@@ -81,7 +102,7 @@ onUnmounted(() => {
 })
 
 const enviarAlCarro = () => {
-  router.push('/cart')
+  pushWithSite('/cart')
 }
 </script>
 

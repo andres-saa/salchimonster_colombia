@@ -4,7 +4,8 @@ import { useSitesStore, useUserStore, useUIStore} from '#imports' // <-- 1. Impo
 
 const props = defineProps({
   categories: { type: Array, default: () => [] },
-  activeCategoryId: { type: [Number, String, null], default: null }
+  activeCategoryId: { type: [Number, String, null], default: null },
+  isLoadingLight: { type: Boolean, default: false }
 })
 
 const emit = defineEmits(['select-category'])
@@ -122,26 +123,49 @@ onBeforeUnmount(() => {
 
 
     <div class="menu-categories-bar__scroll" ref="containerRef">
-      <button
-        v-for="cat in categories"
-        :key="cat.category_id"
-        class="menu-categories-bar__item"
-        :class="{ 'menu-categories-bar__item--active': cat.category_id == activeCategoryId }"
-        :data-cat-pill-id="cat.category_id"
-        @click="onClickCategory(cat)"
-      >
-        <img 
-          v-if="cat.products[0]?.productogeneral_urlimagen"
-          class="menu-categories-bar__img"
-          :src="`https://img.restpe.com/${cat.products[0]?.productogeneral_urlimagen}`" 
-          alt=""
-        > 
-        <span class="menu-categories-bar__text">{{ formatLabel(cat.category_name) }}</span>   
-      </button>
-
-          <button style="height: 2.5rem;width: 2.5rem;width: 3rem; position: absolute;right: 0;border: none; background:linear-gradient(to left , white 90%, transparent);" type="button" class="action-btn search-btn" @click="handleSearch" title="Buscar">
-            <Icon name="mdi:magnify" class="action-icon" />
+      <ClientOnly>
+        <!-- Mostrar skeletons mientras se carga light -->
+        <template v-if="isLoadingLight">
+          <div
+            v-for="i in 5"
+            :key="`skeleton-${i}`"
+            class="menu-categories-bar__item menu-categories-bar__item--skeleton"
+          >
+            <div class="menu-categories-bar__skeleton-img"></div>
+            <div class="menu-categories-bar__skeleton-text"></div>
+          </div>
+        </template>
+        
+        <!-- Mostrar categorías reales cuando no se está cargando light -->
+        <template v-else>
+          <button
+            v-for="cat in categories"
+            :key="cat.category_id"
+            class="menu-categories-bar__item"
+            :class="{ 'menu-categories-bar__item--active': cat.category_id == activeCategoryId }"
+            :data-cat-pill-id="cat.category_id"
+            @click="onClickCategory(cat)"
+          >
+            <NuxtImg 
+              v-if="cat.products[0]?.productogeneral_urlimagen"
+              class="menu-categories-bar__img"
+              :src="`https://img.restpe.com/${cat.products[0]?.productogeneral_urlimagen}`" 
+              alt=""
+              format="webp"
+              width="100"
+              height="100"
+              sizes="(max-width: 768px) 28px, 24px"
+              quality="65"
+              loading="lazy"
+            /> 
+            <span class="menu-categories-bar__text">{{ formatLabel(cat.category_name) }}</span>   
           </button>
+        </template>
+      </ClientOnly>
+
+      <button style="height: 2.5rem;width: 2.5rem;width: 3rem; position: absolute;right: 0;border: none; background:linear-gradient(to left , white 90%, transparent);" type="button" class="action-btn search-btn" @click="handleSearch" title="Buscar">
+        <Icon name="mdi:magnify" class="action-icon" />
+      </button>
     </div>
   </div>
 </template>
@@ -152,6 +176,10 @@ onBeforeUnmount(() => {
   z-index: 99;
   background: #ffffff;
   border-bottom: 1px solid #e5e7eb;
+  width: 100%;
+  max-width: 1920px;
+  margin-left: auto;
+  margin-right: auto;
   
   /* IMPORTANTE: Eliminamos 'transition: top' para que no deslice. */
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
@@ -174,6 +202,7 @@ onBeforeUnmount(() => {
   display: flex;
   gap: 0.75rem;
   overflow-x: auto;
+  max-width: 1920px;
   /* scrollbar-width: none; */
   scroll-behavior: smooth;
 }
@@ -259,5 +288,40 @@ onBeforeUnmount(() => {
 }
 
 .action-icon { font-size: 1.4rem; }
+
+/* Skeleton para categorías mientras se carga light */
+.menu-categories-bar__item--skeleton {
+  pointer-events: none;
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+
+.menu-categories-bar__skeleton-img {
+  height: 1.5rem;
+  width: 1.5rem;
+  border-radius: 50%;
+  background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 50%, #e5e7eb 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s infinite;
+}
+
+.menu-categories-bar__skeleton-text {
+  height: 0.8rem;
+  width: 4rem;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 50%, #e5e7eb 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s infinite;
+  margin-left: 0.5rem;
+}
+
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
 
 </style>

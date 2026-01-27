@@ -455,7 +455,28 @@ const ensureValidOrderTypeForCurrentSite = () => {
   }
 }
 
-watch(() => user.user.order_type, (newType) => {
+watch(() => user.user.order_type, (newType, oldType) => {
+  // Limpiar dirección cuando se cambia de delivery a pickup o viceversa
+  const wasDelivery = oldType && ![2, 6].includes(oldType.id)
+  const isPickup = newType && [2, 6].includes(newType.id)
+  const wasPickup = oldType && [2, 6].includes(oldType.id)
+  const isDelivery = newType && ![2, 6].includes(newType?.id)
+  
+  if ((wasDelivery && isPickup) || (wasPickup && isDelivery)) {
+    // Limpiar dirección al cambiar entre delivery y pickup
+    user.user.address = null
+    user.user.lat = null
+    user.user.lng = null
+    user.user.place_id = null
+    user.user.site = null
+    // Resetear neighborhood pero mantener la estructura
+    if (siteStore.location.neigborhood) {
+      siteStore.location.neigborhood.delivery_price = 0
+      siteStore.location.neigborhood.name = ''
+      siteStore.location.neigborhood.neighborhood_id = null
+    }
+  }
+  
   if (newType?.id === 2 || newType?.id === 6) {
     siteStore.location.neigborhood.delivery_price = 0
   } else {
@@ -470,6 +491,26 @@ watch(() => user.user.order_type, (newType) => {
     user.user.payment_method_option = null
   }
 })
+
+// Limpiar dirección cuando cambia la sede o el modo (barrios a google o viceversa)
+watch(
+  () => [siteStore.location?.site?.site_id, siteStore.location?.mode],
+  ([newSiteId, newMode], [oldSiteId, oldMode]) => {
+    // Si cambia la sede o el modo, limpiar dirección (solo si estamos en modo delivery)
+    const isDelivery = user.user.order_type && ![2, 6].includes(user.user.order_type.id)
+    if (isDelivery && (newSiteId !== oldSiteId || newMode !== oldMode)) {
+      user.user.address = null
+      user.user.lat = null
+      user.user.lng = null
+      user.user.place_id = null
+      user.user.site = null
+      // No limpiar completamente neigborhood, solo resetear delivery_price
+      if (siteStore.location.neigborhood) {
+        siteStore.location.neigborhood.delivery_price = null
+      }
+    }
+  }
+)
 
 /* ================= CUPONES ================= */
 const have_discount = computed({

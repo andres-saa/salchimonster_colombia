@@ -35,6 +35,7 @@
                 v-model="addressQuery"
                 :placeholder="t('address_placeholder')"
                 @input="onSearchInput"
+                @keyup.enter="validateAddress"
                 autocomplete="off"
                 ref="addressInputRef"
               />
@@ -43,18 +44,17 @@
               </button>
             </div>
 
-            <ul
-              v-if="showAddressSuggestions && dir_options.length > 0 && !tempSiteData?.site_id"
-              class="suggestions-list"
+            <button
+              v-if="addressQuery.trim().length >= 3"
+              @click="validateAddress"
+              :disabled="isValidating"
+              class="btn-validate-address"
+              style="width: 100%; margin-bottom: 1rem;"
             >
-              <li v-for="item in dir_options" :key="item.place_id" @click="onAddressSelect(item)">
-                <div class="suggestion-icon"><Icon name="mdi:map-marker-outline" /></div>
-                <div class="suggestion-content">
-                  <span class="main">{{ item.structured_formatting?.main_text || item.description }}</span>
-                  <span class="sub">{{ item.structured_formatting?.secondary_text }}</span>
-                </div>
-              </li>
-            </ul>
+              <Icon v-if="!isValidating" name="mdi:map-search-outline" size="1.2em" />
+              <Icon v-else name="svg-spinners:90-ring-with-bg" size="1.2em" />
+              <span>{{ isValidating ? (lang === 'en' ? 'Validating...' : 'Validando...') : (lang === 'en' ? 'Validate Address' : 'Validar Dirección') }}</span>
+            </button>
 
             <div v-if="isValidating" class="loading-state">
               <Icon name="svg-spinners:90-ring-with-bg" size="32" />
@@ -384,6 +384,9 @@ import { usecartStore, useSitesStore, useUserStore } from '#imports'
 import { URI } from '~/service/conection'
 import { buildCountryOptions } from '~/service/utils/countries'
 import { parsePhoneNumberFromString } from 'libphonenumber-js/min'
+import { checkAddress } from '~/service/location/addressService'
+import { useSiteRouter } from '~/composables/useSiteRouter'
+import { getSiteSlug } from '~/composables/useSedeFromRoute'
 
 /* ================= STORES ================= */
 const user = useUserStore()
@@ -432,7 +435,6 @@ const getErrorDetail = (payload) => {
 }
 
 /* ================= Config ================= */
-const uri_api_google = 'https://api.locations.salchimonster.com'
 const sitePaymentsComplete = ref([])
 const MAIN_DOMAIN = 'salchimonster.com'
 
@@ -531,64 +533,157 @@ const closeModal = () => {
   sessionToken.value = null
 }
 
-const onSearchInput = async () => {
+const onSearchInput = () => {
+  // Solo limpiar resultados cuando el usuario escribe, no validar automáticamente
   tempSiteData.value = null
-  showAddressSuggestions.value = true
-
-  if (!addressQuery.value.trim()) {
-    dir_options.value = []
-    return
-  }
-
-  const city = siteStore.location?.site?.city_name || ''
-  const params = new URLSearchParams({
-    input: addressQuery.value,
-    session_token: sessionToken.value,
-    language: lang.value,
-    city,
-    limit: '5'
-  })
-
-  try {
-    const res = await (await fetch(`${uri_api_google}/co/places/autocomplete?${params}`)).json()
-    dir_options.value = (res.predictions || res).filter((p) => p?.place_id)
-  } catch (e) {
-    dir_options.value = []
-  }
+  showAddressSuggestions.value = false
+  dir_options.value = []
 }
 
 const clearSearch = () => {
   addressQuery.value = ''
-  onSearchInput()
+  tempSiteData.value = null
+  dir_options.value = []
+  showAddressSuggestions.value = false
 }
 
-const onAddressSelect = async (item) => {
-  if (!item?.place_id) return
+const validateAddress = async () => {
+  const address = addressQuery.value.trim()
+  if (address.length < 3) {
+    tempSiteData.value = null
+    return
+  }
 
   isValidating.value = true
-  showAddressSuggestions.value = false
-  addressQuery.value = item.description
+  tempSiteData.value = null
 
   try {
-    const params = new URLSearchParams({
-      place_id: item.place_id,
-      session_token: sessionToken.value,
-      language: lang.value
-    })
-    const details = await (await fetch(`${uri_api_google}/co/places/coverage-details?${params}`)).json()
+    // Intentar obtener la ciudad de múltiples fuentes
+    let cityName = siteStore.location?.site?.city_name || 
+                   siteStore.location?.city?.city_name ||
+                   siteStore.location?.site?.city ||
+                   null
 
-    tempSiteData.value = {
-      ...details,
-      formatted_address: details.formatted_address || item.description,
-      status: 'checked',
-      in_coverage: !details.error && details.nearest?.in_coverage
+    // Si no hay ciudad en el store, intentar extraer de la dirección o usar "Bogotá" como fallback
+    if (!cityName) {
+      // Intentar detectar ciudad común en la dirección
+      const addressLower = address.toLowerCase()
+      if (addressLower.includes('bogotá') || addressLower.includes('bogota')) {
+        cityName = 'Bogotá'
+      } else if (addressLower.includes('medellín') || addressLower.includes('medellin')) {
+        cityName = 'Medellín'
+      } else if (addressLower.includes('cali')) {
+        cityName = 'Cali'
+      } else if (addressLower.includes('barranquilla')) {
+        cityName = 'Barranquilla'
+      } else {
+        // Fallback: usar "Bogotá" como ciudad por defecto si no se puede determinar
+        cityName = 'Bogotá'
+      }
     }
-  } catch (e) {
+
+    const result = await checkAddress({
+      address,
+      country: 'colombia',
+      city: cityName
+    })
+
+    // Transformar la respuesta al formato esperado
+    if (result && result.latitude && result.longitude) {
+      // Encontrar la sede más cercana desde los polígonos que coinciden
+      let nearestSite = null
+      let minDistance = Infinity
+      let inCoverage = false
+
+      if (result.matching_polygons && result.matching_polygons.length > 0) {
+        // Obtener el primer polígono que coincide y tiene una sede
+        const matchingPolygon = result.matching_polygons.find(p => p.is_inside && p.site)
+        if (matchingPolygon && matchingPolygon.site) {
+          const site = matchingPolygon.site
+          nearestSite = {
+            site_id: site.site_id,
+            site_name: site.site_name,
+            subdomain: site.subdomain || null,
+            city_id: site.city_id || null,
+            city: site.city_name || null,
+            site_address: site.site_address || null
+          }
+          inCoverage = matchingPolygon.is_inside
+          
+          // Calcular distancia aproximada
+          if (result.latitude && result.longitude && site.location) {
+            const [siteLat, siteLng] = site.location
+            const R = 6371 // Radio de la Tierra en km
+            const dLat = (siteLat - result.latitude) * Math.PI / 180
+            const dLng = (siteLng - result.longitude) * Math.PI / 180
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                      Math.cos(result.latitude * Math.PI / 180) * Math.cos(siteLat * Math.PI / 180) *
+                      Math.sin(dLng/2) * Math.sin(dLng/2)
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
+            minDistance = R * c
+          }
+        }
+      }
+
+      // Si no hay polígono coincidente, usar la sede actual
+      if (!nearestSite && siteStore.location?.site) {
+        const currentSite = siteStore.location.site
+        nearestSite = {
+          site_id: currentSite.site_id,
+          site_name: currentSite.site_name,
+          subdomain: currentSite.subdomain,
+          city_id: currentSite.city_id,
+          city: currentSite.city_name,
+          site_address: currentSite.site_address
+        }
+        inCoverage = result.is_inside_any
+      }
+
+      // Obtener el costo de domicilio de Rappi si está disponible
+      let deliveryCost = 0
+      if (result.rappi_validation && result.rappi_validation.estimated_price) {
+        deliveryCost = Number(result.rappi_validation.estimated_price) || 0
+      }
+
+      tempSiteData.value = {
+        formatted_address: result.formatted_address || result.address,
+        address: result.address,
+        lat: result.latitude,
+        lng: result.longitude,
+        geocoded: result.geocoded,
+        is_inside_any: result.is_inside_any,
+        delivery_cost_cop: deliveryCost,
+        rappi_validation: result.rappi_validation,
+        status: 'checked',
+        in_coverage: inCoverage || result.is_inside_any,
+        nearest: nearestSite ? {
+          site: nearestSite,
+          distance_km: minDistance,
+          in_coverage: inCoverage || result.is_inside_any
+        } : null,
+        distance_miles: minDistance.toFixed(1)
+      }
+    } else {
+      tempSiteData.value = {
+        status: 'checked',
+        in_coverage: false,
+        error: { 
+          message_es: 'No se pudo geocodificar la dirección. Intenta con una dirección más específica.',
+          message_en: 'Could not geocode the address. Please try a more specific address.'
+        },
+        formatted_address: address
+      }
+    }
+  } catch (error) {
+    console.error('Error validating address:', error)
     tempSiteData.value = {
       status: 'checked',
       in_coverage: false,
-      error: { message_es: 'Error de conexión', message_en: 'Connection error' },
-      formatted_address: item.description
+      error: { 
+        message_es: error.message || 'Error validando dirección.',
+        message_en: error.message || 'Error validating address.'
+      },
+      formatted_address: addressQuery.value
     }
   } finally {
     isValidating.value = false
@@ -616,18 +711,25 @@ const applySiteSelection = (data) => {
   user.user.address = data.formatted_address
   user.user.lat = data.lat
   user.user.lng = data.lng
-  user.user.place_id = data.place_id
+  user.user.place_id = data.place_id || null
 
   // sitio real
   siteStore.location.site = data.nearest?.site || siteStore.location.site
   store.address_details = data
 
-  if (data.delivery_cost_cop != null) {
-    siteStore.location.neigborhood.delivery_price = data.delivery_cost_cop
+  // Usar el costo de Rappi si está disponible, sino el que viene en data
+  const deliveryCost = data.rappi_validation?.estimated_price 
+    ? Number(data.rappi_validation.estimated_price)
+    : (data.delivery_cost_cop != null ? data.delivery_cost_cop : 0)
+
+  if (deliveryCost != null) {
+    siteStore.location.neigborhood.delivery_price = deliveryCost
   }
 
   ensureValidOrderTypeForCurrentSite()
 }
+
+const { pushWithSite } = useSiteRouter()
 
 const handleSiteChange = async (newData) => {
   isRedirecting.value = true
@@ -635,44 +737,45 @@ const handleSiteChange = async (newData) => {
   targetSiteName.value = site?.site_name || 'Nueva Sede'
 
   try {
-    const hash = generateUUID()
+    // Actualizar el store con toda la información de la nueva sede
+    const deliveryPrice = newData.rappi_validation?.estimated_price 
+      ? Number(newData.rappi_validation.estimated_price)
+      : (newData.delivery_cost_cop != null ? newData.delivery_cost_cop : 0)
 
-    const payload = {
-      user: {
-        ...user.user,
-        site: newData,
-        address: newData.formatted_address,
-        lat: newData.lat,
-        lng: newData.lng,
-        place_id: newData.place_id
-      },
-      cart: store.cart,
-      site_location: site,
-      discount: store.applied_coupon || null,
-      coupon_ui: store.coupon_ui || null,
-      coupon_code: store.applied_coupon?.code || store.coupon_ui?.draft_code || null
+    // Actualizar location en el store
+    siteStore.updateLocation({
+      site: site,
+      city: newData.city || null,
+      address_details: newData,
+      formatted_address: newData.formatted_address || '',
+      place_id: newData.place_id || '',
+      lat: newData.lat || null,
+      lng: newData.lng || null,
+      mode: 'google',
+      order_type: siteStore.location?.order_type || null
+    }, deliveryPrice)
+
+    // Actualizar user store
+    user.user = {
+      ...user.user,
+      site: newData,
+      address: newData.formatted_address,
+      lat: newData.lat,
+      lng: newData.lng,
+      place_id: newData.place_id
     }
 
-    await fetch(`${URI}/data/${hash}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    })
-
-    const subdomain = site?.subdomain
-    if (!subdomain) {
+    // Obtener el slug de la sede para navegar
+    const siteSlug = getSiteSlug(site?.site_name || '')
+    
+    if (!siteSlug) {
       alert('Lo sentimos, no pudimos localizar la dirección web de esta sede.')
       isRedirecting.value = false
       return
     }
 
-    const isDev = window.location.hostname.includes('localhost')
-    const protocol = window.location.protocol
-    const targetUrl = isDev
-      ? `${protocol}//${subdomain}.localhost:3000/pay?hash=${hash}`
-      : `https://${subdomain}.${MAIN_DOMAIN}/pay?hash=${hash}`
-
-    window.location.href = targetUrl
+    // Navegar usando el sistema de rutas con slugs
+    pushWithSite('/pay')
   } catch (error) {
     console.error('Error switching site:', error)
     alert('Ocurrió un error al cambiar de sede. Intenta nuevamente.')
@@ -790,18 +893,66 @@ const ensureValidOrderTypeForCurrentSite = () => {
 
 watch(
   () => user.user.order_type,
-  (newType) => {
+  (newType, oldType) => {
+    // Limpiar dirección cuando se cambia de delivery a pickup o viceversa
+    const wasDelivery = oldType && ![2, 6].includes(oldType.id)
+    const isPickup = newType && [2, 6].includes(newType.id)
+    const wasPickup = oldType && [2, 6].includes(oldType.id)
+    const isDelivery = newType && ![2, 6].includes(newType?.id)
+    
+    if ((wasDelivery && isPickup) || (wasPickup && isDelivery)) {
+      // Limpiar dirección al cambiar entre delivery y pickup
+      user.user.address = null
+      user.user.lat = null
+      user.user.lng = null
+      user.user.place_id = null
+      user.user.site = null
+      // Resetear neighborhood pero mantener la estructura
+      if (siteStore.location.neigborhood) {
+        siteStore.location.neigborhood.delivery_price = 0
+        siteStore.location.neigborhood.name = ''
+        siteStore.location.neigborhood.neighborhood_id = null
+      }
+    }
+    
     if (newType?.id === 2 || newType?.id === 6) {
       siteStore.location.neigborhood.delivery_price = 0
     } else {
-      const cost = user.user.site?.delivery_cost_cop ?? siteStore?.delivery_price
-      if (cost != null) siteStore.location.neigborhood.delivery_price = cost
+      // Priorizar el costo de Rappi si está disponible
+      const rappiCost = user.user.site?.rappi_validation?.estimated_price
+      const deliveryCost = rappiCost 
+        ? Number(rappiCost)
+        : (user.user.site?.delivery_cost_cop ?? siteStore?.delivery_price ?? 0)
+      
+      if (deliveryCost != null) {
+        siteStore.location.neigborhood.delivery_price = deliveryCost
+      }
     }
 
     const currentMethodId = user.user.payment_method_option?.id
     const availableMethods = computedPaymentOptions.value
     if (!availableMethods.some((m) => m.id === currentMethodId)) {
       user.user.payment_method_option = null
+    }
+  }
+)
+
+// Limpiar dirección cuando cambia la sede o el modo (barrios a google o viceversa)
+watch(
+  () => [siteStore.location?.site?.site_id, siteStore.location?.mode],
+  ([newSiteId, newMode], [oldSiteId, oldMode]) => {
+    // Si cambia la sede o el modo, limpiar dirección (solo si estamos en modo delivery)
+    const isDelivery = user.user.order_type && ![2, 6].includes(user.user.order_type.id)
+    if (isDelivery && (newSiteId !== oldSiteId || newMode !== oldMode)) {
+      user.user.address = null
+      user.user.lat = null
+      user.user.lng = null
+      user.user.place_id = null
+      user.user.site = null
+      // No limpiar completamente neigborhood, solo resetear delivery_price
+      if (siteStore.location.neigborhood) {
+        siteStore.location.neigborhood.delivery_price = null
+      }
     }
   }
 )
@@ -958,8 +1109,15 @@ onMounted(async () => {
     if (user.user.order_type?.id === 2 || user.user.order_type?.id === 6) {
       siteStore.location.neigborhood.delivery_price = 0
     } else {
-      const cost = user.user.site?.delivery_cost_cop ?? siteStore?.delivery_price
-      if (cost != null) siteStore.location.neigborhood.delivery_price = cost
+      // Priorizar el costo de Rappi si está disponible
+      const rappiCost = user.user.site?.rappi_validation?.estimated_price
+      const deliveryCost = rappiCost 
+        ? Number(rappiCost)
+        : (user.user.site?.delivery_cost_cop ?? siteStore?.delivery_price ?? 0)
+      
+      if (deliveryCost != null) {
+        siteStore.location.neigborhood.delivery_price = deliveryCost
+      }
     }
 
 
@@ -1272,6 +1430,32 @@ textarea.input-modern { resize: vertical; min-height: 80px; }
 .btn-primary { background: #000; color: #fff; }
 .btn-primary:disabled { background: #ccc; cursor: not-allowed; }
 .btn-secondary { background: transparent; color: #666; }
+
+.btn-validate-address {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.8rem 1rem;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+  transition: all 0.2s ease;
+}
+.btn-validate-address:hover {
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  box-shadow: 0 6px 15px rgba(59, 130, 246, 0.4);
+  transform: translateY(-1px);
+}
+.btn-validate-address:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
 
 .modal-fade-enter-active, .modal-fade-leave-active { transition: opacity 0.2s ease; }
 .modal-fade-enter-from, .modal-fade-leave-to { opacity: 0; }

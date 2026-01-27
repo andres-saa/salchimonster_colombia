@@ -19,8 +19,8 @@
       <ClientOnly>
         <div class="vicio-map-shell">
           <div id="vicio-map" class="vicio-map"></div>
-          <img src="/st-1.png" alt="Sticker 1" class="map-sticker map-sticker--top-left" loading="lazy" />
-          <img src="/st-2.png" alt="Sticker 2" class="map-sticker map-sticker--bottom-right" loading="lazy" />
+          <img src="/st-1.png" alt="Sticker 1" class="map-sticker map-sticker--top-left" />
+          <img src="/st-2.png" alt="Sticker 2" class="map-sticker map-sticker--bottom-right" />
         </div>
       </ClientOnly>
 
@@ -37,7 +37,7 @@
                 @click="setLang('es')"
                 aria-label="Español"
               >
-                <img class="lang-flag" :src="FLAGS.es" alt="ES" loading="lazy" />
+                <img class="lang-flag" :src="FLAGS.es" alt="ES" />
                 <span class="lang-label">ES</span>
               </button>
 
@@ -48,7 +48,7 @@
                 @click="setLang('en')"
                 aria-label="English"
               >
-                <img class="lang-flag" :src="FLAGS.en" alt="EN" loading="lazy" />
+                <img class="lang-flag" :src="FLAGS.en" alt="EN" />
                 <span class="lang-label">EN</span>
               </button>
             </div>
@@ -231,7 +231,6 @@
                 @error="onImgError(store)"
                 class="store-img"
                 :alt="t('store_photo_alt')"
-                loading="lazy"
               />
             </div>
 
@@ -477,8 +476,8 @@
 
 <script setup>
 import { ref, computed, onMounted, nextTick, watch, onBeforeUnmount } from 'vue'
-import { useRoute } from 'vue-router'
-import { useHead } from '#imports'
+import { useRoute, useRouter } from 'vue-router'
+import { useHead, useSitesStore, useUserStore } from '#imports'
 import 'leaflet/dist/leaflet.css'
 
 /* PrimeVue */
@@ -491,6 +490,9 @@ import ProgressSpinner from 'primevue/progressspinner'
 
 /* Address Service */
 import { checkAddress } from '~/service/location/addressService'
+
+/* Sede from route */
+import { getSiteSlug } from '~/composables/useSedeFromRoute'
 
 /* =======================
    i18n local + persistencia
@@ -623,9 +625,53 @@ function t(key) {
    CONFIG & STATE
    ======================= */
 const route = useRoute()
+const router = useRouter()
+const sitesStore = useSitesStore()
+const userStore = useUserStore()
+
+// Limpiar la sede actual cuando se monta el dispatcher (si el usuario llega a "/" es porque quiere cambiarla)
+onMounted(() => {
+  if (sitesStore.location?.site?.site_id && sitesStore.location?.order_type) {
+    // Limpiar order_type
+    sitesStore.clearOrderType()
+    
+    // Limpiar location (excepto valores por defecto)
+    sitesStore.updateLocation({
+      site: {
+        site_id: 1,
+        site_name: 'PRINCIPAL',
+        site_address: null,
+        site_phone: null,
+        city_id: 8,
+      },
+      city: null,
+      neigborhood: null,
+      address_details: null,
+      formatted_address: '',
+      place_id: '',
+      lat: null,
+      lng: null,
+      mode: 'barrios',
+      order_type: null
+    }, 0)
+    
+    // Limpiar user store
+    userStore.resetUser()
+    
+    // Limpiar campos del dispatcher
+    selectedCityId.value = 0
+    addressQuery.value = ''
+    selectedNeighborhood.value = null
+    paramExactAddress.value = ''
+    coverageResult.value = null
+    modalCoverageResult.value = null
+    nbSuggestions.value = []
+    selectedStoreId.value = null
+    dropoffMarker.value = null
+  }
+})
 const BACKEND_BASE = 'https://backend.salchimonster.com'
 const URI = 'https://backend.salchimonster.com'
-const MAIN_DOMAIN = 'salchimonster.com'
 
 const map = ref(null)
 const leafletModule = ref(null)
@@ -1395,26 +1441,23 @@ async function dispatchToSite(manualStore, orderTypeObj, extra = { mode: 'simple
   const isDelivery = Number(orderTypeObj?.id) === 3
 
   try {
-    const hash = (typeof crypto !== 'undefined' && crypto.randomUUID)
-      ? crypto.randomUUID()
-      : Date.now().toString(36).substring(2)
-
     let userSiteData = null
     let finalAddress = ''
     let finalLat = 0
     let finalLng = 0
     let finalPlaceId = ''
+    let deliveryPrice = 0
 
     if (isDelivery && useGoogleMaps && extra?.mode === 'gmaps' && extra?.coverageData) {
       const coverageData = extra.coverageData
       // Usar el costo de Rappi si está disponible, sino el que viene en coverageData
-      const deliveryCost = coverageData.rappi_validation?.estimated_price 
+      deliveryPrice = coverageData.rappi_validation?.estimated_price 
         ? Number(coverageData.rappi_validation.estimated_price)
         : (coverageData.delivery_cost_cop || 0)
       
       userSiteData = {
         ...coverageData,
-        delivery_cost_cop: deliveryCost,
+        delivery_cost_cop: deliveryPrice,
         formatted_address: coverageData.formatted_address,
         rappi_validation: coverageData.rappi_validation
       }
@@ -1427,15 +1470,16 @@ async function dispatchToSite(manualStore, orderTypeObj, extra = { mode: 'simple
     if (isDelivery && !useGoogleMaps && extra?.mode === 'params' && extra?.neighborhood) {
       const nb = extra.neighborhood
       finalAddress = (extra.exactAddress || '').toString()
+      deliveryPrice = Number(nb.delivery_price ?? 0)
       userSiteData = {
         formatted_address: finalAddress,
-        delivery_cost_cop: Number(nb.delivery_price ?? 0),
+        delivery_cost_cop: deliveryPrice,
         neighborhood: {
           ...nb,
           neighborhood_id: nb.neighborhood_id || nb.id,
           name: nb.name,
           site_id: nb.site_id,
-          delivery_price: Number(nb.delivery_price ?? 0),
+          delivery_price: deliveryPrice,
         },
         nearest: {
           in_coverage: true,
@@ -1443,7 +1487,6 @@ async function dispatchToSite(manualStore, orderTypeObj, extra = { mode: 'simple
           site: {
             site_id: targetStore.id || targetStore.site_id,
             site_name: (targetStore.name || targetStore.site_name || '').replace('SALCHIMONSTER ', ''),
-            subdomain: targetStore.subdomain,
             city_id: targetCityId,
             city: targetStore.city,
             site_address: targetStore.address
@@ -1452,62 +1495,64 @@ async function dispatchToSite(manualStore, orderTypeObj, extra = { mode: 'simple
       }
     }
 
-    const payload = {
-      user: {
-        name: '',
-        neigborhood: '',
-        payment_method_option: '',
-        phone_number: '',
+    // Preparar el objeto de sitio para el store
+    const siteData = {
+      site_id: targetStore.id || targetStore.site_id,
+      site_name: (targetStore.name || targetStore.site_name || '').replace('SALCHIMONSTER ', ''),
+      site_address: targetStore.address,
+      city_id: targetCityId,
+      city: targetStore.city,
+      site_phone: targetStore.site_phone || null,
+      subdomain: targetStore.subdomain || null // Guardar subdomain para búsqueda por slug
+    }
+
+    // Actualizar el store con toda la información
+    sitesStore.updateLocation({
+      site: siteData,
+      city: extra?.city || null,
+      neigborhood: extra?.mode === 'params' && extra?.neighborhood
+        ? {
+            ...extra.neighborhood,
+            neighborhood_id: extra.neighborhood.neighborhood_id || extra.neighborhood.id,
+            name: extra.neighborhood.name,
+            site_id: extra.neighborhood.site_id,
+            delivery_price: deliveryPrice,
+          }
+        : null,
+      address_details: userSiteData,
+      formatted_address: finalAddress,
+      place_id: finalPlaceId,
+      lat: finalLat,
+      lng: finalLng,
+      mode: isDelivery && !useGoogleMaps ? 'barrios' : 'google',
+      order_type: orderTypeObj
+    }, deliveryPrice)
+
+    // Guardar order_type en el store
+    sitesStore.setOrderType(orderTypeObj)
+
+    // Actualizar user store si es necesario
+    if (userSiteData) {
+      userStore.user = {
+        ...userStore.user,
         site: userSiteData,
         address: finalAddress,
         lat: finalLat,
         lng: finalLng,
         place_id: finalPlaceId,
-        order_type: orderTypeObj,
-        phone_code: { code: "CO", name: "Colombia", dialCode: "+57", flag: "https://flagcdn.com/h20/co.png", label: "+57", dialDigits: "57" }
-      },
-      location_meta: {
-        city: extra?.city || null,
-        neigborhood: extra?.mode === 'params'
-          ? {
-              ...extra.neighborhood,
-              neighborhood_id: extra.neighborhood.neighborhood_id || extra.neighborhood.id,
-              name: extra.neighborhood.name,
-              site_id: extra.neighborhood.site_id,
-              delivery_price: Number(extra.neighborhood.delivery_price ?? 0),
-            }
-          : null
-      },
-      cart: [],
-      site_location: {
-        site_id: targetStore.id || targetStore.site_id,
-        site_name: (targetStore.name || targetStore.site_name || '').replace('SALCHIMONSTER ', ''),
-        site_address: targetStore.address,
-        subdomain: targetStore.subdomain,
-        city: targetStore.city
-      },
-      timestamp: Date.now()
+        order_type: orderTypeObj
+      }
     }
 
-    const res = await fetch(`${URI}/data/${hash}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    })
-    if (!res.ok) throw new Error('Error saving session')
-
-    const subdomain = targetStore.subdomain || 'www'
-    const isDev = window.location.hostname.includes('localhost')
-    const protocol = window.location.protocol
-    const baseUrl = isDev ? `${protocol}//${subdomain}.localhost:3000` : `https://${subdomain}.${MAIN_DOMAIN}`
-
-    const params = new URLSearchParams()
-    params.append('hash', hash)
-    if (route.query.inserted_by) params.append('inserted_by', String(route.query.inserted_by))
-    if (route.query.token) params.append('token', String(route.query.token))
-    if (route.query.iframe) params.append('iframe', String(route.query.iframe))
-
-    window.location.href = `${baseUrl}/?${params.toString()}`
+    // Obtener el slug de la sede para la URL
+    const siteSlug = getSiteSlug(siteData.site_name)
+    
+    // Redirigir a la página de la sede: /modelia/, /suba/, etc.
+    if (siteSlug) {
+      await router.push(`/${siteSlug}/`)
+    } else {
+      await router.push('/')
+    }
   } catch (error) {
     console.error(error)
     isRedirecting.value = false
@@ -1637,7 +1682,7 @@ onMounted(async () => {
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap' }).addTo(map.value)
   const fireIcon = L.divIcon({
     className: 'leaflet-div-icon fire-icon',
-    html: `<img src="https://cdn.deliclever.com/viciocdn/ecommerce/icon-fire-color.gif" class="fire-img" style="width:100%;height:100%" loading="lazy"/>`,
+    html: `<img src="https://cdn.deliclever.com/viciocdn/ecommerce/icon-fire-color.gif" class="fire-img" style="width:100%;height:100%"/>`,
     iconSize: [42, 42]
   })
   dropoffIcon = L.icon({
@@ -1669,19 +1714,11 @@ onMounted(async () => {
    SEO
    ======================= */
 const pageTitle = computed(() => {
-  return 'Salchimonster Colombia - Menú · DOMICILIOS · Sedes · PEDÍ YA'
+  return 'Salchimonster Colombia'
 })
 
 const pageDescription = computed(() => {
-  return 'Salchimonster Colombia - La mejor salchipapa de Colombia. Pide a domicilio, encuentra tu sede más cercana. Menú completo, domicilios, sedes en todo Colombia. Pedidos online disponibles.'
-})
-
-const logoUrl = 'https://gestion.salchimonster.com/images/logo.png'
-const siteUrl = computed(() => {
-  if (typeof window !== 'undefined') {
-    return window.location.origin
-  }
-  return 'https://salchimonster.com'
+  return 'Elige tu Salchimonster más cercano y pide a domicilio. Encuentra la sede más cercana a tu ubicación en Colombia.'
 })
 
 useHead(() => ({
@@ -1689,69 +1726,12 @@ useHead(() => ({
   meta: [
     { name: 'description', content: pageDescription.value },
     { name: 'robots', content: 'index, follow' },
-    { name: 'keywords', content: 'salchimonster, salchipapa, domicilio, delivery, colombia, pedidos online, menú, sedes, restaurante, comida rápida, salchipapas, hamburguesas, perros calientes' },
-    // Open Graph
     { property: 'og:title', content: pageTitle.value },
     { property: 'og:description', content: pageDescription.value },
     { property: 'og:type', content: 'website' },
-    { property: 'og:url', content: `${siteUrl.value}${route.fullPath}` },
-    { property: 'og:image', content: logoUrl },
-    { property: 'og:image:width', content: '1200' },
-    { property: 'og:image:height', content: '630' },
-    { property: 'og:image:alt', content: 'Salchimonster Logo' },
-    { property: 'og:site_name', content: 'Salchimonster' },
-    { property: 'og:locale', content: 'es_CO' },
-    // Twitter Card
     { name: 'twitter:card', content: 'summary_large_image' },
     { name: 'twitter:title', content: pageTitle.value },
-    { name: 'twitter:description', content: pageDescription.value },
-    { name: 'twitter:image', content: logoUrl },
-    { name: 'twitter:image:alt', content: 'Salchimonster Logo' },
-    // Additional SEO
-    { name: 'author', content: 'Salchimonster' },
-    { name: 'language', content: 'es' },
-    { name: 'geo.region', content: 'CO' },
-    { name: 'geo.placename', content: 'Colombia' },
-    { name: 'application-name', content: 'Salchimonster' }
-  ],
-  link: [
-    { rel: 'canonical', href: `${siteUrl.value}${route.fullPath}` },
-    { rel: 'sitemap', type: 'application/xml', href: '/sitemap.xml' }
-  ],
-  script: [
-    {
-      type: 'application/ld+json',
-      children: JSON.stringify({
-        '@context': 'https://schema.org',
-        '@type': 'BreadcrumbList',
-        itemListElement: [
-          {
-            '@type': 'ListItem',
-            position: 1,
-            name: 'Inicio',
-            item: siteUrl.value
-          },
-          {
-            '@type': 'ListItem',
-            position: 2,
-            name: 'Menú',
-            item: `${siteUrl.value}/menu`
-          },
-          {
-            '@type': 'ListItem',
-            position: 3,
-            name: 'Domicilios',
-            item: `${siteUrl.value}/domicilios`
-          },
-          {
-            '@type': 'ListItem',
-            position: 4,
-            name: 'Sedes',
-            item: `${siteUrl.value}/sedes`
-          }
-        ]
-      })
-    }
+    { name: 'twitter:description', content: pageDescription.value }
   ]
 }))
 </script>

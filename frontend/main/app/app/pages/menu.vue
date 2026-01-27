@@ -50,7 +50,7 @@
       <Transition name="fade">
         <div v-if="zoomedImage" class="lightbox-overlay" @click="closeZoom">
           <button class="close-btn">&times;</button>
-          <img :src="zoomedImage" class="lightbox-image" @click.stop />
+          <img :src="zoomedImage" class="lightbox-image" @click.stop loading="lazy" />
         </div>
       </Transition>
     </Teleport>
@@ -67,6 +67,7 @@
           class="fab-icon"
           :src="`${URI}/read-photo-product/5Dqs9XtT`"
           alt="Promos"
+          loading="lazy"
         >
       </div>
     </a>

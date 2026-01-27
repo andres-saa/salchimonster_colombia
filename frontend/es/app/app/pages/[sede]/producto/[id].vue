@@ -301,6 +301,9 @@ const { showToast } = useToast()
 const sitesStore = useSitesStore()
 const userStore = useUserStore()
 
+// ✅ Inicializar useSiteRouter en setup para evitar errores de contexto
+const { pushWithSite, getCurrentSiteSlug, replaceWithSite } = useSiteRouter()
+
 // ==========================
 // ✅ Lower en JS + Capitalize en CSS
 // ==========================
@@ -762,8 +765,6 @@ const processAddToCart = (mode) => {
   }
 
   store.addProductToCart(currentProduct.value, quantity.value, Object.values(selectedAdditions.value))
-
-  const { pushWithSite, getCurrentSiteSlug } = useSiteRouter()
   
   if (mode === 'ask') {
     showPostActionModal.value = true
@@ -805,7 +806,6 @@ const completeMobileAction = (destination) => {
 }
 
 const goBack = () => {
-  const { getCurrentSiteSlug } = useSiteRouter()
   const siteSlug = getCurrentSiteSlug()
   if (siteSlug) {
     router.push(`/${siteSlug}/`)
@@ -815,7 +815,6 @@ const goBack = () => {
 }
 
 const goToRelative = (step) => {
-  const { getCurrentSiteSlug, replaceWithSite } = useSiteRouter()
   const list = flatProducts.value
   const idx = list.findIndex((p) => Number(p.producto_id) === currentProductId.value)
   if (idx === -1) return

@@ -210,16 +210,24 @@ useHead({
 
 const deliveryPrice = computed({
   get: () => {
-    // 1) Barrios (lo normal)
+    // 1) Priorizar Rappi validation (nuevo sistema LocationManager)
+    const ad = store.address_details || siteStore.location?.address_details
+    if (ad?.rappi_validation?.estimated_price != null) {
+      return Number(ad.rappi_validation.estimated_price) || 0
+    }
+    
+    // 2) Barrios (lo normal)
     const nb = siteStore.location?.neigborhood
     if (nb && nb.delivery_price != null) return Number(nb.delivery_price) || 0
 
-    // 2) Google (coverage-details)
-    const ad = store.address_details || siteStore.location?.address_details
+    // 3) Google (coverage-details) - delivery_cost_cop
     if (ad && ad.delivery_cost_cop != null) return Number(ad.delivery_cost_cop) || 0
 
-    // 3) fallback extra (por si lo guardaste en user.site)
+    // 4) fallback extra (por si lo guardaste en user.site)
     const u = user.user?.site
+    if (u?.rappi_validation?.estimated_price != null) {
+      return Number(u.rappi_validation.estimated_price) || 0
+    }
     if (u && u.delivery_cost_cop != null) return Number(u.delivery_cost_cop) || 0
 
     return 0

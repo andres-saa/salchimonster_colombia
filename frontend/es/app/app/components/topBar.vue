@@ -9,6 +9,8 @@ import {
   useUIStore,
   texts
 } from '#imports'
+import { getSiteSlug } from '~/composables/useSedeFromRoute'
+import { useFetch } from '#imports'
 
 const uistore = useUIStore()
 const route = useRoute()
@@ -58,20 +60,24 @@ const setLang = (lang) => {
 // --- refs para menús / "Más" ---
 const menusContainerRef = ref(null)
 const moreButtonRef = ref(null)
+const moreMenuRef = ref(null)
 
-const visibleMenus = ref([])
-const overflowMenus = ref([])
+// Inicializar con menús por defecto para SSR (asegurar que se muestren desde el inicio)
+// En móvil siempre mostramos 4 menús, así que inicializamos con 4
+const visibleMenus = ref([
+  { label: 'Domicilios', to: '/', isSpecial: true },
+  { label: 'Sedes', to: '/sedes' },
+  { label: 'Carta', to: '/carta' },
+  { label: 'Rastrear', to: '/rastrear' }
+])
+const overflowMenus = ref([
+  { label: 'Ayuda', to: '/pqr' }
+])
 const isMoreOpen = ref(false)
 const windowWidth = ref(0)
 
-// CONFIG: cuántos menús según ancho
-const menuVisibilityConfig = [
-  { maxWidth: 900, visible: 2 },
-  { maxWidth: 1024, visible: 3 },
-  { maxWidth: 1070, visible: 4 },
-  { maxWidth: 1280, visible: 5 },
-  { maxWidth: Infinity, visible: 'all' }
-]
+// En desktop siempre mostrar 4 menús y el resto en "Más"
+// En móvil se usa el burger menu, no se muestran menús aquí
 
 // --- LÓGICA DE AUTENTICACIÓN Y NAVEGACIÓN EXTERNA ---
 
@@ -139,12 +145,22 @@ const toggleProfile = () => {
 }
 
 // --- MENÚS DINÁMICOS ---
+// Ruta de domicilios reactiva: si hay sede, ir a /{sede}/, sino a /
+const domiciliosRoute = computed(() => {
+  if (siteStore.location?.site?.site_id && siteStore.location?.order_type) {
+    const siteName = siteStore.location.site.site_name || ''
+    const slug = getSiteSlug(siteName)
+    return slug ? `/${slug}/` : '/'
+  }
+  return '/'
+})
+
 const menusAll = computed(() => {
   const langKey = (user.lang?.name || 'es').toLowerCase()
   const t = texts[langKey]?.menus || {}
 
   const menusPublicos = [
-    { label: t.domicilios || 'Domicilios', to: '/' },
+    { label: t.domicilios || 'Domicilios', to: domiciliosRoute.value, isSpecial: true },
     { label: t.sedes || 'Sedes', to: `/sedes` },
     { label: t.carta || 'Carta', to: `/carta` },
     { label: t.rastrear || 'Rastrear', to: `/rastrear` },
@@ -156,7 +172,7 @@ const menusAll = computed(() => {
   ]
 
   const menusLogueados = [
-    { label: 'Menu', to: '/' },
+    { label: 'Menu', to: domiciliosRoute.value, isSpecial: true },
     { label: t.rastrear || 'Rastrear', to: `/rastrear` }
   ]
 
@@ -177,19 +193,101 @@ const defaultSocialLinks = [
 
 // ✅ API: redes por país
 const SOCIAL_LINKS_API = 'https://backend.salchimonster.com/data/social_links_by_country_v1'
-const socialLinksDB = ref(null)
 
-const fetchSocialLinksDB = async () => {
+// Cache para social links con TTL de 5 minutos
+const SOCIAL_LINKS_CACHE_KEY = 'topbar-social-links-cache'
+const SOCIAL_LINKS_CACHE_TTL = 5 * 60 * 1000 // 5 minutos
+let socialLinksRefreshInterval = null
+
+const loadSocialLinksFromCache = () => {
+  if (!import.meta.client) return null
   try {
-    const res = await fetch(SOCIAL_LINKS_API).then(r => r.json())
-
-    // soporta: { data: { co:[], us:[], es:[] } } o directamente { co:[], us:[], es:[] }
-    const payload = res?.data && typeof res.data === 'object' ? res.data : res
-    socialLinksDB.value = payload && typeof payload === 'object' ? payload : null
+    const cached = localStorage.getItem(SOCIAL_LINKS_CACHE_KEY)
+    if (cached) {
+      const { data, timestamp } = JSON.parse(cached)
+      const age = Date.now() - timestamp
+      if (age < SOCIAL_LINKS_CACHE_TTL) {
+        return data
+      }
+    }
   } catch (e) {
-    console.error('Error cargando social_links_by_country_v1:', e)
-    socialLinksDB.value = null
+    console.error('Error leyendo caché de social links:', e)
   }
+  return null
+}
+
+const saveSocialLinksToCache = (data) => {
+  if (!import.meta.client) return
+  try {
+    localStorage.setItem(SOCIAL_LINKS_CACHE_KEY, JSON.stringify({
+      data,
+      timestamp: Date.now()
+    }))
+  } catch (e) {
+    console.error('Error guardando caché de social links:', e)
+  }
+}
+
+// Usar useFetch para prerenderizado en SSR y actualización periódica
+const { data: socialLinksData, refresh: refreshSocialLinks } = useFetch(SOCIAL_LINKS_API, {
+  key: 'topbar-social-links',
+  server: true,
+  default: () => {
+    // Cargar desde caché local si está disponible (para prerenderizado)
+    if (import.meta.client) {
+      const cached = loadSocialLinksFromCache()
+      return cached ? { data: cached } : null
+    }
+    return null
+  }
+})
+
+// Computed para extraer los datos del formato de respuesta
+const socialLinksDB = computed(() => {
+  if (!socialLinksData.value) {
+    // Si no hay datos de useFetch, intentar desde caché local
+    if (import.meta.client) {
+      const cached = loadSocialLinksFromCache()
+      return cached
+    }
+    return null
+  }
+  // soporta: { data: { co:[], us:[], es:[] } } o directamente { co:[], us:[], es:[] }
+  const payload = socialLinksData.value?.data && typeof socialLinksData.value.data === 'object' 
+    ? socialLinksData.value.data 
+    : socialLinksData.value
+  return payload && typeof payload === 'object' ? payload : null
+})
+
+// Persistir en caché cuando se actualicen los datos de useFetch
+if (import.meta.client) {
+  watch(
+    socialLinksData,
+    (val) => {
+      if (val) {
+        // Extraer los datos del formato de respuesta
+        const payload = val?.data && typeof val.data === 'object' 
+          ? val.data 
+          : val
+        if (payload && typeof payload === 'object') {
+          saveSocialLinksToCache(payload)
+        }
+      }
+    },
+    { immediate: true }
+  )
+}
+
+// Función para actualizar periódicamente cada 5 minutos
+const startSocialLinksRefresh = () => {
+  if (!import.meta.client) return
+  if (socialLinksRefreshInterval) {
+    clearInterval(socialLinksRefreshInterval)
+  }
+  
+  socialLinksRefreshInterval = setInterval(() => {
+    refreshSocialLinks() // Actualizar usando useFetch refresh
+  }, SOCIAL_LINKS_CACHE_TTL)
 }
 
 // ✅ socialLinks: primero DB, si no, fallback Colombia
@@ -223,33 +321,28 @@ const handleResize = () => {
   }
 }
 
-const getVisibleCountForWidth = (width, totalMenus) => {
-  const rule =
-    menuVisibilityConfig.find((rule) => width <= rule.maxWidth) ||
-    menuVisibilityConfig[menuVisibilityConfig.length - 1]
-  if (rule.visible === 'all') return totalMenus
-  return Math.min(rule.visible, totalMenus)
-}
+// Función eliminada - ya no se necesita cálculo dinámico
+// En desktop siempre mostramos 4 menús
 
 const recalcMenus = () => {
   const allMenus = menusAll.value
   if (!windowWidth.value) {
-    visibleMenus.value = allMenus
-    overflowMenus.value = []
-    isMoreOpen.value = false
+    // En SSR o sin windowWidth, mostrar 4 menús (para desktop)
+    visibleMenus.value = allMenus.slice(0, 4)
+    overflowMenus.value = allMenus.slice(4)
     return
   }
   if (windowWidth.value <= 900) {
-    visibleMenus.value = allMenus
+    // En móvil ocultar menús, se usa el burger menu
+    visibleMenus.value = []
     overflowMenus.value = []
     isMoreOpen.value = false
     return
   }
 
-  const total = allMenus.length
-  const visibleCount = getVisibleCountForWidth(windowWidth.value, total)
-  visibleMenus.value = allMenus.slice(0, visibleCount)
-  overflowMenus.value = allMenus.slice(visibleCount)
+  // En desktop siempre mostrar 4 menús y el resto en "Más"
+  visibleMenus.value = allMenus.slice(0, 4)
+  overflowMenus.value = allMenus.slice(4)
   if (!overflowMenus.value.length) isMoreOpen.value = false
 }
 
@@ -263,6 +356,22 @@ const onDocClick = (e) => {
     const menu = langMenuRef.value
     const inside = btn?.contains(e.target) || menu?.contains(e.target)
     if (!inside) isLangOpen.value = false
+  }
+  
+  // Botón "Más"
+  if (isMoreOpen.value) {
+    const btn = moreButtonRef.value
+    const menu = moreMenuRef.value
+    const inside = btn?.contains(e.target) || menu?.contains(e.target)
+    if (!inside) isMoreOpen.value = false
+  }
+  
+  // Perfil
+  if (isProfileOpen.value) {
+    const trigger = document.querySelector('.profile-trigger')
+    const card = document.querySelector('.profile-card')
+    const inside = trigger?.contains(e.target) || card?.contains(e.target)
+    if (!inside) isProfileOpen.value = false
   }
 }
 
@@ -292,7 +401,10 @@ onMounted(() => {
   }
 
   siteStore.initStatusWatcher()
-  fetchSocialLinksDB() // ✅ aquí se llama la API
+  
+  // Iniciar actualización periódica cada 5 minutos para social links
+  startSocialLinksRefresh()
+  
   nextTick().then(() => recalcMenus())
 })
 
@@ -302,11 +414,27 @@ onBeforeUnmount(() => {
     document.removeEventListener('click', onDocClick, true)
     document.removeEventListener('keydown', onKeyDown)
   }
+  
+  // Limpiar intervalo de actualización
+  if (socialLinksRefreshInterval) {
+    clearInterval(socialLinksRefreshInterval)
+    socialLinksRefreshInterval = null
+  }
 })
 
 watch([menusAll, windowWidth], () => {
   nextTick().then(() => recalcMenus())
 }, { immediate: true })
+
+// Computed para determinar si mostrar el botón "Más" (solo en desktop)
+const shouldShowMoreButton = computed(() => {
+  // Solo mostrar en desktop (no en móvil)
+  if (typeof window !== 'undefined' && window.innerWidth <= 900) {
+    return false
+  }
+  // En desktop mostrar si hay más de 4 menús
+  return overflowMenus.value.length > 0
+})
 </script>
 
 <template>
@@ -330,50 +458,70 @@ watch([menusAll, windowWidth], () => {
     <header class="app-topbar-container">
       <div class="header-inner">
 
-        <NuxtLink to="/" class="logo-link">
-          <div class="logo-sesion">
-            <button
-              v-if="isLoggedIn"
-              @click.prevent="goToNewOrder"
-              class="new"
-              type="button"
-            >
-              Nuevo pedido
-            </button>
+        <div class="logo-sesion">
+          <button
+            v-if="isLoggedIn"
+            @click.prevent="goToNewOrder"
+            class="new"
+            type="button"
+          >
+            Nuevo pedido
+          </button>
 
+          <NuxtLink :to="domiciliosRoute" class="logo-link">
             <img src="https://gestion.salchimonster.com/images/logo.png" alt="Logo" class="logo-img" />
-            <div class="title-block">
-              <div class="site-info">
-                <Icon name="mdi:map-marker" class="marker-icon" />
+          </NuxtLink>
+          
+          <div class="title-block">
+            <div class="site-info">
+              <Icon name="mdi:map-marker" class="marker-icon" />
+              <NuxtLink to="/" class="site-name-link">
                 <span class="site-name">
                   {{ siteStore?.location?.site?.site_name?.toLowerCase() || 'Salchimonster' }}
                 </span>
-                <div v-if="isOpen" class="live-dot-container" title="Estamos Abiertos">
-                  <div class="live-dot"></div>
-                </div>
+              </NuxtLink>
+              <div v-if="isOpen" class="live-dot-container" title="Estamos Abiertos">
+                <div class="live-dot"></div>
               </div>
             </div>
           </div>
-        </NuxtLink>
+        </div>
 
         <nav class="menus" ref="menusContainerRef">
-          <NuxtLink
-            v-for="item in visibleMenus"
-            :key="item.to"
-            :to="item.to"
-            class="menu-item"
-            :class="{ 'menu-item--active': isActiveRoute(item.to) }"
-          >
-            {{ item.label }}
-          </NuxtLink>
+          <template v-for="item in visibleMenus" :key="item.to">
+            <NuxtLink
+              v-if="!item.isSpecial"
+              :to="item.to"
+              class="menu-item"
+              :class="{ 'menu-item--active': isActiveRoute(item.to) }"
+            >
+              {{ item.label }}
+            </NuxtLink>
+            <NuxtLink
+              v-else
+              :to="item.to"
+              class="menu-item"
+              :class="{ 'menu-item--active': isActiveRoute(item.to) }"
+            >
+              {{ item.label }}
+            </NuxtLink>
+          </template>
 
-          <div v-if="overflowMenus.length" class="more-wrapper">
+          <!-- En móvil siempre mostrar el botón "Más" si hay más de 4 menús -->
+          <div 
+            v-if="shouldShowMoreButton" 
+            class="more-wrapper"
+          >
             <button type="button" class="more-button" ref="moreButtonRef" @click="isMoreOpen = !isMoreOpen">
               Más <Icon name="mdi:chevron-down" class="more-chevron" />
             </button>
 
             <transition name="fade-slide">
-              <ul v-if="isMoreOpen" class="dropdown-menu more-dropdown">
+              <ul 
+                v-if="isMoreOpen" 
+                ref="moreMenuRef"
+                class="dropdown-menu more-dropdown"
+              >
                 <li v-for="item in overflowMenus" :key="item.to">
                   <NuxtLink
                     :to="item.to"
@@ -590,6 +738,19 @@ watch([menusAll, windowWidth], () => {
 }
 .logo-link:hover { opacity: 0.9; }
 
+.site-name-link {
+  text-decoration: none;
+  color: inherit;
+  display: inline-flex;
+  align-items: center;
+  transition: opacity 0.2s;
+  cursor: pointer;
+}
+.site-name-link:hover { opacity: 0.8; }
+.site-name-link:hover .site-name {
+  text-decoration: underline;
+}
+
 .logo-sesion {
   display: flex;
   align-items: center;
@@ -649,6 +810,14 @@ watch([menusAll, windowWidth], () => {
   justify-content: center;
   align-items: center;
   gap: 1.5rem;
+}
+
+/* En desktop siempre mostrar máximo 4 menús visibles */
+@media (min-width: 901px) {
+  .menus {
+    /* Limitar visualmente a 4 menús + botón Más */
+    max-width: fit-content;
+  }
 }
 
 .menu-item {
@@ -989,6 +1158,7 @@ watch([menusAll, windowWidth], () => {
 }
 
 @media (max-width: 900px) {
+  /* En móvil ocultar menús, usar burger menu */
   .menus { display: none; }
   .burger-button { display: inline-flex; justify-content: center; align-items: center; }
   .header-inner { padding: 0.5rem 1rem; height: var(--nav-height-mobile); }

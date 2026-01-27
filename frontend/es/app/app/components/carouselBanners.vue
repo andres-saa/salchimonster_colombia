@@ -8,11 +8,18 @@
         :class="{ 'has-link': !!banner.link }"
         @click="onBannerClick(banner)"
       >
-        <img
+        <NuxtImg
           class="slide-image"
           :src="`${URI}/read-photo-product/${banner.img_identifier}`"
           :alt="`Banner Colombia ${idx + 1}`"
-          loading="lazy"
+          :loading="idx === 0 ? 'eager' : 'lazy'"
+          :fetchpriority="idx === 0 ? 'high' : 'auto'"
+          format="webp"
+          width="1200"
+          height="675"
+          sizes="(max-width: 768px) 180px, 1200px"
+          quality="65"
+          fit="cover"
         />
       </div>
     </div>
@@ -80,6 +87,15 @@ const isTransitionEnabled = ref(true)
 
 onMounted(() => {
   startAutoplay()
+  // Preload la primera imagen del banner para mejor rendimiento
+  if (banners.value.length > 0 && banners.value[0]?.img_identifier) {
+    const link = document.createElement('link')
+    link.rel = 'preload'
+    link.as = 'image'
+    link.href = `${URI}/read-photo-product/${banners.value[0].img_identifier}`
+    link.fetchPriority = 'high'
+    document.head.appendChild(link)
+  }
 })
 
 onBeforeUnmount(() => {

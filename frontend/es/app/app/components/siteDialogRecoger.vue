@@ -113,11 +113,13 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch, nextTick } from 'vue'
 import Dialog from 'primevue/dialog'
 import Select from 'primevue/select'
 import { useSitesStore, useUserStore } from '#imports'
 import { URI } from '~/service/conection'
+import { useSiteRouter } from '~/composables/useSiteRouter'
+import { getSiteSlug } from '~/composables/useSedeFromRoute'
 
 /* ================= STORES ================= */
 const store = useSitesStore()
@@ -152,18 +154,70 @@ const canSave = computed(() => {
 })
 
 /* ================= ACTIONS ================= */
-const confirmLocation = () => {
+const { pushWithSite } = useSiteRouter()
+
+const confirmLocation = async () => {
   if (!canSave.value || !currentSite.value) return
 
   isRedirecting.value = true
   targetSiteName.value = currentSite.value?.site_name
-  const subdomain = currentSite.value?.subdomain
-  const currentHash = siteStore.session_hash
-    if (!currentHash) return
 
-  window.location.href = `https://${subdomain}.salchimonster.com/pay?hash=${currentHash}/`
+  try {
+    // Actualizar el store con la información de la sede seleccionada
+    const nb = currenNeigborhood.value
+    const deliveryPrice = Number(nb?.delivery_price || 0)
 
-  store.setVisible('currentSiteRecoger', false)
+    // Actualizar location en el store
+    siteStore.updateLocation({
+      site: currentSite.value,
+      city: fixedCity.value || null,
+      neigborhood: nb ? {
+        ...nb,
+        neighborhood_id: nb.neighborhood_id || nb.id,
+        name: nb.name,
+        site_id: nb.site_id,
+        delivery_price: deliveryPrice
+      } : null,
+      address_details: null,
+      formatted_address: exactAddress.value || '',
+      place_id: '',
+      lat: null,
+      lng: null,
+      mode: 'barrios',
+      order_type: { id: 2, name: 'Pasar a recoger' } // Order type para recoger
+    }, deliveryPrice)
+
+    // Guardar order_type en el store
+    siteStore.setOrderType({ id: 2, name: 'Pasar a recoger' })
+
+    // Obtener el slug de la sede para navegar
+    const siteSlug = getSiteSlug(currentSite.value?.site_name || '')
+    
+    if (!siteSlug) {
+      alert('Lo sentimos, no pudimos localizar la dirección web de esta sede.')
+      isRedirecting.value = false
+      store.setVisible('currentSiteRecoger', false)
+      return
+    }
+
+    // Cerrar el modal primero
+    store.setVisible('currentSiteRecoger', false)
+    
+    // Navegar usando el sistema de rutas con slugs
+    // Usar nextTick para asegurar que el modal se cierre antes de navegar
+    await nextTick()
+    pushWithSite('/pay')
+    
+    // Resetear el estado de carga después de un breve delay
+    setTimeout(() => {
+      isRedirecting.value = false
+    }, 1000)
+  } catch (error) {
+    console.error('Error confirming location:', error)
+    alert('Ocurrió un error al confirmar la ubicación. Intenta nuevamente.')
+    isRedirecting.value = false
+    store.setVisible('currentSiteRecoger', false)
+  }
 }
 
 /* ================= API CALLS ================= */

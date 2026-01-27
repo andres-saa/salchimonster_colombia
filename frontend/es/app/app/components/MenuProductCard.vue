@@ -72,6 +72,7 @@ const displayName = computed(() => {
   const p = props.product || {}
 
   const esName =
+    p.producto_descripcion ||
     p.productogeneral_descripcion ||
     p.productogeneral_descripcionweb ||
     p.product_name ||
@@ -158,26 +159,42 @@ const imageSrc = computed(() => {
   if (p.productogeneral_urlimagen) return `https://img.restpe.com/${p.productogeneral_urlimagen}`
   if (p.image_url?.startsWith('http')) return p.image_url
   if (p.image_url) return `${props.imageBaseUrl}/${p.image_url}`
-  if (p.img_identifier) return `${props.imageBaseUrl}/read-photo-product/${p.img_identifier}/400`
+  if (p.img_identifier) return `${props.imageBaseUrl}/read-photo-product/${p.img_identifier}`
   return `${props.imageBaseUrl}/placeholder.png`
 })
 
-const imageSrcSet = computed(() => {
+// Determinar si la imagen es externa (no optimizable con NuxtImg)
+// img.restpe.com está en la lista de dominios permitidos, así que SÍ se puede optimizar
+const isExternalImage = computed(() => {
   const p = props.product || {}
-  if (!p.img_identifier || p.productogeneral_urlimagen || p.image_url) return ''
-  return `
-    ${props.imageBaseUrl}/read-photo-product/${p.img_identifier}/200 200w,
-    ${props.imageBaseUrl}/read-photo-product/${p.img_identifier}/400 400w,
-    ${props.imageBaseUrl}/read-photo-product/${p.img_identifier}/600 600w
-  `
+  
+  // Si tiene productogeneral_urlimagen, viene de img.restpe.com (optimizable)
+  if (p.productogeneral_urlimagen) {
+    return false // img.restpe.com está en dominios permitidos
+  }
+  
+  // Si image_url es de img.restpe.com, también es optimizable
+  const imageUrl = p.image_url || ''
+  if (imageUrl.includes('img.restpe.com')) {
+    return false
+  }
+  
+  // Solo marcar como externa si es otra URL HTTP que NO es de img.restpe.com
+  if (imageUrl.startsWith('http')) {
+    return true
+  }
+  
+  // El resto (rutas relativas, etc.) son optimizables
+  return false
 })
 
 const onImgLoad = () => { imgLoaded.value = true }
 
 const onImgError = (event) => {
   imgLoaded.value = true
-  event.target?.removeAttribute?.('srcset')
-  event.target.src = `${props.imageBaseUrl}/placeholder.png`
+  if (event.target) {
+    event.target.src = `${props.imageBaseUrl}/placeholder.png`
+  }
 }
 
 // === Handlers ===
@@ -207,21 +224,6 @@ onBeforeUnmount(() => {
     @click="handleClick"
     @keyup="handleKeyUp"
   >
-    <div class="menu-product-card__image-wrapper" :class="{ 'is-loaded': imgLoaded }">
-      <img
-        ref="imgRef"
-        class="menu-product-card__image"
-        :src="imageSrc"
-        :srcset="imageSrcSet"
-        sizes="(max-width: 600px) 200px, (max-width: 1200px) 400px, 600px"
-        :alt="displayName"
-        loading="lazy"
-        decoding="async"
-        @load="onImgLoad"
-        @error="onImgError"
-      />
-    </div>
-
     <div class="menu-product-card__body">
       <h3 class="menu-product-card__name">{{ displayName }}</h3>
       <p class="menu-product-card__desc">{{ truncatedDescription }}</p>
@@ -251,6 +253,37 @@ onBeforeUnmount(() => {
         </div>
       </div>
     </div>
+
+    <div class="menu-product-card__image-wrapper" :class="{ 'is-loaded': imgLoaded }">
+      <!-- Usar NuxtImg para imágenes optimizables, img normal para externas -->
+      <NuxtImg
+        v-if="!isExternalImage"
+        ref="imgRef"
+        class="menu-product-card__image"
+        :src="imageSrc"
+        :alt="displayName"
+        loading="lazy"
+        format="webp"
+        width="96"
+        height="96"
+        sizes="(max-width: 768px) 100vw, 96px"
+        quality="70"
+        fit="cover"
+        @load="onImgLoad"
+        @error="onImgError"
+      />
+      <img
+        v-else
+        ref="imgRef"
+        class="menu-product-card__image"
+        :src="imageSrc"
+        :alt="displayName"
+        loading="lazy"
+        decoding="async"
+        @load="onImgLoad"
+        @error="onImgError"
+      />
+    </div>
   </article>
 </template>
 
@@ -270,6 +303,12 @@ onBeforeUnmount(() => {
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
+/* Layout horizontal: imagen a la derecha (móvil y PC) */
+.menu-product-card {
+  flex-direction: row;
+  min-height: 96px;
+}
+
 .menu-product-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 10px 25px rgba(0,0,0,0.1);
@@ -278,13 +317,20 @@ onBeforeUnmount(() => {
 /* === OPTIMIZACIÓN SKELETON === */
 .menu-product-card__image-wrapper {
   position: relative;
-  width: 100%;
-  aspect-ratio: 1 / 1;
+  width: 96px;
+  max-width: 96px;
+  height: 96px;
+  max-height: 96px;
+  flex-shrink: 0;
+  aspect-ratio: unset;
   overflow: hidden;
   background: #f3f4f6;
   background-image: linear-gradient(90deg, #f3f4f6 0px, #e5e7eb 50%, #f3f4f6 100%);
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
+  order: 1; /* A la derecha siempre */
+  padding: 0.5rem;
+  box-sizing: border-box;
 }
 
 /* Cuando carga, quitamos fondo y animación */
@@ -302,6 +348,8 @@ onBeforeUnmount(() => {
 .menu-product-card__image {
   width: 100%;
   height: 100%;
+  max-width: 96px;
+  max-height: 96px;
   object-fit: cover;
   display: block;
   opacity: 0;
@@ -312,7 +360,21 @@ onBeforeUnmount(() => {
   opacity: 1;
 }
 
-.menu-product-card__body { padding: 0.7rem; display: flex; flex-direction: column; gap: 0.35rem; flex: 1; }
+.menu-product-card__body { 
+  padding: 0.7rem; 
+  display: flex; 
+  flex-direction: column; 
+  gap: 0.35rem; 
+  flex: 1; 
+  order: -1; /* A la izquierda siempre */
+}
+
+/* En PC: más padding */
+@media (min-width: 769px) {
+  .menu-product-card__body {
+    padding: 1rem;
+  }
+}
 .menu-product-card__name { margin: 0; font-size: 0.95rem; font-weight: 600; color: #111; }
 .menu-product-card__desc { margin: 0; font-size: 0.78rem; color: #666; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .menu-product-card__footer { margin-top: auto; display: flex; justify-content: space-between; align-items: center; }
@@ -325,6 +387,8 @@ onBeforeUnmount(() => {
 .menu-product-card__tag--flavors { background: #dbeafe; border-color: #bfdbfe; color: #1d4ed8; }
 
 @media (max-width: 768px) {
-  .menu-product-card { min-height: 0; }
+  .menu-product-card { 
+    min-height: 0; 
+  }
 }
 </style>

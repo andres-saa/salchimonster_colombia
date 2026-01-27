@@ -5,7 +5,7 @@
 
       <div v-if="loading" class="state-container loading">
         <div class="spinner"></div>
-        <p>Cargando carta de España...</p>
+        <p>Cargando</p>
       </div>
 
       <div v-else-if="error" class="state-container error">
@@ -15,8 +15,8 @@
       </div>
 
       <div v-else-if="!activeMenu || !activeCards.length" class="state-container empty">
-        <span class="icon">🇪🇸</span>
-        <p>Cargando carta de España...</p>
+        <div class="spinner"></div>
+        <p>Cargando</p>
       </div>
 
       <div v-else class="image-gallery">
@@ -25,14 +25,20 @@
           :key="card.id"
           class="image-wrapper"
           :class="{ 'is-loaded': imageStates[card.id] === 'loaded' }"
+          @click="openZoom(bigUrl(card.img_identifier))"
         >
           <div v-if="imageStates[card.id] !== 'loaded'" class="skeleton-loader"></div>
 
-          <img
+          <NuxtImg
             :src="bigUrl(card.img_identifier)"
             :alt="`Carta España`"
             class="main-image"
             loading="lazy"
+            format="webp"
+            :width="isMobile ? 640 : 1920"
+            :height="isMobile ? 960 : 1080"
+            sizes="(max-width: 600px) 100vw, 1920px"
+            quality="80"
             @load="onImageLoad(card.id)"
             @error="onImageError($event, card.id)"
           />
@@ -45,7 +51,13 @@
       <Transition name="fade">
         <div v-if="zoomedImage" class="lightbox-overlay" @click="closeZoom">
           <button class="close-btn">&times;</button>
-          <img :src="zoomedImage" class="lightbox-image" @click.stop />
+          <NuxtImg 
+            :src="zoomedImage" 
+            class="lightbox-image" 
+            format="webp" 
+            quality="90" 
+            @click.stop 
+          />
         </div>
       </Transition>
     </Teleport>
@@ -109,14 +121,86 @@ let hideTimer = null
 const zoomedImage = ref(null)
 const imageStates = reactive({})
 
-// --- FETCH DATA ---
+// --- CACHÉ CON VERIFICACIÓN DE IDs ---
+const CACHE_KEY = 'carta-menu-cache'
+const CACHE_TTL = 10 * 60 * 1000 // 10 minutos
+
+const getCachedData = () => {
+  if (!import.meta.client) return null
+  try {
+    const cached = localStorage.getItem(CACHE_KEY)
+    if (cached) {
+      const { data, timestamp, ids } = JSON.parse(cached)
+      const age = Date.now() - timestamp
+      if (age < CACHE_TTL) {
+        return { data, ids }
+      }
+    }
+  } catch (e) {
+    console.error('Error leyendo caché de carta:', e)
+  }
+  return null
+}
+
+const saveToCache = (data, ids) => {
+  if (!import.meta.client) return
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify({
+      data,
+      ids,
+      timestamp: Date.now()
+    }))
+  } catch (e) {
+    console.error('Error guardando caché de carta:', e)
+  }
+}
+
+const extractCardIds = (menuData) => {
+  if (!menuData || !Array.isArray(menuData)) return []
+  const ids = []
+  menuData.forEach(menu => {
+    if (menu.cartas) {
+      Object.values(menu.cartas).forEach(orientation => {
+        if (orientation && orientation.es) {
+          orientation.es.forEach(card => {
+            if (card.img_identifier) {
+              ids.push(card.img_identifier)
+            }
+          })
+        }
+      })
+    }
+  })
+  return ids.sort()
+}
+
+// --- FETCH DATA CON CACHÉ ---
+const cachedData = getCachedData()
+const initialData = cachedData?.data || null
+
 const {
   data: rawResponse,
   pending: loading,
   error,
   refresh
 } = await useFetch(`${URI}/data/cata-tiendas-sm`, {
-  lazy: true, server: false, timeout: 15000, retry: 1
+  lazy: true, 
+  server: false, 
+  timeout: 15000, 
+  retry: 1,
+  default: () => initialData,
+  onResponse({ response }) {
+    if (response._data) {
+      const newIds = extractCardIds(response._data?.data?.data || [])
+      const cachedIds = cachedData?.ids || []
+      
+      // Solo actualizar caché si los IDs cambiaron
+      const idsChanged = JSON.stringify(newIds) !== JSON.stringify(cachedIds)
+      if (idsChanged || !cachedData) {
+        saveToCache(response._data, newIds)
+      }
+    }
+  }
 })
 
 const handleRetry = async () => { error.value = null; await refresh() }
@@ -243,10 +327,24 @@ onBeforeUnmount(() => {
 }
 .image-wrapper.is-loaded .main-image { opacity: 1; }
 
-/* Estados de carga/error (centrados) */
+/* Estados de carga/error (centrados en pantalla completa) */
 .state-container {
-  display: flex; flex-direction: column; justify-content: center; align-items: center;
-  min-height: 50vh; color: #666; gap: 1rem; text-align: center; padding: 2rem;
+  display: flex; 
+  flex-direction: column; 
+  justify-content: center; 
+  align-items: center;
+  min-height: 100vh; 
+  color: #666; 
+  gap: 1rem; 
+  text-align: center; 
+  padding: 2rem;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #ffffff;
+  z-index: 1000;
 }
 .spinner {
   width: 40px; height: 40px; border: 4px solid rgba(0,0,0,0.1);

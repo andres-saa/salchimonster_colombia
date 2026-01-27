@@ -91,12 +91,13 @@ import { useRoute, useRouter } from 'vue-router'
 import { useUIStore } from '~/stores/ui'
 import MenuProductCard from '~/components/MenuProductCard.vue'
 import { URI } from '~/service/conection'
-import { useFetch, useSitesStore, useMenuStore, useUserStore } from '#imports'
+import { useSitesStore, useUserStore } from '#imports'
+import { useSiteRouter } from '~/composables/useSiteRouter'
+import { useMenuData } from '~/composables/useMenuData'
 
 const route = useRoute()
 const router = useRouter()
 const sitesStore = useSitesStore()
-const menuStore = useMenuStore()
 const uiStore = useUIStore()
 const userStore = useUserStore()
 
@@ -170,7 +171,6 @@ watch(
 )
 
 /* ================= Config ================= */
-const CACHE_TTL = 30 * 60 * 1000
 const isRefreshing = ref(false)
 let clientRefreshIntervalId = null
 
@@ -183,39 +183,11 @@ const doClientRefresh = async (refreshFn) => {
   }
 }
 
-const siteId = computed(() => sitesStore?.location?.site?.site_id || 1)
-
 /* ================= Fetch ================= */
-const { data: rawCategoriesData, refresh, pending: menuPending } = useFetch(
-  () => `${URI}/tiendas/${siteId.value}/products`,
-  {
-    key: () => `menu-data-${siteId.value}`,
-    server: true,
-    default: () => ({ categorias: [] })
-  }
-)
-
-/* Cache (cliente) */
-if (process.client) {
-  const cachedWrapper = menuStore.getMenuBySite(siteId.value)
-  if (cachedWrapper && cachedWrapper.data && cachedWrapper.timestamp) {
-    const age = Date.now() - cachedWrapper.timestamp
-    if (age < CACHE_TTL) rawCategoriesData.value = cachedWrapper.data
-  }
-}
+// Usar el composable compartido para asegurar consistencia
+const { rawCategoriesData, refresh, menuPending, siteId } = useMenuData()
 
 const sourceData = computed(() => rawCategoriesData.value)
-
-watch(
-  rawCategoriesData,
-  (val) => {
-    if (!process.client) return
-    if (val && Array.isArray(val.categorias) && val.categorias.length) {
-      menuStore.setMenuForSite(siteId.value, { data: val, timestamp: Date.now() })
-    }
-  },
-  { immediate: true }
-)
 
 /* ================= Helpers ================= */
 const normalize = (str) =>
@@ -296,8 +268,9 @@ const showLoader = computed(() => menuPending.value && baseCategories.value.leng
 const shouldUseWhiteText = (index) => index === 0
 
 const onClickProduct = (category, product) => {
+  const { pushWithSite } = useSiteRouter()
   uiStore.closeSearch()
-  router.push(`/producto/${product.id}`)
+  pushWithSite(`/producto/${product.id}`)
 }
 
 /* ================= Refs / observers ================= */
@@ -543,6 +516,14 @@ const setProductRef = (productId, categoryId, el) => {
   padding-bottom: 5rem;
 }
 
+/* En PC: ajustar grid para cards horizontales con imagen 96px */
+@media (min-width: 769px) {
+  .menu-category-section__grid {
+    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+    max-width: 100%;
+  }
+}
+
 .loading-container {
   display: flex;
   flex-direction: column;
@@ -573,7 +554,7 @@ const setProductRef = (productId, categoryId, el) => {
   .menu-content { padding: 0.5rem 0.5rem 1.5rem; }
   .menu-category-section__title { font-size: 1.5rem; }
   .menu-category-section__grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: 1fr;
     gap: 0.55rem;
   }
   .close-modal-btn {

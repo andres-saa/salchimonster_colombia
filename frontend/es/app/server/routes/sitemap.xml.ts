@@ -31,6 +31,73 @@ export default defineEventHandler(async (event: any) => {
       { loc: `${baseUrl}/colaboraciones`, changefreq: 'monthly', priority: '0.6' },
     ]
 
+    // Obtener productos y categorías para incluir en el sitemap
+    let productUrls: any[] = []
+    let categoryUrls: any[] = []
+    
+    if (!subdomain || subdomain === 'www') {
+      // Solo generar URLs de productos/categorías para el dominio principal
+      try {
+        // Obtener productos de la primera sede principal (más representativa)
+        // Esto evita sobrecargar el servidor y mantiene el sitemap manejable
+        const mainSite = filteredSites[0]
+        if (mainSite) {
+          try {
+            const productsResponse = await fetch(`${URI}/tiendas/${mainSite.site_id}/products`, {
+              signal: AbortSignal.timeout(5000) // Timeout de 5 segundos
+            })
+            if (productsResponse.ok) {
+              const menuData = await productsResponse.json()
+              const categorias = menuData?.categorias || []
+              
+              // Usar Set para evitar duplicados
+              const categorySlugs = new Set<string>()
+              const productIds = new Set<number>()
+              
+              categorias.forEach((cat: any) => {
+                if (cat.visible && cat.categoria_descripcion) {
+                  const categorySlug = encodeURIComponent(
+                    cat.categoria_descripcion.toLowerCase()
+                      .normalize('NFD')
+                      .replace(/[\u0300-\u036f]/g, '')
+                      .replace(/\s+/g, '-')
+                      .replace(/[^a-z0-9-]/g, '')
+                  )
+                  
+                  if (!categorySlugs.has(categorySlug)) {
+                    categorySlugs.add(categorySlug)
+                    categoryUrls.push({
+                      loc: `${baseUrl}/?category=${categorySlug}`,
+                      changefreq: 'daily',
+                      priority: '0.8',
+                      lastmod: new Date().toISOString().split('T')[0]
+                    })
+                  }
+                  
+                  // Agregar productos de esta categoría (limitar a 15 por categoría)
+                  (cat.products || []).slice(0, 15).forEach((prod: any) => {
+                    if (prod.producto_id && !productIds.has(prod.producto_id)) {
+                      productIds.add(prod.producto_id)
+                      productUrls.push({
+                        loc: `${baseUrl}/producto/${prod.producto_id}`,
+                        changefreq: 'weekly',
+                        priority: '0.7',
+                        lastmod: new Date().toISOString().split('T')[0]
+                      })
+                    }
+                  })
+                }
+              })
+            }
+          } catch (err) {
+            console.error(`Error fetching products for site ${mainSite.site_id}:`, err)
+          }
+        }
+      } catch (err) {
+        console.error('Error generating product/category URLs:', err)
+      }
+    }
+
     // Si hay subdominio, solo incluir URLs de esa sede específica
     let siteUrls: any[] = []
     if (subdomain) {
@@ -58,7 +125,9 @@ export default defineEventHandler(async (event: any) => {
         }))
     }
 
-    const allUrls = subdomain ? siteUrls : [...staticUrls, ...siteUrls]
+    const allUrls = subdomain 
+      ? siteUrls 
+      : [...staticUrls, ...siteUrls, ...categoryUrls, ...productUrls]
 
     // Generar XML del sitemap
     const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
