@@ -14,13 +14,22 @@ export function useSiteRouter() {
     router = useRouter()
     route = useRoute()
     sedeFromRoute = useSedeFromRoute()
+    
+    // Verificar que router esté disponible
+    if (!router || !router.push) {
+      console.warn('[useSiteRouter] Router no está disponible correctamente')
+    }
   } catch (e) {
     // Si los composables fallan, retornar funciones que no hacen nada o usan fallbacks
     console.warn('[useSiteRouter] Error inicializando composables:', e)
     return {
       getCurrentSiteSlug: () => null,
-      pushWithSite: (path: string) => {},
-      replaceWithSite: (path: string) => {},
+      pushWithSite: (path: string) => {
+        console.error('[useSiteRouter] pushWithSite llamado pero router no disponible')
+      },
+      replaceWithSite: (path: string) => {
+        console.error('[useSiteRouter] replaceWithSite llamado pero router no disponible')
+      },
       getRouteWithSite: (path: string) => path,
       siteSlug: { value: null }
     }
@@ -53,13 +62,22 @@ export function useSiteRouter() {
    * @param path - Ruta relativa (ej: '/cart', '/producto/123')
    */
   const pushWithSite = (path: string) => {
-    const siteSlug = getCurrentSiteSlug()
-    const cleanPath = path.startsWith('/') ? path : `/${path}`
+    if (!router || !router.push) {
+      console.error('[useSiteRouter] Router no disponible')
+      return
+    }
     
-    if (siteSlug) {
-      router.push(`/${siteSlug}${cleanPath}`)
-    } else {
-      router.push(cleanPath)
+    try {
+      const siteSlug = getCurrentSiteSlug()
+      const cleanPath = path.startsWith('/') ? path : `/${path}`
+      
+      if (siteSlug) {
+        router.push(`/${siteSlug}${cleanPath}`)
+      } else {
+        router.push(cleanPath)
+      }
+    } catch (error) {
+      console.error('[useSiteRouter] Error en pushWithSite:', error)
     }
   }
 
@@ -67,13 +85,22 @@ export function useSiteRouter() {
    * Reemplaza la ruta actual incluyendo la sede
    */
   const replaceWithSite = (path: string) => {
-    const siteSlug = getCurrentSiteSlug()
-    const cleanPath = path.startsWith('/') ? path : `/${path}`
+    if (!router || !router.replace) {
+      console.error('[useSiteRouter] Router no disponible')
+      return
+    }
     
-    if (siteSlug) {
-      router.replace(`/${siteSlug}${cleanPath}`)
-    } else {
-      router.replace(cleanPath)
+    try {
+      const siteSlug = getCurrentSiteSlug()
+      const cleanPath = path.startsWith('/') ? path : `/${path}`
+      
+      if (siteSlug) {
+        router.replace(`/${siteSlug}${cleanPath}`)
+      } else {
+        router.replace(cleanPath)
+      }
+    } catch (error) {
+      console.error('[useSiteRouter] Error en replaceWithSite:', error)
     }
   }
 
