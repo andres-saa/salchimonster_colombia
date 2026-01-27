@@ -540,6 +540,42 @@ function setupQuickSyncWatchers() {
 // ------------------------------------------------------------------------
 // 8. LIFECYCLE
 // ------------------------------------------------------------------------
+// ------------------------------------------------------------------------
+// 9. LISTENER POSTMESSAGE PARA IFRAME (Nuevo Pedido desde padre)
+// ------------------------------------------------------------------------
+function handlePostMessage(event) {
+  // Validar origen por seguridad (ajusta según tu dominio)
+  // const allowedOrigins = ['https://tu-dominio.com', 'https://otro-dominio.com']
+  // if (!allowedOrigins.includes(event.origin)) return
+  
+  // Por ahora aceptamos cualquier origen, pero puedes restringirlo
+  if (event.data && typeof event.data === 'object') {
+    // Escuchar mensaje "new-order" desde el iframe padre
+    if (event.data.type === 'new-order' || event.data.action === 'new-order') {
+      console.log('[App] Recibida señal de nuevo pedido desde iframe padre')
+      
+      // Limpiar el carrito (misma lógica que goToNewOrder)
+      cartStore.cart = []
+      cartStore.applied_coupon = null
+      cartStore.coupon_ui = { enabled: false, draft_code: '' }
+      cartStore.address_details = {}
+      cartStore.order_notes = ''
+      
+      // Redirigir al dispatcher (home)
+      router.push('/')
+      
+      // Opcional: Enviar confirmación al padre
+      if (event.source && event.source !== window) {
+        event.source.postMessage({
+          type: 'new-order-confirmed',
+          success: true,
+          timestamp: new Date().toISOString()
+        }, event.origin)
+      }
+    }
+  }
+}
+
 onMounted(() => {
   bootstrapFromUrl('mounted')
   startHashSyncer()
@@ -547,6 +583,11 @@ onMounted(() => {
 
   window.addEventListener('popstate', onPopState)
   window.addEventListener('beforeunload', syncOnUnload)
+  
+  // Agregar listener para postMessage desde iframe padre
+  if (import.meta.client) {
+    window.addEventListener('message', handlePostMessage)
+  }
 
   stopRouteWatch = watch(
     () => route.fullPath,
@@ -568,6 +609,9 @@ onBeforeUnmount(() => {
   clearTimeout(syncDebounce)
   window.removeEventListener('popstate', onPopState)
   window.removeEventListener('beforeunload', syncOnUnload)
+  if (import.meta.client) {
+    window.removeEventListener('message', handlePostMessage)
+  }
   if (stopRouteWatch) stopRouteWatch()
   stopQuickWatchers.forEach((fn) => fn && fn())
 })
