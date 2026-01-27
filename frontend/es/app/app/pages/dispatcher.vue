@@ -228,7 +228,7 @@
               <NuxtImg
                 v-if="store.img_id"
                 :src="`${BACKEND_BASE}/read-photo-product/${store.img_id}`"
-                :key="`${store.id}-${imageRefreshKey}`"
+                :key="`store-${store.id}-img-${store.img_id}`"
                 @error="onImgError(store)"
                 class="store-img"
                 :alt="t('store_photo_alt')"
@@ -1385,7 +1385,7 @@ async function loadStores() {
   try {
     const res = await fetch(`${BACKEND_BASE}/sites`)
     const data = await res.json()
-    stores.value = data
+    const newStores = data
       .filter((s) => s.show_on_web && s.time_zone === 'America/Bogota' && s.site_id != 32)
       .map((s) => ({
         id: s.site_id,
@@ -1400,6 +1400,19 @@ async function loadStores() {
         status: 'unknown',
         site_phone: s.site_phone || null
       }))
+    
+    // Detectar cambios en img_id y actualizar solo si cambió
+    if (import.meta.client && stores.value.length > 0) {
+      newStores.forEach((newStore) => {
+        const oldStore = stores.value.find(s => s.id === newStore.id)
+        if (oldStore && oldStore.img_id !== newStore.img_id) {
+          // El img_id cambió, actualizar el cache para forzar re-render
+          storeImgIds.value[newStore.id] = newStore.img_id
+        }
+      })
+    }
+    
+    stores.value = newStores
   } catch {}
 }
 
@@ -1580,23 +1593,36 @@ async function dispatchToSite(manualStore, orderTypeObj, extra = { mode: 'simple
    IMAGES
    ======================= */
 const FALLBACK_LOGO = 'https://gestion.salchimonster.com/images/logo.png'
-const imageRefreshKey = ref(0)
-let imageRefreshInterval = null
 
-// Actualizar imágenes cada 5 minutos
+// Cache de img_id por store para detectar cambios
+const storeImgIds = ref({})
+let storeRefreshInterval = null
+
+// Inicializar cache de img_id cuando se cargan los stores
+watch(stores, (newStores) => {
+  if (!import.meta.client) return
+  
+  newStores.forEach((store) => {
+    if (!storeImgIds.value[store.id]) {
+      storeImgIds.value[store.id] = store.img_id
+    }
+  })
+}, { immediate: true })
+
+// Verificar cambios en img_id cada 5 minutos
 onMounted(() => {
   if (import.meta.client) {
-    imageRefreshInterval = setInterval(() => {
-      imageRefreshKey.value = Date.now()
+    storeRefreshInterval = setInterval(async () => {
+      // Solo verificar cambios, no forzar recarga si no hay cambios
+      await loadStores()
     }, 5 * 60 * 1000) // 5 minutos
   }
 })
 
-// Limpiar intervalo al desmontar el componente
 onBeforeUnmount(() => {
-  if (imageRefreshInterval) {
-    clearInterval(imageRefreshInterval)
-    imageRefreshInterval = null
+  if (storeRefreshInterval) {
+    clearInterval(storeRefreshInterval)
+    storeRefreshInterval = null
   }
 })
 
