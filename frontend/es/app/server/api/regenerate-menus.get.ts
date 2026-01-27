@@ -72,29 +72,31 @@ export default defineEventHandler(async (event) => {
         // Construir la URL de la página del menú
         const menuUrl = `/${slug}/`
         
-        // Intentar hacer una petición a la página para forzar su regeneración
-        // Esto funciona si tienes ISR configurado
+        // Forzar la regeneración de la página haciendo una petición interna
+        // Esto invalida el caché de ISR y fuerza la regeneración con los nuevos datos
         try {
           const host = event.node.req.headers.host || 'localhost:3000'
           const protocol = event.node.req.headers['x-forwarded-proto'] || 
                           (event.node.req.headers['x-forwarded-ssl'] === 'on' ? 'https' : 'http')
           const baseUrl = `${protocol}://${host}`
           
-          // Hacer una petición GET para forzar la regeneración (si ISR está configurado)
-          // Usar un header especial para indicar que es una regeneración forzada
+          // Hacer una petición GET para forzar la regeneración de ISR
+          // El header Cache-Control: no-cache fuerza a Nitro a regenerar la página
           await fetch(`${baseUrl}${menuUrl}`, { 
             method: 'GET',
             headers: {
-              'Cache-Control': 'no-cache',
-              'X-Regenerate': 'true', // Header personalizado para indicar regeneración
+              'Cache-Control': 'no-cache, no-store, must-revalidate',
+              'Pragma': 'no-cache',
+              'X-Regenerate': 'true', // Header personalizado
               'User-Agent': 'Menu-Regenerator/1.0'
             }
-          }).catch(() => {
-            // Ignorar errores de fetch - puede que el servidor no esté disponible
-            // pero el menú se regenerará en el próximo build o cuando se acceda
+          }).catch((err) => {
+            // Log el error pero continuar con otras sedes
+            console.warn(`[Regenerate] Error regenerando ${menuUrl}:`, err.message)
           })
         } catch (fetchError) {
           // Ignorar errores de fetch interno
+          console.warn(`[Regenerate] Error en fetch interno para ${menuUrl}:`, fetchError)
         }
 
         results.push({

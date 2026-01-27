@@ -80,58 +80,27 @@ export function useMenuData() {
   const initialCachedData = getCachedDataForSite(siteId.value)
   const hasInitialCache = initialCachedData !== null && Array.isArray(initialCachedData.categorias) && initialCachedData.categorias.length > 0
 
-  // Cargar products-light, usando caché si está disponible
-  // Siempre usar lazy para evitar fetch inmediato, y hacer refresh condicional después
+  // Cargar products-light SOLO en el servidor (SSR) para que venga en el HTML
+  // En el cliente NO hacer fetch automático - usar solo los datos del servidor
   const { data: rawCategoriesData, refresh, pending: menuPending } = useFetch(
     () => `${URI}/tiendas/${siteId.value}/products-light`,
     {
       key: () => `menu-data-${siteId.value}`,
-      server: true,
+      server: true, // Solo fetch en servidor (SSR) - los datos vienen en el HTML
+      client: false, // NO hacer fetch en el cliente - usar solo datos del servidor
       // Usar datos del caché como default para que estén disponibles inmediatamente
       default: () => initialCachedData || { categorias: [] },
-      // Siempre usar lazy para evitar fetch inmediato innecesario
-      // Haremos refresh condicional después si no hay caché
-      lazy: true,
-      immediate: false,
-      // Asegurar que siempre se ejecute el fetch cuando cambie el siteId
+      // NO usar lazy - queremos que se cargue en el servidor
+      lazy: false,
+      immediate: true,
+      // Asegurar que siempre se ejecute el fetch cuando cambie el siteId (solo en servidor)
       watch: [siteId]
     }
   )
 
-  // Hacer refresh condicional: solo si no hay caché válido
-  if (import.meta.client) {
-    // En el cliente, verificar si necesitamos hacer fetch
-    if (!hasInitialCache) {
-      // No hay caché, hacer fetch inmediato
-      refresh()
-    } else {
-      // Hay caché, hacer refresh en background después de un delay para actualizar si es necesario
-      // pero sin bloquear la UI
-      setTimeout(() => {
-        refresh().catch(() => {
-          // Silenciar errores de refresh en background
-        })
-      }, 500) // Delay un poco más largo para no interferir con la renderización inicial
-    }
-
-    // Cuando cambia el siteId, verificar si hay caché y hacer refresh si es necesario
-    watch(siteId, (newSiteId) => {
-      const cachedForNewSite = getCachedDataForSite(newSiteId)
-      const hasCacheForNewSite = cachedForNewSite !== null && Array.isArray(cachedForNewSite.categorias) && cachedForNewSite.categorias.length > 0
-      
-      if (!hasCacheForNewSite) {
-        // No hay caché para el nuevo site, hacer fetch inmediato
-        refresh()
-      } else {
-        // Hay caché, hacer refresh en background para actualizar si es necesario
-        setTimeout(() => {
-          refresh().catch(() => {
-            // Silenciar errores de refresh en background
-          })
-        }, 500)
-      }
-    })
-  }
+  // En el cliente, NO hacer refresh automático
+  // Solo usar los datos que vienen del servidor en el HTML
+  // El refresh solo se hará cuando se llame explícitamente desde el endpoint de regeneración
   
   // Debug: Log cuando los datos cambian o cuando está pendiente
   if (import.meta.client) {
