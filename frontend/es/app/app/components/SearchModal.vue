@@ -145,22 +145,37 @@ const categories = computed(() => {
       const category_name =
         cat.categoria_descripcion || cat.english_name || ''
 
-      const products = (cat.products || []).map((p) => ({
-        ...p,
-        id: p.producto_id,
-        product_name:
-          p.productogeneral_descripcionweb ||
-          p.productogeneral_descripcion ||
-          p.english_name ||
-          '',
-        price: Number(p.productogeneral_precio ?? 0),
-        image_url:
-          p.productogeneral_urlimagen ||
-          (p.lista_productobase &&
-            p.lista_productobase[0] &&
-            p.lista_productobase[0].producto_urlimagen) ||
-          ''
-      }))
+      const products = (cat.products || [])
+        .map((p) => {
+          // Calcular precio de la misma manera que MenuProductCard
+          const presentationPrice = Number(p.lista_presentacion?.[0]?.producto_precio ?? 0)
+          const generalPrice = Number(p.productogeneral_precio ?? 0)
+          const fallbackPrice = Number(p.price ?? 0)
+          
+          const calculatedPrice = presentationPrice > 0 
+            ? presentationPrice 
+            : generalPrice > 0 
+            ? generalPrice 
+            : fallbackPrice
+
+          return {
+            ...p,
+            id: p.producto_id,
+            product_name:
+              p.productogeneral_descripcionweb ||
+              p.productogeneral_descripcion ||
+              p.english_name ||
+              '',
+            price: calculatedPrice,
+            image_url:
+              p.productogeneral_urlimagen ||
+              (p.lista_productobase &&
+                p.lista_productobase[0] &&
+                p.lista_productobase[0].producto_urlimagen) ||
+              ''
+          }
+        })
+        .filter((p) => p.price > 0) // Filtrar productos con precio 0
 
       return {
         ...cat,

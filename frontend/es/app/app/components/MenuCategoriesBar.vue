@@ -163,9 +163,11 @@ onBeforeUnmount(() => {
         </template>
       </ClientOnly>
 
-      <button style="height: 2.5rem;width: 2.5rem;width: 3rem; position: absolute;right: 0;border: none; background:linear-gradient(to left , white 90%, transparent);" type="button" class="action-btn search-btn" @click="handleSearch" title="Buscar">
-        <Icon name="mdi:magnify" class="action-icon" />
-      </button>
+      <ClientOnly>
+        <button style="height: 2.5rem;width: 2.5rem;width: 3rem; position: absolute;right: 0;border: none; background:linear-gradient(to left , white 90%, transparent);" type="button" class="action-btn search-btn" @click="handleSearch" title="Buscar">
+          <Icon name="mdi:magnify" class="action-icon" />
+        </button>
+      </ClientOnly>
     </div>
   </div>
 </template>

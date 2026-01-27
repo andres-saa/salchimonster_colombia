@@ -14,21 +14,67 @@ export function useSiteRouter() {
     router = useRouter()
     route = useRoute()
     sedeFromRoute = useSedeFromRoute()
-    
-    // Verificar que router esté disponible
-    if (!router || !router.push) {
-      console.warn('[useSiteRouter] Router no está disponible correctamente')
-    }
   } catch (e) {
-    // Si los composables fallan, retornar funciones que no hacen nada o usan fallbacks
+    // Si los composables fallan, retornar funciones con fallbacks
     console.warn('[useSiteRouter] Error inicializando composables:', e)
     return {
-      getCurrentSiteSlug: () => null,
+      getCurrentSiteSlug: () => {
+        try {
+          // Intentar obtener desde el store directamente
+          const { useSitesStore } = require('~/stores/site')
+          const sitesStore = useSitesStore()
+          if (sitesStore?.location?.site?.site_name) {
+            const { getSiteSlug } = require('./useSedeFromRoute')
+            return getSiteSlug(sitesStore.location.site.site_name)
+          }
+        } catch {}
+        return null
+      },
       pushWithSite: (path: string) => {
-        console.error('[useSiteRouter] pushWithSite llamado pero router no disponible')
+        // Fallback: usar window.location
+        try {
+          if (typeof window !== 'undefined') {
+            // Intentar obtener el slug del store directamente
+            let finalPath = path.startsWith('/') ? path : `/${path}`
+            try {
+              const { useSitesStore } = require('~/stores/site')
+              const sitesStore = useSitesStore()
+              if (sitesStore?.location?.site?.site_name) {
+                const { getSiteSlug } = require('./useSedeFromRoute')
+                const siteSlug = getSiteSlug(sitesStore.location.site.site_name)
+                if (siteSlug) {
+                  finalPath = `/${siteSlug}${finalPath}`
+                }
+              }
+            } catch {}
+            window.location.href = finalPath
+          }
+        } catch (err) {
+          console.error('[useSiteRouter] Error en fallback pushWithSite:', err)
+        }
       },
       replaceWithSite: (path: string) => {
-        console.error('[useSiteRouter] replaceWithSite llamado pero router no disponible')
+        // Fallback: usar window.location.replace
+        try {
+          if (typeof window !== 'undefined') {
+            // Intentar obtener el slug del store directamente
+            let finalPath = path.startsWith('/') ? path : `/${path}`
+            try {
+              const { useSitesStore } = require('~/stores/site')
+              const sitesStore = useSitesStore()
+              if (sitesStore?.location?.site?.site_name) {
+                const { getSiteSlug } = require('./useSedeFromRoute')
+                const siteSlug = getSiteSlug(sitesStore.location.site.site_name)
+                if (siteSlug) {
+                  finalPath = `/${siteSlug}${finalPath}`
+                }
+              }
+            } catch {}
+            window.location.replace(finalPath)
+          }
+        } catch (err) {
+          console.error('[useSiteRouter] Error en fallback replaceWithSite:', err)
+        }
       },
       getRouteWithSite: (path: string) => path,
       siteSlug: { value: null }
@@ -62,22 +108,43 @@ export function useSiteRouter() {
    * @param path - Ruta relativa (ej: '/cart', '/producto/123')
    */
   const pushWithSite = (path: string) => {
-    if (!router || !router.push) {
-      console.error('[useSiteRouter] Router no disponible')
-      return
-    }
-    
     try {
       const siteSlug = getCurrentSiteSlug()
       const cleanPath = path.startsWith('/') ? path : `/${path}`
+      const finalPath = siteSlug ? `/${siteSlug}${cleanPath}` : cleanPath
       
-      if (siteSlug) {
-        router.push(`/${siteSlug}${cleanPath}`)
-      } else {
-        router.push(cleanPath)
+      // Intentar usar router de Vue Router primero
+      if (router && typeof router.push === 'function') {
+        router.push(finalPath).catch((err) => {
+          // Si falla, usar fallback
+          console.warn('[useSiteRouter] Router.push falló, usando fallback:', err)
+          if (typeof window !== 'undefined') {
+            window.location.href = finalPath
+          }
+        })
+        return
       }
+      
+      // Fallback: usar window.location si router no está disponible
+      if (typeof window !== 'undefined' && window.location) {
+        window.location.href = finalPath
+        return
+      }
+      
+      console.error('[useSiteRouter] Router no disponible y no hay fallback')
     } catch (error) {
       console.error('[useSiteRouter] Error en pushWithSite:', error)
+      // Último recurso: intentar navegación directa
+      try {
+        const siteSlug = getCurrentSiteSlug()
+        const cleanPath = path.startsWith('/') ? path : `/${path}`
+        const finalPath = siteSlug ? `/${siteSlug}${cleanPath}` : cleanPath
+        if (typeof window !== 'undefined') {
+          window.location.href = finalPath
+        }
+      } catch (e) {
+        console.error('[useSiteRouter] Error en fallback de navegación:', e)
+      }
     }
   }
 
@@ -85,22 +152,43 @@ export function useSiteRouter() {
    * Reemplaza la ruta actual incluyendo la sede
    */
   const replaceWithSite = (path: string) => {
-    if (!router || !router.replace) {
-      console.error('[useSiteRouter] Router no disponible')
-      return
-    }
-    
     try {
       const siteSlug = getCurrentSiteSlug()
       const cleanPath = path.startsWith('/') ? path : `/${path}`
+      const finalPath = siteSlug ? `/${siteSlug}${cleanPath}` : cleanPath
       
-      if (siteSlug) {
-        router.replace(`/${siteSlug}${cleanPath}`)
-      } else {
-        router.replace(cleanPath)
+      // Intentar usar router de Vue Router primero
+      if (router && typeof router.replace === 'function') {
+        router.replace(finalPath).catch((err) => {
+          // Si falla, usar fallback
+          console.warn('[useSiteRouter] Router.replace falló, usando fallback:', err)
+          if (typeof window !== 'undefined') {
+            window.location.replace(finalPath)
+          }
+        })
+        return
       }
+      
+      // Fallback: usar window.location.replace si router no está disponible
+      if (typeof window !== 'undefined' && window.location) {
+        window.location.replace(finalPath)
+        return
+      }
+      
+      console.error('[useSiteRouter] Router no disponible y no hay fallback')
     } catch (error) {
       console.error('[useSiteRouter] Error en replaceWithSite:', error)
+      // Último recurso: intentar navegación directa
+      try {
+        const siteSlug = getCurrentSiteSlug()
+        const cleanPath = path.startsWith('/') ? path : `/${path}`
+        const finalPath = siteSlug ? `/${siteSlug}${cleanPath}` : cleanPath
+        if (typeof window !== 'undefined') {
+          window.location.replace(finalPath)
+        }
+      } catch (e) {
+        console.error('[useSiteRouter] Error en fallback de navegación:', e)
+      }
     }
   }
 

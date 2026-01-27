@@ -202,23 +202,19 @@ const { rawCategoriesData, refresh, menuPending, isLightLoading } = useMenuData(
 
 // Inicializar sistema de prerender y actualización periódica
 if (import.meta.client) {
-  onMounted(async () => {
-    // Asegurar que la página inicie arriba del todo sin scroll automático
-    window.scrollTo({ top: 0, behavior: 'instant' })
-    
-    // Inicializar prerender en background (solo para actualizaciones periódicas)
-    // NO hace fetch inicial - useMenuData ya lo está haciendo
-    menuPreloader.initialize()
-  })
-
   onUnmounted(() => {
     menuPreloader.cleanup()
   })
 
-  // Cuando cambia el site, resetear scroll
+  // Cuando cambia el site, resetear scroll (pero solo si no hay posición guardada)
   watch(siteId, async (_newSiteId) => {
-    // Asegurar que la página inicie arriba del todo cuando cambia el site
-    window.scrollTo({ top: 0, behavior: 'instant' })
+    const siteSlug = getSiteSlug(sitesStore.location.site?.site_name || '') || 'default'
+    const savedScrollPosition = sessionStorage.getItem(`menu-scroll-${siteSlug}`)
+    
+    // Solo resetear si no hay posición guardada (navegación directa a nuevo site)
+    if (savedScrollPosition === null) {
+      window.scrollTo({ top: 0, behavior: 'instant' })
+    }
     
     // useMenuData se encargará automáticamente de cargar los datos del nuevo site
     // No necesitamos hacer fetch manual aquí
@@ -250,25 +246,40 @@ const categories = computed(() => {
       // ✅ “english_name” es el campo EN. “categoria_descripcion” es ES.
       const category_name = pickByLang(cat.categoria_descripcion, cat.english_name)
 
-      const products = (cat.products || []).map((p) => ({
-        ...p,
-        id: p.producto_id,
+      const products = (cat.products || [])
+        .map((p) => {
+          // Calcular precio de la misma manera que MenuProductCard
+          const presentationPrice = Number(p.lista_presentacion?.[0]?.producto_precio ?? 0)
+          const generalPrice = Number(p.productogeneral_precio ?? 0)
+          const fallbackPrice = Number(p.price ?? 0)
+          
+          const calculatedPrice = presentationPrice > 0 
+            ? presentationPrice 
+            : generalPrice > 0 
+            ? generalPrice 
+            : fallbackPrice
 
-        // ✅ EN: english_name si existe, si no ES
-        // ✅ ES: ES si existe, si no english_name
-        product_name: pickByLang(
-          p.productogeneral_descripcionweb || p.productogeneral_descripcion,
-          p.english_name || ''
-        ),
+          return {
+            ...p,
+            id: p.producto_id,
 
-        price: Number(p.productogeneral_precio ?? 0),
-        image_url:
-          p.productogeneral_urlimagen ||
-          (p.lista_productobase &&
-            p.lista_productobase[0] &&
-            p.lista_productobase[0].producto_urlimagen) ||
-          ''
-      }))
+            // ✅ EN: english_name si existe, si no ES
+            // ✅ ES: ES si existe, si no english_name
+            product_name: pickByLang(
+              p.productogeneral_descripcionweb || p.productogeneral_descripcion,
+              p.english_name || ''
+            ),
+
+            price: calculatedPrice,
+            image_url:
+              p.productogeneral_urlimagen ||
+              (p.lista_productobase &&
+                p.lista_productobase[0] &&
+                p.lista_productobase[0].producto_urlimagen) ||
+              ''
+          }
+        })
+        .filter((p) => p.price > 0) // Filtrar productos con precio 0
 
       return { ...cat, category_id, category_name, products }
     })
@@ -302,6 +313,12 @@ const showLoader = computed(() => {
    CLICK PRODUCTO
    ========================== */
 const onClickProduct = (category, product) => {
+  // Guardar posición del scroll antes de navegar
+  if (import.meta.client && typeof window !== 'undefined') {
+    const scrollPosition = window.scrollY || window.pageYOffset || 0
+    const siteSlug = getSiteSlug(sitesStore.location.site?.site_name || '') || 'default'
+    sessionStorage.setItem(`menu-scroll-${siteSlug}`, scrollPosition.toString())
+  }
   pushWithSite(`/producto/${product.id}`)
 }
 
@@ -363,14 +380,33 @@ const observeAllProducts = () => {
 onMounted(async () => {
   if (!import.meta.client) return
 
-  // Asegurar que la página inicie arriba del todo sin scroll automático
-  window.scrollTo({ top: 0, behavior: 'instant' })
+  // Cargar sede desde URL si no está en el store
+  await loadSiteFromUrl()
+
+  // Inicializar prerender en background (solo para actualizaciones periódicas)
+  // NO hace fetch inicial - useMenuData ya lo está haciendo
+  menuPreloader.initialize()
+
+  // Restaurar posición del scroll si existe (desde navegación desde producto)
+  const siteSlug = getSiteSlug(sitesStore.location.site?.site_name || '') || 'default'
+  const savedScrollPosition = sessionStorage.getItem(`menu-scroll-${siteSlug}`)
+  
+  if (savedScrollPosition !== null) {
+    // Esperar a que el contenido se renderice antes de restaurar scroll
+    await nextTick()
+    // Usar requestAnimationFrame para asegurar que el DOM esté listo
+    requestAnimationFrame(() => {
+      window.scrollTo({ top: parseInt(savedScrollPosition, 10), behavior: 'instant' })
+      // Limpiar la posición guardada después de restaurarla
+      sessionStorage.removeItem(`menu-scroll-${siteSlug}`)
+    })
+  } else {
+    // Solo resetear a 0 si no hay posición guardada
+    window.scrollTo({ top: 0, behavior: 'instant' })
+  }
   
   // Resetear categoría activa al montar (no recordar categoría anterior)
   activeCategoryId.value = null
-
-  // Cargar sede desde URL si no está en el store
-  await loadSiteFromUrl()
 
   // Observer para animación de entrada de productos
   productObserver.value = new IntersectionObserver(

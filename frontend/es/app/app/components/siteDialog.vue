@@ -106,7 +106,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch, nextTick } from 'vue'
 import Dialog from 'primevue/dialog'
 import Select from 'primevue/select'
 import { useSitesStore, useUserStore } from '#imports'
@@ -168,7 +168,7 @@ const canSave = computed(() => {
 /* ================= ACTIONS ================= */
 const { pushWithSite } = useSiteRouter()
 
-const confirmLocation = () => {
+const confirmLocation = async () => {
   if (!canSave.value) return
 
   const nb = currenNeigborhood.value
@@ -203,6 +203,8 @@ const confirmLocation = () => {
   store.setVisible('currentSite', false)
   
   // Navegar a /pay usando el sistema de slugs
+  // Usar nextTick para asegurar que el modal se cierre antes de navegar
+  await nextTick()
   pushWithSite('/pay')
 }
 
