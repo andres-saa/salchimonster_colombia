@@ -1714,24 +1714,112 @@ onMounted(async () => {
    SEO
    ======================= */
 const pageTitle = computed(() => {
-  return 'Salchimonster Colombia'
+  return 'Salchimonster Colombia - Elige tu Sede y Pide a Domicilio'
 })
 
 const pageDescription = computed(() => {
-  return 'Elige tu Salchimonster más cercano y pide a domicilio. Encuentra la sede más cercana a tu ubicación en Colombia.'
+  return 'Elige tu Salchimonster más cercano y pide a domicilio. Encuentra la sede más cercana a tu ubicación en Colombia. La mejor salchipapa, hamburguesas y más. Delivery rápido y seguro.'
+})
+
+// URL completa para compartir
+const fullUrl = computed(() => {
+  if (typeof window !== 'undefined') {
+    return window.location.href
+  }
+  return 'https://salchimonster.com/'
+})
+
+// Imagen para Open Graph (logo de Salchimonster)
+const ogImage = computed(() => {
+  // Usar logo de Salchimonster - URL absoluta para compartir en redes sociales
+  // Usar el logo del backend que es accesible públicamente
+  return 'https://gestion.salchimonster.com/images/logo.png'
 })
 
 useHead(() => ({
   title: pageTitle.value,
+  link: [
+    { rel: 'canonical', href: fullUrl.value }
+  ],
   meta: [
+    // SEO básico
     { name: 'description', content: pageDescription.value },
     { name: 'robots', content: 'index, follow' },
+    { name: 'keywords', content: 'salchimonster, salchipapa, hamburguesas, delivery, domicilio, comida rápida, colombia, restaurante, pedidos online' },
+    { name: 'author', content: 'Salchimonster' },
+    { name: 'viewport', content: 'width=device-width, initial-scale=1.0' },
+    
+    // Open Graph
     { property: 'og:title', content: pageTitle.value },
     { property: 'og:description', content: pageDescription.value },
     { property: 'og:type', content: 'website' },
+    { property: 'og:url', content: fullUrl.value },
+    { property: 'og:image', content: ogImage.value },
+    { property: 'og:image:width', content: '1200' },
+    { property: 'og:image:height', content: '630' },
+    { property: 'og:image:alt', content: 'Salchimonster Colombia - Elige tu Sede' },
+    { property: 'og:site_name', content: 'Salchimonster' },
+    { property: 'og:locale', content: 'es_CO' },
+    
+    // Twitter Card
     { name: 'twitter:card', content: 'summary_large_image' },
     { name: 'twitter:title', content: pageTitle.value },
-    { name: 'twitter:description', content: pageDescription.value }
+    { name: 'twitter:description', content: pageDescription.value },
+    { name: 'twitter:image', content: ogImage.value },
+    { name: 'twitter:image:alt', content: 'Salchimonster Colombia - Elige tu Sede' },
+    { name: 'twitter:site', content: '@salchimonster' },
+    
+    // Mobile
+    { name: 'mobile-web-app-capable', content: 'yes' },
+    { name: 'apple-mobile-web-app-capable', content: 'yes' },
+    { name: 'apple-mobile-web-app-status-bar-style', content: 'black-translucent' }
+  ],
+  script: [
+    {
+      type: 'application/ld+json',
+      children: JSON.stringify({
+        '@context': 'https://schema.org',
+        '@type': 'Organization',
+        name: 'Salchimonster',
+        description: pageDescription.value,
+        url: 'https://salchimonster.com',
+        logo: ogImage.value,
+        sameAs: [
+          'https://www.facebook.com/salchimonster',
+          'https://www.instagram.com/salchimonster',
+          'https://www.tiktok.com/@salchimonster'
+        ],
+        contactPoint: {
+          '@type': 'ContactPoint',
+          contactType: 'Customer Service',
+          availableLanguage: ['Spanish', 'English']
+        },
+        areaServed: {
+          '@type': 'Country',
+          name: 'Colombia'
+        },
+        servesCuisine: 'Fast Food',
+        priceRange: '$$'
+      })
+    },
+    {
+      type: 'application/ld+json',
+      children: JSON.stringify({
+        '@context': 'https://schema.org',
+        '@type': 'WebSite',
+        name: 'Salchimonster Colombia',
+        url: 'https://salchimonster.com',
+        description: pageDescription.value,
+        potentialAction: {
+          '@type': 'SearchAction',
+          target: {
+            '@type': 'EntryPoint',
+            urlTemplate: 'https://salchimonster.com/buscar?q={search_term_string}'
+          },
+          'query-input': 'required name=search_term_string'
+        }
+      })
+    }
   ]
 }))
 </script>
