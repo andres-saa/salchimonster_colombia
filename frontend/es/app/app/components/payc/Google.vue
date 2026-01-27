@@ -742,6 +742,34 @@ const applySiteSelection = (data) => {
     siteStore.location.neigborhood.delivery_price = deliveryCost
   }
 
+  // Preservar el order_type actual si es válido, solo validar si no hay uno o no es válido
+  // NO cambiar a "recoger" automáticamente cuando se establece una dirección
+  const currentOrderType = user.user.order_type
+  const dispatcherOrderType = siteStore.location?.order_type
+  
+  // Si hay un order_type del dispatcher y es válido, usarlo
+  if (dispatcherOrderType && dispatcherOrderType.id) {
+    const list = computedOrderTypesVisible.value
+    const isValidDispatcherType = list.some((o) => Number(o.id) === Number(dispatcherOrderType.id))
+    if (isValidDispatcherType) {
+      user.user.order_type = dispatcherOrderType
+      return
+    }
+  }
+  
+  // Si el order_type actual es válido y es delivery (no pickup), mantenerlo
+  if (currentOrderType && currentOrderType.id) {
+    const list = computedOrderTypesVisible.value
+    const isValidCurrentType = list.some((o) => Number(o.id) === Number(currentOrderType.id))
+    const isDelivery = ![2, 6].includes(currentOrderType.id)
+    
+    // Si es válido y es delivery, mantenerlo (no cambiar a recoger)
+    if (isValidCurrentType && isDelivery) {
+      return // Mantener el order_type actual
+    }
+  }
+  
+  // Solo validar si no hay order_type válido o si es pickup y queremos cambiarlo
   ensureValidOrderTypeForCurrentSite()
 }
 
@@ -924,7 +952,19 @@ const ensureValidOrderTypeForCurrentSite = () => {
     return // Ya es válido, no hacer nada
   }
   
-  // Prioridad 3: Usar el primero disponible
+  // Prioridad 3: Si el order_type actual es delivery (no pickup) pero no está en la lista,
+  // intentar encontrar un order_type de delivery válido antes de usar el primero disponible
+  const currentOrderType = user.user.order_type
+  if (currentOrderType && ![2, 6].includes(currentOrderType.id)) {
+    // Es delivery, buscar un order_type de delivery válido
+    const deliveryType = list.find((o) => ![2, 6].includes(o.id))
+    if (deliveryType) {
+      user.user.order_type = deliveryType
+      return
+    }
+  }
+  
+  // Prioridad 4: Usar el primero disponible
   user.user.order_type = list[0]
 }
 
