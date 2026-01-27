@@ -225,10 +225,22 @@
             @click="openModal(store)"
           >
             <div style="grid-area: img;" class="store-img-wrapper">
-              <img
-                :src="currentImage(store)"
-                @load="loadHighResImage(store)"
+              <NuxtImg
+                v-if="store.img_id"
+                :src="`${BACKEND_BASE}/read-photo-product/${store.img_id}`"
+                :key="`${store.id}-${imageRefreshKey}`"
                 @error="onImgError(store)"
+                class="store-img"
+                :alt="t('store_photo_alt')"
+                width="80"
+                height="80"
+                format="webp"
+                quality="80"
+                loading="lazy"
+              />
+              <img
+                v-else
+                :src="FALLBACK_LOGO"
                 class="store-img"
                 :alt="t('store_photo_alt')"
               />
@@ -1568,21 +1580,29 @@ async function dispatchToSite(manualStore, orderTypeObj, extra = { mode: 'simple
    IMAGES
    ======================= */
 const FALLBACK_LOGO = 'https://gestion.salchimonster.com/images/logo.png'
-const imgCache = ref({})
-const currentImage = (store) => {
-  if (imgCache.value[store.id]) return imgCache.value[store.id]
-  if (store.img_id) return `${BACKEND_BASE}/read-photo-product/${store.img_id}`
-  return FALLBACK_LOGO
-}
-const loadHighResImage = (store) => {
-  if (!store.img_id) return
-  const i = new Image()
-  i.src = `${BACKEND_BASE}/read-photo-product/${store.img_id}`
-  i.onload = () => { imgCache.value[store.id] = i.src }
-}
+const imageRefreshKey = ref(0)
+let imageRefreshInterval = null
+
+// Actualizar imágenes cada 5 minutos
+onMounted(() => {
+  if (import.meta.client) {
+    imageRefreshInterval = setInterval(() => {
+      imageRefreshKey.value = Date.now()
+    }, 5 * 60 * 1000) // 5 minutos
+  }
+})
+
+// Limpiar intervalo al desmontar el componente
+onBeforeUnmount(() => {
+  if (imageRefreshInterval) {
+    clearInterval(imageRefreshInterval)
+    imageRefreshInterval = null
+  }
+})
+
 const onImgError = (store) => {
-  // Si falló la imagen con img_id, usamos el logo como fallback
-  imgCache.value[store.id] = FALLBACK_LOGO
+  // El fallback se maneja con v-else en el template
+  console.warn(`[Dispatcher] Error loading image for store ${store.id}`)
 }
 
 /* =======================

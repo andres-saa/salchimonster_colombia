@@ -1,13 +1,5 @@
 <template>
   <div class="page-wrapper">
-    <button
-      class="nav-btn nav-btn--back"
-      @click="goBack"
-      :aria-label="tl('back_aria', 'volver', 'back')"
-    >
-      <Icon name="mdi:arrow-left" size="24" />
-    </button>
-
     <div v-if="loading" class="loading-overlay">
       <div class="spinner-container">
         <Icon name="mdi:loading" class="spin-icon" size="60" />
@@ -802,15 +794,6 @@ const completeMobileAction = (destination) => {
   }
 }
 
-const goBack = () => {
-  const siteSlug = getCurrentSiteSlug()
-  if (siteSlug) {
-    router.push(`/${siteSlug}/`)
-  } else {
-    router.push('/')
-  }
-}
-
 const goToRelative = (step) => {
   const list = flatProducts.value
   const idx = list.findIndex((p) => Number(p.producto_id) === currentProductId.value)
@@ -954,15 +937,6 @@ useHead({
 .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
-.nav-btn {
-  position: fixed; z-index: 50; background: white;
-  border: 1px solid var(--border, #e5e7eb); box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-  border-radius: 50%; width: 40px; height: 40px;
-  display: flex; align-items: center; justify-content: center;
-  cursor: pointer; transition: all 0.2s; color: var(--text-main, #1f2937);
-}
-.nav-btn:hover { background: #f3f4f6; transform: scale(1.05); }
-.nav-btn--back { top: 4rem; left: 1rem; }
 
 .product-container { display: grid; grid-template-columns: 1fr; max-width: 1200px; margin: 0 auto; }
 @media (min-width: 1024px) {

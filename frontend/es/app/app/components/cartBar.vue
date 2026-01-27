@@ -59,8 +59,11 @@ const { pushWithSite } = useSiteRouter()
 const isMenuPage = computed(() => {
   const path = route.path || ''
   
-  // Mostrar en: /, /kids
-  if (path === '/' || path === '/kids') return true
+  // NO mostrar en el dispatcher (/)
+  if (path === '/') return false
+  
+  // Mostrar en: /kids
+  if (path === '/kids') return true
   
   // Verificar si es una ruta de sede sin subrutas (ej: /montes/, /montes/index)
   const pathSegments = path.split('/').filter(Boolean)
