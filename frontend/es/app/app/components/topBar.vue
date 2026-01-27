@@ -7,6 +7,7 @@ import {
   useSidebarStore,
   useUserStore,
   useUIStore,
+  usecartStore,
   texts
 } from '#imports'
 import { getSiteSlug } from '~/composables/useSedeFromRoute'
@@ -18,6 +19,7 @@ const router = useRouter()
 const siteStore = useSitesStore()
 const sidebarStore = useSidebarStore()
 const user = useUserStore()
+const cartStore = usecartStore()
 
 const handleSearch = () => {
   uistore.isSearchOpen = true
@@ -90,12 +92,17 @@ const isIframe = computed(() => {
   return user.user.iframe
 })
 
-// Acción: Nuevo Pedido (Redirige al 3001)
+// Acción: Nuevo Pedido (Limpia el carrito y redirige al dispatcher)
 const goToNewOrder = () => {
-  const token = user.user.token
-  const inserted_by = user.user.inserted_by
-  const iframe = user.user?.iframe
-  window.location.href = `http://localhost:3001?token=${token}&inserted_by=${inserted_by}&iframe=${iframe}`
+  // Limpiar el carrito
+  cartStore.cart = []
+  cartStore.applied_coupon = null
+  cartStore.coupon_ui = { enabled: false, draft_code: '' }
+  cartStore.address_details = {}
+  cartStore.order_notes = ''
+  
+  // Redirigir al dispatcher
+  router.push('/')
 }
 
 // Acción: Cerrar Sesión
