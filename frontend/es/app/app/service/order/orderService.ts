@@ -54,6 +54,38 @@ function buildPhone() {
   return `${dial}${number}`;
 }
 
+/**
+ * Decodifica un JWT y extrae el id del usuario.
+ * Retorna null si no hay token o no se puede decodificar.
+ */
+function getUserIdFromToken(): number | null {
+  const { user } = getStores();
+  const token = user.user?.token;
+  
+  if (!token || typeof window === 'undefined') return null;
+  
+  try {
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    
+    // Decodificación compatible con caracteres especiales (utf-8)
+    const jsonPayload = decodeURIComponent(
+      window.atob(base64)
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
+    const decoded = JSON.parse(jsonPayload);
+    
+    // Extraer el id del token decodificado
+    const userId = decoded?.id || decoded?.user_id || null;
+    return userId ? Number(userId) : null;
+  } catch (e) {
+    console.error('Error decodificando token para inserted_by:', e);
+    return null;
+  }
+}
+
 /* --------------------------------- Domain --------------------------------- */
 
 /** Arma la orden base desde los stores. */
@@ -111,6 +143,9 @@ function preparar_orden() {
   };
 
   /* -------------------------------------------------------------------------- */
+  
+  // Obtener inserted_by del token si hay usuario logueado
+  const inserted_by = getUserIdFromToken();
 
   const order = {
     order_products: [], // backend recibe pe_json del carrito completo
@@ -128,6 +163,7 @@ function preparar_orden() {
     address_details: address_details,
     discount_code: discount_code,
     total: 0,
+    ...(inserted_by ? { inserted_by } : {}), // Incluir inserted_by solo si hay usuario logueado
   };
 
   return order;

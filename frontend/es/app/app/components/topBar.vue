@@ -100,9 +100,17 @@ const goToNewOrder = () => {
 
 // Acción: Cerrar Sesión
 const handleLogout = () => {
+  // Limpiar token y inserted_by del store
   user.user.token = null
   user.user.inserted_by = null
-  window.location.href = 'http://localhost:3001'
+  
+  // Limpiar localStorage de sesión externa
+  if (typeof window !== 'undefined' && window.localStorage) {
+    localStorage.removeItem('session_external_data')
+  }
+  
+  // Redirigir al dispatcher (página principal)
+  router.push('/')
 }
 
 // --- LÓGICA DE PERFIL DE USUARIO Y JWT ---
