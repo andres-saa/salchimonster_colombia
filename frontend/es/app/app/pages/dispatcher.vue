@@ -913,11 +913,20 @@ async function validateAddress() {
         }
       }
 
-      // Obtener el costo de domicilio de Rappi si está disponible
+      // Obtener el costo de domicilio: priorizar delivery_pricing.price, luego rappi_validation, luego delivery_cost_cop
       let deliveryCost = 0
-      if (result.rappi_validation && result.rappi_validation.estimated_price) {
+      if (result.delivery_pricing && result.delivery_pricing.price != null) {
+        deliveryCost = Number(result.delivery_pricing.price) || 0
+      } else if (result.rappi_validation && result.rappi_validation.estimated_price) {
         deliveryCost = Number(result.rappi_validation.estimated_price) || 0
+      } else if (result.delivery_cost_cop != null) {
+        deliveryCost = Number(result.delivery_cost_cop) || 0
       }
+
+      // Usar distancia de delivery_pricing si está disponible
+      const finalDistance = result.delivery_pricing?.distance_km != null
+        ? Number(result.delivery_pricing.distance_km)
+        : minDistance
 
       // Usar formatted_address directamente del backend (como en LocationManager)
       // El backend ya incluye zona, barrio y toda la información completa
@@ -929,10 +938,12 @@ async function validateAddress() {
         geocoded: result.geocoded,
         is_inside_any: result.is_inside_any,
         delivery_cost_cop: deliveryCost,
+        delivery_pricing: result.delivery_pricing, // Guardar objeto completo de pricing
         rappi_validation: result.rappi_validation,
+        matching_polygons: result.matching_polygons, // Guardar polígonos coincidentes
         nearest: nearestSite ? {
           site: nearestSite,
-          distance_km: minDistance,
+          distance_km: finalDistance,
           in_coverage: inCoverage || result.is_inside_any
         } : null
       }
@@ -1225,11 +1236,20 @@ async function validateModalAddress() {
         inCoverage = result.is_inside_any
       }
 
-      // Obtener el costo de domicilio de Rappi si está disponible
+      // Obtener el costo de domicilio: priorizar delivery_pricing.price, luego rappi_validation, luego delivery_cost_cop
       let deliveryCost = 0
-      if (result.rappi_validation && result.rappi_validation.estimated_price) {
+      if (result.delivery_pricing && result.delivery_pricing.price != null) {
+        deliveryCost = Number(result.delivery_pricing.price) || 0
+      } else if (result.rappi_validation && result.rappi_validation.estimated_price) {
         deliveryCost = Number(result.rappi_validation.estimated_price) || 0
+      } else if (result.delivery_cost_cop != null) {
+        deliveryCost = Number(result.delivery_cost_cop) || 0
       }
+
+      // Usar distancia de delivery_pricing si está disponible
+      const finalDistance = result.delivery_pricing?.distance_km != null
+        ? Number(result.delivery_pricing.distance_km)
+        : minDistance
 
       // Usar formatted_address directamente del backend (como en LocationManager)
       // El backend ya incluye zona, barrio y toda la información completa
@@ -1241,10 +1261,12 @@ async function validateModalAddress() {
         geocoded: result.geocoded,
         is_inside_any: result.is_inside_any,
         delivery_cost_cop: deliveryCost,
+        delivery_pricing: result.delivery_pricing, // Guardar objeto completo de pricing
         rappi_validation: result.rappi_validation,
+        matching_polygons: result.matching_polygons, // Guardar polígonos coincidentes
         nearest: nearestSite ? {
           site: nearestSite,
-          distance_km: minDistance,
+          distance_km: finalDistance,
           in_coverage: inCoverage || result.is_inside_any
         } : null
       }
@@ -1475,15 +1497,20 @@ async function dispatchToSite(manualStore, orderTypeObj, extra = { mode: 'simple
 
     if (isDelivery && useGoogleMaps && extra?.mode === 'gmaps' && extra?.coverageData) {
       const coverageData = extra.coverageData
-      // Usar el costo de Rappi si está disponible, sino el que viene en coverageData
-      deliveryPrice = coverageData.rappi_validation?.estimated_price 
-        ? Number(coverageData.rappi_validation.estimated_price)
-        : (coverageData.delivery_cost_cop || 0)
+      // Obtener el costo de domicilio: priorizar delivery_pricing.price, luego rappi_validation, luego delivery_cost_cop
+      if (coverageData.delivery_pricing?.price != null) {
+        deliveryPrice = Number(coverageData.delivery_pricing.price) || 0
+      } else if (coverageData.rappi_validation?.estimated_price) {
+        deliveryPrice = Number(coverageData.rappi_validation.estimated_price) || 0
+      } else {
+        deliveryPrice = coverageData.delivery_cost_cop || 0
+      }
       
       userSiteData = {
         ...coverageData,
         delivery_cost_cop: deliveryPrice,
         formatted_address: coverageData.formatted_address,
+        delivery_pricing: coverageData.delivery_pricing, // Guardar objeto completo de pricing
         rappi_validation: coverageData.rappi_validation
       }
       finalAddress = coverageData.formatted_address || ''

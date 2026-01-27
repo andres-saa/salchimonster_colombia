@@ -639,11 +639,20 @@ const validateAddress = async () => {
         inCoverage = result.is_inside_any
       }
 
-      // Obtener el costo de domicilio de Rappi si está disponible
+      // Obtener el costo de domicilio: priorizar delivery_pricing.price, luego rappi_validation, luego delivery_cost_cop
       let deliveryCost = 0
-      if (result.rappi_validation && result.rappi_validation.estimated_price) {
+      if (result.delivery_pricing && result.delivery_pricing.price != null) {
+        deliveryCost = Number(result.delivery_pricing.price) || 0
+      } else if (result.rappi_validation && result.rappi_validation.estimated_price) {
         deliveryCost = Number(result.rappi_validation.estimated_price) || 0
+      } else if (result.delivery_cost_cop != null) {
+        deliveryCost = Number(result.delivery_cost_cop) || 0
       }
+
+      // Usar distancia de delivery_pricing si está disponible
+      const finalDistance = result.delivery_pricing?.distance_km != null
+        ? Number(result.delivery_pricing.distance_km)
+        : minDistance
 
       tempSiteData.value = {
         formatted_address: result.formatted_address || result.address,
@@ -653,15 +662,17 @@ const validateAddress = async () => {
         geocoded: result.geocoded,
         is_inside_any: result.is_inside_any,
         delivery_cost_cop: deliveryCost,
+        delivery_pricing: result.delivery_pricing, // Guardar objeto completo de pricing
         rappi_validation: result.rappi_validation,
+        matching_polygons: result.matching_polygons, // Guardar polígonos coincidentes
         status: 'checked',
         in_coverage: inCoverage || result.is_inside_any,
         nearest: nearestSite ? {
           site: nearestSite,
-          distance_km: minDistance,
+          distance_km: finalDistance,
           in_coverage: inCoverage || result.is_inside_any
         } : null,
-        distance_miles: minDistance.toFixed(1)
+        distance_miles: finalDistance.toFixed(1)
       }
     } else {
       tempSiteData.value = {
@@ -717,10 +728,15 @@ const applySiteSelection = (data) => {
   siteStore.location.site = data.nearest?.site || siteStore.location.site
   store.address_details = data
 
-  // Usar el costo de Rappi si está disponible, sino el que viene en data
-  const deliveryCost = data.rappi_validation?.estimated_price 
-    ? Number(data.rappi_validation.estimated_price)
-    : (data.delivery_cost_cop != null ? data.delivery_cost_cop : 0)
+  // Obtener el costo de domicilio: priorizar delivery_pricing.price, luego rappi_validation, luego delivery_cost_cop
+  let deliveryCost = 0
+  if (data.delivery_pricing && data.delivery_pricing.price != null) {
+    deliveryCost = Number(data.delivery_pricing.price) || 0
+  } else if (data.rappi_validation?.estimated_price) {
+    deliveryCost = Number(data.rappi_validation.estimated_price) || 0
+  } else if (data.delivery_cost_cop != null) {
+    deliveryCost = Number(data.delivery_cost_cop) || 0
+  }
 
   if (deliveryCost != null) {
     siteStore.location.neigborhood.delivery_price = deliveryCost
@@ -738,9 +754,15 @@ const handleSiteChange = async (newData) => {
 
   try {
     // Actualizar el store con toda la información de la nueva sede
-    const deliveryPrice = newData.rappi_validation?.estimated_price 
-      ? Number(newData.rappi_validation.estimated_price)
-      : (newData.delivery_cost_cop != null ? newData.delivery_cost_cop : 0)
+    // Obtener el costo de domicilio: priorizar delivery_pricing.price, luego rappi_validation, luego delivery_cost_cop
+    let deliveryPrice = 0
+    if (newData.delivery_pricing && newData.delivery_pricing.price != null) {
+      deliveryPrice = Number(newData.delivery_pricing.price) || 0
+    } else if (newData.rappi_validation?.estimated_price) {
+      deliveryPrice = Number(newData.rappi_validation.estimated_price) || 0
+    } else if (newData.delivery_cost_cop != null) {
+      deliveryPrice = Number(newData.delivery_cost_cop) || 0
+    }
 
     // Actualizar location en el store
     siteStore.updateLocation({
@@ -918,11 +940,15 @@ watch(
     if (newType?.id === 2 || newType?.id === 6) {
       siteStore.location.neigborhood.delivery_price = 0
     } else {
-      // Priorizar el costo de Rappi si está disponible
-      const rappiCost = user.user.site?.rappi_validation?.estimated_price
-      const deliveryCost = rappiCost 
-        ? Number(rappiCost)
-        : (user.user.site?.delivery_cost_cop ?? siteStore?.delivery_price ?? 0)
+      // Obtener el costo de domicilio: priorizar delivery_pricing.price, luego rappi_validation, luego delivery_cost_cop
+      let deliveryCost = 0
+      if (user.user.site?.delivery_pricing?.price != null) {
+        deliveryCost = Number(user.user.site.delivery_pricing.price) || 0
+      } else if (user.user.site?.rappi_validation?.estimated_price) {
+        deliveryCost = Number(user.user.site.rappi_validation.estimated_price) || 0
+      } else {
+        deliveryCost = user.user.site?.delivery_cost_cop ?? siteStore?.delivery_price ?? 0
+      }
       
       if (deliveryCost != null) {
         siteStore.location.neigborhood.delivery_price = deliveryCost
