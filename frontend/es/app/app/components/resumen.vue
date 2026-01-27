@@ -123,7 +123,7 @@
           <i class="pi pi-clock"></i> Cerrado, abre a las {{ siteStore.status.next_opening_time }}
         </div>
 
-        <div v-if="!minPurchaseValidation.valid && route.path == '/pay'" class="closed-alert" style="background-color: #fef2f2; border-color: #fecaca; color: #b91c1c;">
+        <div v-if="!minPurchaseValidation.valid && route.path.includes('/pay')" class="closed-alert" style="background-color: #fef2f2; border-color: #fecaca; color: #b91c1c;">
           <i class="pi pi-exclamation-triangle"></i> {{ minPurchaseValidation.message }}
         </div>
 
@@ -135,7 +135,7 @@
                 </button>
             </NuxtLink>
 
-            <NuxtLink to="/cart" v-else-if="route.path != '/reservas'" class="link-wrapper">
+            <NuxtLink to="/cart" v-else-if="route.path != '/reservas' && !route.path.includes('/pay')" class="link-wrapper">
                 <button type="button" class="btn btn-text">
                     Volver al carrito
                 </button>
@@ -151,14 +151,14 @@
                 </button>
             </NuxtLink>
 
-            <NuxtLink to="/pay" v-else-if="route.path == '/cart'" class="link-wrapper">
+            <NuxtLink to="/pay" v-else-if="route.path.includes('/cart') && !route.path.includes('/pay')" class="link-wrapper">
                 <button type="button" class="btn btn-primary">
-                    Finalizar pedido
+Finalizar pedido
                 </button>
             </NuxtLink>
 
             <button
-                v-else-if="route.path == '/pay' && !reportes.loading.visible && siteStore.status?.status !== 'closed' && (isLoggedIn || user.user.payment_method_option?.id != 9)"
+                v-else-if="route.path.includes('/pay') && !reportes.loading.visible && siteStore.status?.status !== 'closed' && (isLoggedIn || user.user.payment_method_option?.id != 9)"
                 type="button"
                 class="btn btn-primary"
                 :disabled="reportes.loading.visible || !canProceedToPayment"
@@ -171,7 +171,7 @@
             </button>
 
             <button
-                v-else-if="route.path == '/pay' && !reportes.loading.visible && siteStore.status?.status !== 'closed' && !isLoggedIn && user.user.payment_method_option?.id == 9"
+                v-else-if="route.path.includes('/pay') && !reportes.loading.visible && siteStore.status?.status !== 'closed' && !isLoggedIn && user.user.payment_method_option?.id == 9"
                 type="button"
                 class="btn btn-primary"
                 :disabled="reportes.loading.visible || !canProceedToPayment"
