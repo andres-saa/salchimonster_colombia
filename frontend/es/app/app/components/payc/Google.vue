@@ -602,6 +602,7 @@ const validateAddress = async () => {
           const site = matchingPolygon.site
           nearestSite = {
             site_id: site.site_id,
+            pe_site_id: site.pe_site_id || null, // Incluir pe_site_id si está disponible
             site_name: site.site_name,
             subdomain: site.subdomain || null,
             city_id: site.city_id || null,
@@ -630,6 +631,7 @@ const validateAddress = async () => {
         const currentSite = siteStore.location.site
         nearestSite = {
           site_id: currentSite.site_id,
+          pe_site_id: currentSite.pe_site_id || null, // Preservar pe_site_id del site actual
           site_name: currentSite.site_name,
           subdomain: currentSite.subdomain,
           city_id: currentSite.city_id,
@@ -724,8 +726,15 @@ const applySiteSelection = (data) => {
   user.user.lng = data.lng
   user.user.place_id = data.place_id || null
 
-  // sitio real
-  siteStore.location.site = data.nearest?.site || siteStore.location.site
+  // sitio real - preservar pe_site_id si está disponible
+  const newSite = data.nearest?.site
+  if (newSite) {
+    siteStore.location.site = {
+      ...siteStore.location.site, // Preservar propiedades existentes
+      ...newSite, // Sobrescribir con las nuevas propiedades
+      pe_site_id: newSite.pe_site_id || siteStore.location.site?.pe_site_id || null // Asegurar pe_site_id
+    }
+  }
   store.address_details = data
 
   // Obtener el costo de domicilio: priorizar delivery_pricing.price, luego rappi_validation, luego delivery_cost_cop
@@ -792,9 +801,13 @@ const handleSiteChange = async (newData) => {
       deliveryPrice = Number(newData.delivery_cost_cop) || 0
     }
 
-    // Actualizar location en el store
+    // Actualizar location en el store - asegurar que pe_site_id esté incluido
+    const siteWithPeSiteId = {
+      ...site,
+      pe_site_id: site?.pe_site_id || siteStore.location?.site?.pe_site_id || null // Preservar pe_site_id
+    }
     siteStore.updateLocation({
-      site: site,
+      site: siteWithPeSiteId,
       city: newData.city || null,
       address_details: newData,
       formatted_address: newData.formatted_address || '',

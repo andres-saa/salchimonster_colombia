@@ -95,7 +95,10 @@ function preparar_orden() {
 
   const order_products = cart.cart; // se envía como pe_json
   const site_id = site.location?.site?.site_id;
-  const pe_site_id = site.location?.site?.pe_site_id;
+  // pe_site_id es requerido - asegurarse de que siempre tenga un valor
+  // Si no está disponible, usar site_id como fallback (aunque idealmente debería venir del backend)
+  const pe_site_id = site.location?.site?.pe_site_id ?? null;
+  const final_pe_site_id = pe_site_id ?? site_id ?? null;
   const payment_method_id = user.user.payment_method_option?.id ?? null;
   const order_type_id = user.user.order_type?.id ?? null;
   const placa = user.user.placa?.toString().trim() || "";
@@ -148,7 +151,7 @@ function preparar_orden() {
   const order = {
     order_products: [], // backend recibe pe_json del carrito completo
     site_id,
-    pe_site_id,
+    pe_site_id: final_pe_site_id, // Asegurar que siempre tenga un valor
     order_type_id,
     placa,
     delivery_person_id: 4,

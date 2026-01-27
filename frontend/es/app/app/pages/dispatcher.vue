@@ -1411,6 +1411,8 @@ async function loadStores() {
       .filter((s) => s.show_on_web && s.time_zone === 'America/Bogota' && s.site_id != 32)
       .map((s) => ({
         id: s.site_id,
+        site_id: s.site_id, // Incluir también site_id explícitamente
+        pe_site_id: s.pe_site_id || null, // pe_site_id es requerido - debe venir del backend
         name: `SALCHIMONSTER ${s.site_name}`,
         city: s.city_name,
         cityId: s.city_id,
@@ -1550,6 +1552,7 @@ async function dispatchToSite(manualStore, orderTypeObj, extra = { mode: 'simple
     // Preparar el objeto de sitio para el store
     const siteData = {
       site_id: targetStore.id || targetStore.site_id,
+      pe_site_id: targetStore.pe_site_id || null, // pe_site_id es requerido - debe venir del backend
       site_name: (targetStore.name || targetStore.site_name || '').replace('SALCHIMONSTER ', ''),
       site_address: targetStore.address,
       city_id: targetCityId,
