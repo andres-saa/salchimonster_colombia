@@ -73,16 +73,26 @@ export default defineEventHandler(async (event) => {
         const menuUrl = `/${slug}/`
         
         // Forzar la regeneración de la página haciendo una petición interna
-        // Esto invalida el caché de ISR y fuerza la regeneración con los nuevos datos
+        // Esto invalida el caché y fuerza la regeneración con los nuevos datos
         try {
           const host = event.node.req.headers.host || 'localhost:3000'
           const protocol = event.node.req.headers['x-forwarded-proto'] || 
                           (event.node.req.headers['x-forwarded-ssl'] === 'on' ? 'https' : 'http')
           const baseUrl = `${protocol}://${host}`
           
-          // Hacer una petición GET para forzar la regeneración de ISR
-          // El header Cache-Control: no-cache fuerza a Nitro a regenerar la página
-          await fetch(`${baseUrl}${menuUrl}`, { 
+          // Intentar invalidar el caché usando la API de Nitro si está disponible
+          try {
+            // @ts-ignore - Nitro puede tener métodos de caché
+            if (event.context.nitro?.cache) {
+              await event.context.nitro.cache.delete(menuUrl)
+            }
+          } catch (cacheError) {
+            // Si no está disponible, continuar con fetch HTTP
+          }
+          
+          // Hacer una petición GET con query parameter para forzar regeneración
+          // El query parameter ?_regenerate=true fuerza a Nitro a regenerar la página
+          await fetch(`${baseUrl}${menuUrl}?_regenerate=${Date.now()}`, { 
             method: 'GET',
             headers: {
               'Cache-Control': 'no-cache, no-store, must-revalidate',

@@ -19,7 +19,7 @@
         <div style="width: 100vw; height: 100vh;"></div>
       </div>
 
-      <aside v-if="!isIframeMode" class="app-layout__sidebar" >
+      <aside v-if="!isIframeMode && !isPerformanceMode" class="app-layout__sidebar" >
         <sidebar />
       </aside>
 
@@ -41,6 +41,10 @@ import sidebar from '~/components/sidebar.vue'
 const route = useRoute()
 const siteStore = useSitesStore()
 const user = useUserStore()
+const config = useRuntimeConfig()
+
+// Modo rendimiento: oculta sidebar y otros elementos pesados
+const isPerformanceMode = computed(() => config.public.rendimiento === true)
 
 // ===== LÓGICA IFRAME =====
 const isIframeMode = computed(() => {
@@ -201,6 +205,17 @@ onBeforeUnmount(() => {
   padding-left: 320px;
 }
 .app-layout__content--full { padding-left: 0; }
+
+/* Modo rendimiento: sin padding para sidebar */
+.app-layout__content:has(+ .app-layout__sidebar:not(:empty)) {
+  padding-left: 320px;
+}
+
+/* Modo rendimiento: sin padding cuando no hay sidebar */
+.app-layout__shell:has(.app-layout__sidebar:empty) .app-layout__content,
+.app-layout__shell:not(:has(.app-layout__sidebar)) .app-layout__content {
+  padding-left: 0;
+}
 
 /* Transición Nuxt */
 .page-enter-active,

@@ -87,6 +87,7 @@ export default defineNuxtConfig({
     public: {
       apiBase: process.env.API_BASE_URL || 'http://localhost:8000',
       googleMapsKey: process.env.NUXT_PUBLIC_GOOGLE_MAPS_KEY || '',
+      rendimiento: process.env.NUXT_PUBLIC_RENDIMIENTO === 'true' || false, // Variable para pruebas de rendimiento
     },
   },
 
@@ -100,9 +101,13 @@ export default defineNuxtConfig({
     // Reemplaza '/ayuda' por la ruta donde usas este componente
     '/pqr': { isr: 3600 } ,
 
-    // Reglas dinámicas para menús de sedes - se generarán en el hook
-    // Patrón: /{sede}/ -> ISR cada 1 hora (3600s) para menús estáticos
-    '/**': { isr: 3600 }, // Aplicar ISR a todas las rutas dinámicas (menús de sedes)
+    // Rutas dinámicas de sedes: estáticas hasta que se llame al endpoint de regeneración
+    // NO usar ISR automático - solo se regeneran cuando se llama a /api/regenerate-menus
+    // Las páginas se generan en la primera visita y se mantienen estáticas
+    '/**': { 
+      // Sin ISR - las páginas son completamente estáticas
+      // Solo se regeneran cuando se llama explícitamente al endpoint /api/regenerate-menus
+    },
 
     // Opcional: Cachear assets estáticos agresivamente
     '/_nuxt/**': { headers: { 'cache-control': 's-maxage=31536000' } },

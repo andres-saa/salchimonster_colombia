@@ -9,7 +9,7 @@
 
 <template>
   <div class="menu-page">
-    <CarouselBanners v-if="!isLoggedIn" />
+    <CarouselBanners v-if="!isLoggedIn && !isPerformanceMode" />
 
     <MenuCategoriesBar
       :categories="categories"
@@ -19,7 +19,7 @@
       @select-category="onClickCategory"
     />
 
-    <div class="menu-background">
+    <div class="menu-background" :class="{ 'performance-mode': isPerformanceMode }">
       <!-- Mostrar loader solo si realmente no hay datos -->
       <ClientOnly>
         <div v-if="showLoader" class="loading-container">
@@ -92,6 +92,10 @@ const sitesStore = useSitesStore()
 const userStore = useUserStore()
 const sedeFromRoute = useSedeFromRoute()
 const { pushWithSite } = useSiteRouter()
+const config = useRuntimeConfig()
+
+// Modo rendimiento: oculta banners y imagen de fondo
+const isPerformanceMode = computed(() => config.public.rendimiento === true)
 
 // Detectar sede desde la URL y cargar en el store si no está
 const loadSiteFromUrl = async () => {
@@ -858,6 +862,12 @@ useHead(() => {
   background-size: 100%;
 }
 
+/* Modo rendimiento: sin imagen de fondo */
+.menu-background.performance-mode {
+  background-image: none;
+  background: #ffffff;
+}
+
 /* Imagen de fondo optimizada y estática */
 .menu-background::before {
   content: '';
@@ -881,6 +891,11 @@ useHead(() => {
   /* Forzar aceleración por hardware */
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
+}
+
+/* Modo rendimiento: ocultar imagen de fondo */
+.menu-background.performance-mode::before {
+  display: none;
 }
 
 /* LOADER INICIAL */
