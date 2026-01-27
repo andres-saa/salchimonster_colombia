@@ -149,50 +149,8 @@ export default defineNuxtConfig({
     }
   },
 
-  // Pre-renderizar menús de todas las sedes en build time
-  nitro: {
-    prerender: {
-      crawlLinks: false, // No seguir links automáticamente
-      routes: async () => {
-        // Esta función se ejecuta en build time
-        try {
-          const URI = 'https://backend.salchimonster.com'
-          const response = await fetch(`${URI}/sites`)
-          const sites = await response.json()
-          
-          const filteredSites = (sites || []).filter(
-            (s: any) => s.show_on_web && s.time_zone === 'America/Bogota' && s.site_id !== 32
-          )
-
-          // Función para generar slug desde nombre de sitio
-          const getSiteSlug = (siteName: string): string => {
-            if (!siteName) return ''
-            return siteName
-              .toLowerCase()
-              .normalize('NFD')
-              .replace(/[\u0300-\u036f]/g, '')
-              .replace(/[^a-z0-9]+/g, '-')
-              .replace(/^-+|-+$/g, '')
-              .trim()
-          }
-
-          // Generar rutas para pre-renderizar
-          const routes: string[] = []
-          
-          filteredSites.forEach((site: any) => {
-            const slug = getSiteSlug(site.site_name)
-            if (slug) {
-              routes.push(`/${slug}/`) // Ruta del menú de la sede
-            }
-          })
-
-          console.log(`[Nuxt Config] Pre-renderizando ${routes.length} rutas de menús`)
-          return routes
-        } catch (error) {
-          console.error('[Nuxt Config] Error obteniendo sedes para pre-render:', error)
-          return []
-        }
-      }
-    }
-  }
+  // Nota: El prerender dinámico se maneja vía ISR (Incremental Static Regeneration)
+  // Las rutas se generan automáticamente cuando se acceden por primera vez
+  // o cuando se llama al endpoint /api/regenerate-menus
+  // ISR está configurado en routeRules para todas las rutas dinámicas (/{sede}/)
 })
