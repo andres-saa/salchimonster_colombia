@@ -99,7 +99,11 @@ export default defineNuxtConfig({
  
     // Reemplaza '/ayuda' por la ruta donde usas este componente
     '/pqr': { isr: 3600 } ,
- 
+
+    // Reglas dinámicas para menús de sedes - se generarán en el hook
+    // Patrón: /{sede}/ -> ISR cada 1 hora (3600s) para menús estáticos
+    '/**': { isr: 3600 }, // Aplicar ISR a todas las rutas dinámicas (menús de sedes)
+
     // Opcional: Cachear assets estáticos agresivamente
     '/_nuxt/**': { headers: { 'cache-control': 's-maxage=31536000' } },
   },
@@ -140,6 +144,53 @@ export default defineNuxtConfig({
         modifiers: {
           loading: 'lazy',
           fit: 'cover',
+        }
+      }
+    }
+  },
+
+  // Pre-renderizar menús de todas las sedes en build time
+  nitro: {
+    prerender: {
+      crawlLinks: false, // No seguir links automáticamente
+      routes: async () => {
+        // Esta función se ejecuta en build time
+        try {
+          const URI = 'https://backend.salchimonster.com'
+          const response = await fetch(`${URI}/sites`)
+          const sites = await response.json()
+          
+          const filteredSites = (sites || []).filter(
+            (s: any) => s.show_on_web && s.time_zone === 'America/Bogota' && s.site_id !== 32
+          )
+
+          // Función para generar slug desde nombre de sitio
+          const getSiteSlug = (siteName: string): string => {
+            if (!siteName) return ''
+            return siteName
+              .toLowerCase()
+              .normalize('NFD')
+              .replace(/[\u0300-\u036f]/g, '')
+              .replace(/[^a-z0-9]+/g, '-')
+              .replace(/^-+|-+$/g, '')
+              .trim()
+          }
+
+          // Generar rutas para pre-renderizar
+          const routes: string[] = []
+          
+          filteredSites.forEach((site: any) => {
+            const slug = getSiteSlug(site.site_name)
+            if (slug) {
+              routes.push(`/${slug}/`) // Ruta del menú de la sede
+            }
+          })
+
+          console.log(`[Nuxt Config] Pre-renderizando ${routes.length} rutas de menús`)
+          return routes
+        } catch (error) {
+          console.error('[Nuxt Config] Error obteniendo sedes para pre-render:', error)
+          return []
         }
       }
     }
