@@ -907,10 +907,25 @@ const ensureValidOrderTypeForCurrentSite = () => {
     user.user.order_type = null
     return
   }
-  const currentId = user.user.order_type?.id
-  if (!currentId || !list.some((o) => Number(o.id) === Number(currentId))) {
-    user.user.order_type = list[0]
+  
+  // Prioridad 1: Si hay un order_type del dispatcher en sitesStore, sincronizarlo
+  const dispatcherOrderType = siteStore.location?.order_type
+  if (dispatcherOrderType && dispatcherOrderType.id) {
+    const isValidDispatcherType = list.some((o) => Number(o.id) === Number(dispatcherOrderType.id))
+    if (isValidDispatcherType) {
+      user.user.order_type = dispatcherOrderType
+      return
+    }
   }
+  
+  // Prioridad 2: Verificar si el order_type actual es válido
+  const currentId = user.user.order_type?.id
+  if (currentId && list.some((o) => Number(o.id) === Number(currentId))) {
+    return // Ya es válido, no hacer nada
+  }
+  
+  // Prioridad 3: Usar el primero disponible
+  user.user.order_type = list[0]
 }
 
 watch(
