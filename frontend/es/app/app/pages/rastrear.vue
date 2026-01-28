@@ -1,7 +1,10 @@
 <!-- pages/rastrear.vue (o el componente que uses para /rastrear) -->
 <template>
   <div class="track-page">
-    <main class="track-main">
+    <main 
+      class="track-main"
+      :class="{ 'track-main--with-cargo': hasCargoTracking }"
+    >
       <section class="track-card animate-entry">
         <header class="track-card__header">
           <h1 class="track-title">{{ t('title', 'Rastrea tu pedido', 'Track your order') }}</h1>
@@ -114,6 +117,65 @@
           </TransitionGroup>
         </section>
 
+        <!-- Sección de rastreo Rappi Cargo -->
+        <Transition name="slide-up">
+          <section
+            v-if="
+              !loading &&
+              !error &&
+              firstHistory &&
+              firstHistory.cargo_response_insert &&
+              firstHistory.cargo_response_insert.tracking_url
+            "
+            class="cargo-tracking"
+          >
+            <div class="cargo-tracking__header">
+              <h3 class="cargo-tracking__title">
+                <Icon name="mdi:truck-delivery" class="cargo-tracking__icon" />
+                {{ t('cargo_tracking', 'Rastreo en tiempo real', 'Real-time tracking') }}
+              </h3>
+              <button
+                @click="openTrackingInNewWindow"
+                class="cargo-tracking__external-btn"
+                :title="t('open_external', 'Abrir en nueva ventana', 'Open in new window')"
+              >
+                <Icon name="mdi:open-in-new" />
+                <span>{{ t('open_external', 'Abrir en nueva ventana', 'Open in new window') }}</span>
+              </button>
+            </div>
+            
+            <div class="cargo-tracking__iframe-wrapper">
+              <iframe
+                :src="firstHistory.cargo_response_insert.tracking_url"
+                class="cargo-tracking__iframe"
+                frameborder="0"
+                allowfullscreen
+                :title="t('cargo_tracking', 'Rastreo en tiempo real', 'Real-time tracking')"
+              ></iframe>
+            </div>
+
+            <div v-if="firstHistory.cargo_response_insert.eta" class="cargo-tracking__footer">
+              <div class="cargo-tracking__eta">
+                <Icon name="mdi:clock-outline" />
+                <span>
+                  {{ t('eta', 'Tiempo estimado de llegada', 'Estimated arrival time') }}: 
+                  <strong>{{ firstHistory.cargo_response_insert.eta }} {{ t('minutes', 'minutos', 'minutes') }}</strong>
+                  <span v-if="firstHistory.cargo_response_insert.eta_interval" class="eta-interval">
+                    ({{ firstHistory.cargo_response_insert.eta_interval.lower }}-{{ firstHistory.cargo_response_insert.eta_interval.upper }} {{ t('minutes', 'minutos', 'minutes') }})
+                  </span>
+                </span>
+              </div>
+              <div v-if="firstHistory.cargo_response_insert.trip_distance" class="cargo-tracking__distance">
+                <Icon name="mdi:map-marker-distance" />
+                <span>
+                  {{ t('distance', 'Distancia', 'Distance') }}: 
+                  <strong>{{ firstHistory.cargo_response_insert.trip_distance }} km</strong>
+                </span>
+              </div>
+            </div>
+          </section>
+        </Transition>
+
         <Transition name="fade">
           <section
             v-if="!loading && !error && !currentStatus && !firstHistory"
@@ -183,7 +245,12 @@ const localTrackTexts = {
       'intento de pago archivado': 'El intento de pago fue archivado.',
       'domiciliario solicitado': 'Se solicitó un domiciliario para tu pedido.',
       'no confirmada': 'Tu pedido aún no está confirmado.'
-    }
+    },
+    cargo_tracking: 'Rastreo en tiempo real',
+    open_external: 'Abrir en nueva ventana',
+    eta: 'Tiempo estimado de llegada',
+    minutes: 'minutos',
+    distance: 'Distancia'
   },
   en: {
     title: 'Track your order',
@@ -213,7 +280,12 @@ const localTrackTexts = {
       'intento de pago archivado': 'The payment attempt was archived.',
       'domiciliario solicitado': 'A courier was requested for your order.',
       'no confirmada': 'Your order is not confirmed yet.'
-    }
+    },
+    cargo_tracking: 'Real-time tracking',
+    open_external: 'Open in new window',
+    eta: 'Estimated arrival time',
+    minutes: 'minutes',
+    distance: 'Distance'
   }
 }
 
@@ -240,6 +312,12 @@ const firstHistory = computed(() => {
   return Array.isArray(history.value) && history.value.length > 0
     ? history.value[0]
     : null
+})
+
+const hasCargoTracking = computed(() => {
+  return !!(
+    firstHistory.value?.cargo_response_insert?.tracking_url
+  )
 })
 
 const normalizeStatus = (s) => String(s ?? '').trim().toLowerCase()
@@ -319,6 +397,12 @@ const getCurrentStatusMessage = (statusFromDB) => {
   // y el prefijo se traduce según idioma.
   const prefix = lk === 'en' ? 'Current status:' : 'Estado actual:'
   return `${prefix} ${lk === 'en' ? (translateStatus(original) || original) : (original || '')}`
+}
+
+const openTrackingInNewWindow = () => {
+  if (firstHistory.value?.cargo_response_insert?.tracking_url) {
+    window.open(firstHistory.value.cargo_response_insert.tracking_url, '_blank', 'noopener,noreferrer')
+  }
 }
 
 const setOrderIdInUrl = async (id) => {
@@ -414,10 +498,31 @@ onMounted(() => {
   background: radial-gradient(circle at top, #f8fafc, #f1f5f9);
 }
 
+@media (max-width: 640px) {
+  .track-page {
+    padding: 0;
+  }
+}
+
 .track-main {
   width: 100%;
   max-width: 720px;
   margin: auto;
+}
+
+.track-main--with-cargo {
+  max-width: 1200px;
+}
+
+@media (max-width: 640px) {
+  .track-main {
+    max-width: 100%;
+    margin: 0;
+  }
+
+  .track-main--with-cargo {
+    max-width: 100%;
+  }
 }
 
 .animate-entry {
@@ -440,6 +545,16 @@ onMounted(() => {
   box-shadow: 0 22px 45px rgba(15, 23, 42, 0.08);
   border: 1px solid rgba(148, 163, 184, 0.2);
   transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+@media (max-width: 640px) {
+  .track-card {
+    border-radius: 0;
+    padding: 1.5rem 1rem 2rem;
+    box-shadow: none;
+    border-left: none;
+    border-right: none;
+  }
 }
 
 .track-card:hover {
@@ -808,9 +923,139 @@ onMounted(() => {
   transform: translateX(20px);
 }
 
+/* Estilos para rastreo Rappi Cargo */
+.cargo-tracking {
+  margin-top: 2rem;
+  padding: 0;
+  border-radius: 1rem;
+  background: linear-gradient(135deg, #f0f9ff, #e0f2fe);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.1);
+  overflow: hidden;
+}
+
+.cargo-tracking__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.cargo-tracking__title {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #0369a1;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.cargo-tracking__icon {
+  font-size: 1.3rem;
+  color: #0284c7;
+}
+
+.cargo-tracking__external-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  border: 1px solid #0284c7;
+  background-color: #ffffff;
+  color: #0284c7;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-decoration: none;
+}
+
+.cargo-tracking__external-btn:hover {
+  background-color: #0284c7;
+  color: #ffffff;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(2, 132, 199, 0.3);
+}
+
+.cargo-tracking__external-btn:active {
+  transform: translateY(0);
+}
+
+.cargo-tracking__iframe-wrapper {
+  position: relative;
+  width: 100%;
+  height: 500px;
+  overflow: hidden;
+  background-color: #ffffff;
+}
+
+.cargo-tracking__iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  border-radius: 0;
+}
+
+.cargo-tracking__footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding: 1.5rem;
+  border-top: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.cargo-tracking__eta,
+.cargo-tracking__distance {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  color: #475569;
+}
+
+.cargo-tracking__eta strong,
+.cargo-tracking__distance strong {
+  color: #0369a1;
+  font-weight: 700;
+}
+
+.eta-interval {
+  color: #64748b;
+  font-size: 0.85rem;
+  margin-left: 0.25rem;
+}
+
 @media (max-width: 640px) {
-  .track-card {
-    padding: 1.5rem 1.25rem 2rem;
+  .cargo-tracking {
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+    margin-top: 0;
+  }
+
+  .cargo-tracking__header {
+    padding: 1rem;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .cargo-tracking__external-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .cargo-tracking__iframe-wrapper {
+    height: 400px;
+  }
+
+  .cargo-tracking__footer {
+    padding: 1rem;
+    flex-direction: column;
+    gap: 0.75rem;
   }
 }
 </style>

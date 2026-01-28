@@ -148,9 +148,6 @@
               <span class="coverage-label">{{ t('nearest_store') }}:</span>
               <span class="coverage-value">
                 {{ coverageResult.nearest?.site?.site_name || t('na') }}
-                <small v-if="coverageResult.nearest">
-                  ({{ Number(coverageResult.nearest.distance_km || 0).toFixed(1) }} km)
-                </small>
               </span>
             </div>
 
@@ -452,9 +449,6 @@
                   <span class="coverage-label">{{ t('assigned_store') }}:</span>
                   <span class="coverage-value">
                     {{ modalCoverageResult.nearest?.site?.site_name || t('na') }}
-                    <small v-if="modalCoverageResult.nearest">
-                      ({{ Number(modalCoverageResult.nearest.distance_km || 0).toFixed(1) }} km)
-                    </small>
                   </span>
                 </div>
                 <div class="coverage-row highlight">
@@ -489,7 +483,7 @@
 <script setup>
 import { ref, computed, onMounted, nextTick, watch, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useHead, useSitesStore, useUserStore } from '#imports'
+import { useHead, useSitesStore, useUserStore, usecartStore } from '#imports'
 import 'leaflet/dist/leaflet.css'
 
 /* PrimeVue */
@@ -640,6 +634,7 @@ const route = useRoute()
 const router = useRouter()
 const sitesStore = useSitesStore()
 const userStore = useUserStore()
+const cartStore = usecartStore()
 
 // Limpiar la sede actual cuando se monta el dispatcher (si el usuario llega a "/" es porque quiere cambiarla)
 onMounted(() => {
@@ -854,7 +849,13 @@ async function validateAddress() {
 
       if (result.matching_polygons && result.matching_polygons.length > 0) {
         // Get the first matching polygon with a site
-        const matchingPolygon = result.matching_polygons.find(p => p.is_inside && p.site)
+        // Priorizar polígonos con is_inside: true, pero también considerar otros si no hay ninguno
+        let matchingPolygon = result.matching_polygons.find(p => p.is_inside && p.site)
+        if (!matchingPolygon) {
+          // Si no hay polígono con is_inside, usar el primero que tenga sitio
+          matchingPolygon = result.matching_polygons.find(p => p.site)
+        }
+        
         if (matchingPolygon && matchingPolygon.site) {
           const site = matchingPolygon.site
           nearestSite = {
@@ -865,9 +866,9 @@ async function validateAddress() {
             city: site.city_name || null,
             site_address: site.site_address || null
           }
-          inCoverage = matchingPolygon.is_inside
+          inCoverage = matchingPolygon.is_inside || false
           
-          // Calculate approximate distance (simple haversine)
+          // Calculate approximate distance (simple haversine) siempre que tengamos coordenadas
           if (result.latitude && result.longitude && site.location) {
             const [siteLat, siteLng] = site.location
             const R = 6371 // Earth radius in km
@@ -923,23 +924,68 @@ async function validateAddress() {
         deliveryCost = Number(result.delivery_cost_cop) || 0
       }
 
-      // Usar distancia de delivery_pricing si está disponible
-      const finalDistance = result.delivery_pricing?.distance_km != null
-        ? Number(result.delivery_pricing.distance_km)
-        : minDistance
+      // Calcular distancia: priorizar delivery_pricing.distance_km, luego rappi_validation.trip_distance, luego distancia calculada
+      let finalDistance = minDistance
+      if (result.delivery_pricing && result.delivery_pricing.distance_km != null) {
+        // Formato Google Maps: usar distancia de delivery_pricing
+        finalDistance = Number(result.delivery_pricing.distance_km) || 0
+      } else if (result.rappi_validation && result.rappi_validation.trip_distance != null) {
+        // Formato Rappi Cargo: usar trip_distance de rappi_validation
+        finalDistance = Number(result.rappi_validation.trip_distance) || 0
+      } else if (minDistance === Infinity && nearestSite && result.latitude && result.longitude) {
+        // Si no hay distancia disponible y hay una sede, calcularla desde las coordenadas
+        const site = nearestSite
+        // Intentar obtener coordenadas de la sede desde matching_polygons
+        const matchingPolygon = result.matching_polygons?.find(p => p.site && p.site.site_id === site.site_id)
+        if (matchingPolygon?.site?.location) {
+          const [siteLat, siteLng] = matchingPolygon.site.location
+          const R = 6371 // Radio de la Tierra en km
+          const dLat = (siteLat - result.latitude) * Math.PI / 180
+          const dLng = (siteLng - result.longitude) * Math.PI / 180
+          const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                    Math.cos(result.latitude * Math.PI / 180) * Math.cos(siteLat * Math.PI / 180) *
+                    Math.sin(dLng/2) * Math.sin(dLng/2)
+          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
+          finalDistance = R * c
+        } else if (stores.value.length > 0) {
+          // Si no hay coordenadas en matching_polygons, calcular desde stores
+          const store = stores.value.find(s => s.id === site.site_id)
+          if (store) {
+            const R = 6371
+            const dLat = (store.lat - result.latitude) * Math.PI / 180
+            const dLng = (store.lng - result.longitude) * Math.PI / 180
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                      Math.cos(result.latitude * Math.PI / 180) * Math.cos(store.lat * Math.PI / 180) *
+                      Math.sin(dLng/2) * Math.sin(dLng/2)
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
+            finalDistance = R * c
+          }
+        }
+      }
+      
+      // Si aún es Infinity, usar 0 como fallback
+      if (finalDistance === Infinity || isNaN(finalDistance)) {
+        finalDistance = 0
+      }
 
+      // Compatible con ambos formatos: Rappi Cargo (latitude/longitude) y Google Maps (lat/lng)
+      const lat = result.latitude || result.lat || null
+      const lng = result.longitude || result.lng || null
+      
       // Usar formatted_address directamente del backend (como en LocationManager)
       // El backend ya incluye zona, barrio y toda la información completa
       coverageResult.value = {
         formatted_address: result.formatted_address || result.address,
-        address: result.address,
-        lat: result.latitude,
-        lng: result.longitude,
+        address: result.address || result.formatted_address,
+        lat: lat,
+        lng: lng,
+        latitude: lat, // Preservar ambos formatos
+        longitude: lng, // Preservar ambos formatos
         geocoded: result.geocoded,
         is_inside_any: result.is_inside_any,
         delivery_cost_cop: deliveryCost,
-        delivery_pricing: result.delivery_pricing, // Guardar objeto completo de pricing
-        rappi_validation: result.rappi_validation,
+        delivery_pricing: result.delivery_pricing, // Guardar objeto completo de pricing (puede ser null en formato Rappi Cargo)
+        rappi_validation: result.rappi_validation, // Guardar objeto completo de validación (puede ser null en formato Google Maps)
         matching_polygons: result.matching_polygons, // Guardar polígonos coincidentes
         nearest: nearestSite ? {
           site: nearestSite,
@@ -1195,7 +1241,13 @@ async function validateModalAddress() {
 
       if (result.matching_polygons && result.matching_polygons.length > 0) {
         // Get the first matching polygon with a site
-        const matchingPolygon = result.matching_polygons.find(p => p.is_inside && p.site)
+        // Priorizar polígonos con is_inside: true, pero también considerar otros si no hay ninguno
+        let matchingPolygon = result.matching_polygons.find(p => p.is_inside && p.site)
+        if (!matchingPolygon) {
+          // Si no hay polígono con is_inside, usar el primero que tenga sitio
+          matchingPolygon = result.matching_polygons.find(p => p.site)
+        }
+        
         if (matchingPolygon && matchingPolygon.site) {
           const site = matchingPolygon.site
           nearestSite = {
@@ -1206,9 +1258,9 @@ async function validateModalAddress() {
             city: site.city_name || null,
             site_address: site.site_address || null
           }
-          inCoverage = matchingPolygon.is_inside
+          inCoverage = matchingPolygon.is_inside || false
           
-          // Calculate approximate distance
+          // Calculate approximate distance siempre que tengamos coordenadas
           if (result.latitude && result.longitude && site.location) {
             const [siteLat, siteLng] = site.location
             const R = 6371
@@ -1234,6 +1286,18 @@ async function validateModalAddress() {
           site_address: modalStore.value.address
         }
         inCoverage = result.is_inside_any
+        
+        // Calcular distancia desde el modal store si tenemos coordenadas
+        if (result.latitude && result.longitude && modalStore.value.lat && modalStore.value.lng) {
+          const R = 6371
+          const dLat = (modalStore.value.lat - result.latitude) * Math.PI / 180
+          const dLng = (modalStore.value.lng - result.longitude) * Math.PI / 180
+          const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                    Math.cos(result.latitude * Math.PI / 180) * Math.cos(modalStore.value.lat * Math.PI / 180) *
+                    Math.sin(dLng/2) * Math.sin(dLng/2)
+          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
+          minDistance = R * c
+        }
       }
 
       // Obtener el costo de domicilio: priorizar delivery_pricing.price, luego rappi_validation, luego delivery_cost_cop
@@ -1246,23 +1310,65 @@ async function validateModalAddress() {
         deliveryCost = Number(result.delivery_cost_cop) || 0
       }
 
-      // Usar distancia de delivery_pricing si está disponible
-      const finalDistance = result.delivery_pricing?.distance_km != null
-        ? Number(result.delivery_pricing.distance_km)
-        : minDistance
+      // Calcular distancia: priorizar delivery_pricing.distance_km, luego rappi_validation.trip_distance, luego distancia calculada
+      let finalDistance = minDistance
+      if (result.delivery_pricing && result.delivery_pricing.distance_km != null) {
+        // Formato Google Maps: usar distancia de delivery_pricing
+        finalDistance = Number(result.delivery_pricing.distance_km) || 0
+      } else if (result.rappi_validation && result.rappi_validation.trip_distance != null) {
+        // Formato Rappi Cargo: usar trip_distance de rappi_validation
+        finalDistance = Number(result.rappi_validation.trip_distance) || 0
+      } else if (minDistance === Infinity && nearestSite && result.latitude && result.longitude) {
+        // Si no hay distancia disponible y hay una sede, calcularla desde las coordenadas
+        const site = nearestSite
+        // Intentar obtener coordenadas de la sede desde matching_polygons
+        const matchingPolygon = result.matching_polygons?.find(p => p.site && p.site.site_id === site.site_id)
+        if (matchingPolygon?.site?.location) {
+          const [siteLat, siteLng] = matchingPolygon.site.location
+          const R = 6371 // Radio de la Tierra en km
+          const dLat = (siteLat - result.latitude) * Math.PI / 180
+          const dLng = (siteLng - result.longitude) * Math.PI / 180
+          const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                    Math.cos(result.latitude * Math.PI / 180) * Math.cos(siteLat * Math.PI / 180) *
+                    Math.sin(dLng/2) * Math.sin(dLng/2)
+          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
+          finalDistance = R * c
+        } else if (modalStore.value && modalStore.value.lat && modalStore.value.lng) {
+          // Si no hay coordenadas en matching_polygons, calcular desde modalStore
+          const R = 6371
+          const dLat = (modalStore.value.lat - result.latitude) * Math.PI / 180
+          const dLng = (modalStore.value.lng - result.longitude) * Math.PI / 180
+          const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                    Math.cos(result.latitude * Math.PI / 180) * Math.cos(modalStore.value.lat * Math.PI / 180) *
+                    Math.sin(dLng/2) * Math.sin(dLng/2)
+          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
+          finalDistance = R * c
+        }
+      }
+      
+      // Si aún es Infinity, usar 0 como fallback
+      if (finalDistance === Infinity || isNaN(finalDistance)) {
+        finalDistance = 0
+      }
 
+      // Compatible con ambos formatos: Rappi Cargo (latitude/longitude) y Google Maps (lat/lng)
+      const lat = result.latitude || result.lat || null
+      const lng = result.longitude || result.lng || null
+      
       // Usar formatted_address directamente del backend (como en LocationManager)
       // El backend ya incluye zona, barrio y toda la información completa
       modalCoverageResult.value = {
         formatted_address: result.formatted_address || result.address,
-        address: result.address,
-        lat: result.latitude,
-        lng: result.longitude,
+        address: result.address || result.formatted_address,
+        lat: lat,
+        lng: lng,
+        latitude: lat, // Preservar ambos formatos
+        longitude: lng, // Preservar ambos formatos
         geocoded: result.geocoded,
         is_inside_any: result.is_inside_any,
         delivery_cost_cop: deliveryCost,
-        delivery_pricing: result.delivery_pricing, // Guardar objeto completo de pricing
-        rappi_validation: result.rappi_validation,
+        delivery_pricing: result.delivery_pricing, // Guardar objeto completo de pricing (puede ser null en formato Rappi Cargo)
+        rappi_validation: result.rappi_validation, // Guardar objeto completo de validación (puede ser null en formato Google Maps)
         matching_polygons: result.matching_polygons, // Guardar polígonos coincidentes
         nearest: nearestSite ? {
           site: nearestSite,
@@ -1500,24 +1606,34 @@ async function dispatchToSite(manualStore, orderTypeObj, extra = { mode: 'simple
     if (isDelivery && useGoogleMaps && extra?.mode === 'gmaps' && extra?.coverageData) {
       const coverageData = extra.coverageData
       // Obtener el costo de domicilio: priorizar delivery_pricing.price, luego rappi_validation, luego delivery_cost_cop
-      if (coverageData.delivery_pricing?.price != null) {
+      // Compatible con ambos formatos: Rappi Cargo y Google Maps
+      if (coverageData.delivery_pricing && coverageData.delivery_pricing.price != null) {
         deliveryPrice = Number(coverageData.delivery_pricing.price) || 0
-      } else if (coverageData.rappi_validation?.estimated_price) {
+      } else if (coverageData.rappi_validation && coverageData.rappi_validation.estimated_price) {
         deliveryPrice = Number(coverageData.rappi_validation.estimated_price) || 0
       } else {
         deliveryPrice = coverageData.delivery_cost_cop || 0
       }
       
+      // Compatible con ambos formatos: Rappi Cargo (latitude/longitude) y Google Maps (lat/lng)
+      const lat = coverageData.latitude || coverageData.lat || 0
+      const lng = coverageData.longitude || coverageData.lng || 0
+      
       userSiteData = {
         ...coverageData,
         delivery_cost_cop: deliveryPrice,
-        formatted_address: coverageData.formatted_address,
-        delivery_pricing: coverageData.delivery_pricing, // Guardar objeto completo de pricing
-        rappi_validation: coverageData.rappi_validation
+        formatted_address: coverageData.formatted_address || coverageData.address,
+        address: coverageData.address || coverageData.formatted_address,
+        delivery_pricing: coverageData.delivery_pricing, // Guardar objeto completo de pricing (puede ser null en formato Rappi Cargo)
+        rappi_validation: coverageData.rappi_validation, // Guardar objeto completo de validación (puede ser null en formato Google Maps)
+        lat: lat,
+        lng: lng,
+        latitude: lat, // Preservar ambos formatos
+        longitude: lng // Preservar ambos formatos
       }
-      finalAddress = coverageData.formatted_address || ''
-      finalLat = coverageData.lat || 0
-      finalLng = coverageData.lng || 0
+      finalAddress = coverageData.formatted_address || coverageData.address || ''
+      finalLat = lat
+      finalLng = lng
       finalPlaceId = coverageData.place_id || ''
     }
 
@@ -1582,6 +1698,11 @@ async function dispatchToSite(manualStore, orderTypeObj, extra = { mode: 'simple
       mode: isDelivery && !useGoogleMaps ? 'barrios' : 'google',
       order_type: orderTypeObj
     }, deliveryPrice)
+    
+    // Actualizar address_details y calcular is_rappi_cargo (persistente) si hay userSiteData
+    if (userSiteData) {
+      cartStore.setAddressDetails(userSiteData)
+    }
 
     // Guardar order_type en el store
     sitesStore.setOrderType(orderTypeObj)

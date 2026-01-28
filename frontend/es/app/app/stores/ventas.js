@@ -1,9 +1,9 @@
 import { defineStore } from 'pinia'
 import { URI } from '../service/conection'
 
-export const useReportesStore = defineStore('reportes', {
+export const useReportesStore = defineStore('rep32ortes', {
   persist: {
-    key: 'reportes', // La clave bajo la cual se almacenará tu estado en el storage
+    key: 'rep32ortes', // La clave bajo la cual se almacenará tu estado en el storage
         storage: piniaPluginPersistedstate.localStorage(), // 👈 en vez de localStorage directo
 
     paths: [

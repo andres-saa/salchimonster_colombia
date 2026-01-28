@@ -3,7 +3,7 @@ import { ref, watch } from 'vue'
 import { URI } from '../service/conection'
 
 export const useSitesStore = defineStore(
-  'site-d3sddfs422',
+  'site-d3sd32dfs422',
   () => {
     // 1. HELPER
     const emptyNeighborhood = () => ({
@@ -30,7 +30,7 @@ export const useSitesStore = defineStore(
       city: null,
       site: {
         site_id: 1,
-        site_name: 'PRINCIPAL',
+        site_name: 'SALCHIMONSTER',
         site_address: null,
         site_phone: null,
         site_business_hours: null,
@@ -235,7 +235,7 @@ export const useSitesStore = defineStore(
   {
     persist: {
       // Opcional: Para mantener el mismo nombre de key que tenías antes
-      key: 'site-session-hash', 
+      key: 'site-sess32ion-hash', 
       // IMPORTANTE: Array con los nombres de las variables que quieres guardar
       paths: ['session_hash'],
     },

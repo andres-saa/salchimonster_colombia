@@ -1,5 +1,28 @@
 // Address validation service using LocationManager API
-const API_BASE_URL = 'https://location-manager.salchimonster.com/api'
+// En desarrollo usa localhost:8000, en producción usa la URL de producción
+const getLocationManagerUrl = () => {
+  // En desarrollo (localhost), usar localhost:8000
+  if (typeof window !== 'undefined') {
+    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    if (isLocalhost) {
+      return 'http://localhost:8000/api'
+    }
+  }
+  
+  // En servidor, verificar si estamos en desarrollo
+  if (typeof process !== 'undefined' && process.env) {
+    const isDev = process.env.NODE_ENV === 'development' || 
+                  process.env.NUXT_PUBLIC_LOCATION_MANAGER_URL?.includes('localhost')
+    if (isDev) {
+      return 'http://localhost:8000/api'
+    }
+  }
+  
+  // Producción: usar URL de producción
+  return 'https://location-manager.salchimonster.com/api'
+}
+
+const API_BASE_URL = getLocationManagerUrl()
 
 /** 
  * Check address validation

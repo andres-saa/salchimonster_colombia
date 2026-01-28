@@ -98,7 +98,7 @@ const goToNewOrder = () => {
   cartStore.cart = []
   cartStore.applied_coupon = null
   cartStore.coupon_ui = { enabled: false, draft_code: '' }
-  cartStore.address_details = {}
+  cartStore.setAddressDetails({}) // Esto también limpia is_rappi_cargo
   cartStore.order_notes = ''
   
   // Redirigir al dispatcher

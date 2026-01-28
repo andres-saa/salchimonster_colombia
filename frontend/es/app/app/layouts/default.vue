@@ -1,7 +1,6 @@
 <template>
   <div class="app-layout">
     <header
-      v-if="!isIframeMode"
       ref="topbarRef"
       class="app-layout__topbar"
       :style="layoutVars"
@@ -25,7 +24,7 @@
 
       <main
         class="app-layout__content"
-        :class="{ 'app-layout__content--full': isCartaRoute || isIframeMode }"
+        :class="{ 'app-layout__content--full': isCartaRoute }"
       >   
         <slot />
       </main>
@@ -92,9 +91,8 @@ const measureTopbar = () => {
 
 /* CSS vars (transform) */
 const layoutVars = computed(() => {
-  // SI es iframe mode, forzamos altura 0 inmediatamente.
-  // SI NO, usamos la altura medida del ref.
-  const h = isIframeMode.value ? 0 : topbarH.value
+  // Usar la altura medida del ref (TopBar siempre visible)
+  const h = topbarH.value
 
   return {
     '--topbar-h': `${h}px`,

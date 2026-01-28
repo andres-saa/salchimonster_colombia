@@ -7,14 +7,15 @@ function normalizeCoupon(c) {
   return c
 }
 
-export const usecartStore = defineStore('salchi_supegwseasr_cart_web443', {
+export const usecartStore = defineStore('salchi_supegwseasr2_cart_web443', {
   persist: {
-    key: 'salchi_surep34er_gsacaret_web4eddf43ssv',
+    key: 'salchi_surep34er_gsacaret_web334eddf43ssv',
     paths: [
       'cart',
       'last_order',
       'menu',
       'address_details',
+      'is_rappi_cargo',
       'applied_coupon',
       'coupon_ui',
       'order_notes'
@@ -32,6 +33,16 @@ export const usecartStore = defineStore('salchi_supegwseasr_cart_web443', {
       // ✅ Recalcular descuentos si hay cupón y carrito
       if (ctx.store.applied_coupon && Array.isArray(ctx.store.cart) && ctx.store.cart.length > 0) {
         ctx.store.applyCoupon(ctx.store.applied_coupon)
+      }
+
+      // ✅ Recalcular is_rappi_cargo si hay address_details pero no hay flag (compatibilidad hacia atrás)
+      if (ctx.store.address_details && typeof ctx.store.address_details === 'object' && Object.keys(ctx.store.address_details).length > 0) {
+        if (ctx.store.is_rappi_cargo === undefined || ctx.store.is_rappi_cargo === null) {
+          ctx.store.is_rappi_cargo = ctx.store.calculateIsRappiCargo(ctx.store.address_details)
+        }
+      } else {
+        // Si no hay address_details, asegurar que is_rappi_cargo sea false
+        ctx.store.is_rappi_cargo = false
       }
     }
   },
@@ -60,6 +71,7 @@ export const usecartStore = defineStore('salchi_supegwseasr_cart_web443', {
 
     cart: [],
     address_details: {},
+    is_rappi_cargo: false, // Flag persistente para indicar si la orden requiere Rappi Cargo
     last_order: '',
     sending_order: false,
     was_reserva: false,
@@ -114,6 +126,30 @@ export const usecartStore = defineStore('salchi_supegwseasr_cart_web443', {
   },
 
   actions: {
+    // Función helper para calcular si es Rappi Cargo basándose en address_details
+    calculateIsRappiCargo(addressData) {
+      if (!addressData || typeof addressData !== 'object') return false
+      
+      // Prioridad 1: Si rappi_validation existe y no es null → es Rappi Cargo
+      if (addressData.rappi_validation != null && typeof addressData.rappi_validation === 'object') {
+        return true
+      }
+      
+      // Prioridad 2: Si delivery_pricing.uses_rappi === true → es Rappi Cargo
+      if (addressData.delivery_pricing?.uses_rappi === true) {
+        return true
+      }
+      
+      // Si delivery_pricing existe pero uses_rappi === false → NO es Rappi Cargo
+      // Si delivery_pricing es null pero rappi_validation también es null → NO es Rappi Cargo
+      return false
+    },
+
+    // Actualizar address_details y calcular is_rappi_cargo
+    setAddressDetails(addressData) {
+      this.address_details = addressData || {}
+      this.is_rappi_cargo = this.calculateIsRappiCargo(addressData)
+    },
     // ✅ Setter seguro (persistente)
     setCouponUi(patch) {
       if (!this.coupon_ui) this.coupon_ui = { enabled: false, draft_code: '' }

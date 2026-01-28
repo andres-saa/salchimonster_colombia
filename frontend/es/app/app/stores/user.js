@@ -6,6 +6,8 @@ export const useUserStore = defineStore(
   () => {
     const user = ref({
       name: '',
+      first_name: '',
+      last_name: '',
       neigborhood: '',
       address: '',
       phone_number: '',
@@ -28,6 +30,8 @@ export const useUserStore = defineStore(
     function resetUser() {
       user.value = {
         name: '',
+        first_name: '',
+        last_name: '',
         neigborhood: '',
         address: '',
         phone_number: '',

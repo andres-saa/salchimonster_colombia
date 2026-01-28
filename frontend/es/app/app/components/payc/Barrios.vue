@@ -50,10 +50,14 @@
           <section class="card form-section">
             <h2 class="section-title">Datos Personales</h2>
 
-            <div class="form-row">
-              <div class="form-group full">
-                <label>{{ t('name') }}</label>
-                <InputText type="text" class="input-modern" v-model="user.user.name" :placeholder="t('name')" />
+            <div class="form-row split">
+              <div class="form-group">
+                <label>{{ t('first_name') }} <span style="color: red;">*</span></label>
+                <InputText type="text" class="input-modern" v-model="user.user.first_name" :placeholder="t('first_name')" />
+              </div>
+              <div class="form-group">
+                <label>{{ t('last_name') }} <span style="color: red;">*</span></label>
+                <InputText type="text" class="input-modern" v-model="user.user.last_name" :placeholder="t('last_name')" />
               </div>
             </div>
 
@@ -99,8 +103,16 @@
               </div>
 
               <div class="form-group">
-                <label>{{ t('email') }}</label>
-                <InputText type="email" class="input-modern" v-model="user.user.email" :placeholder="t('email')" />
+                <label>{{ t('email') }} <span style="color: red;">*</span></label>
+                <InputText 
+                  type="email" 
+                  class="input-modern" 
+                  v-model="user.user.email" 
+                  :placeholder="t('email')"
+                  @blur="validateEmail"
+                  @input="emailError = ''"
+                />
+                <span v-if="emailError" class="field-error">{{ emailError }}</span>
               </div>
             </div>
           </section>
@@ -323,6 +335,8 @@ const DICT = {
   es: {
     finalize_purchase: 'Finalizar Compra',
     name: 'Nombre Completo',
+    first_name: 'Nombre',
+    last_name: 'Apellido',
     phone: 'Celular',
     site_recoger: 'Sede para Recoger',
     payment_method: 'Método de Pago',
@@ -341,6 +355,8 @@ const DICT = {
   en: {
     finalize_purchase: 'Checkout',
     name: 'Full Name',
+    first_name: 'First Name',
+    last_name: 'Last Name',
     phone: 'Mobile Phone',
     site_recoger: 'Pickup Location',
     payment_method: 'Payment Method',
@@ -373,6 +389,29 @@ const countrySuggestions = ref([])
 const countries = ref([])
 const showCountryDropdown = ref(false)
 const countryQuery = ref('')
+
+/* ================= Email ================= */
+const emailError = ref('')
+
+// Función para validar email
+const validateEmail = () => {
+  const email = user.user.email?.toString().trim() || ''
+  emailError.value = ''
+  
+  if (!email) {
+    emailError.value = lang.value === 'en' ? 'Email is required' : 'El correo electrónico es obligatorio'
+    return false
+  }
+  
+  // Validar formato de email
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  if (!emailRegex.test(email)) {
+    emailError.value = lang.value === 'en' ? 'Please enter a valid email address' : 'Por favor ingresa un correo electrónico válido'
+    return false
+  }
+  
+  return true
+}
 
 const norm = (s) => (s || '').toString().trim().toLowerCase()
 const onlyDigits = (s) => (s || '').replace(/\D+/g, '')
@@ -421,6 +460,18 @@ watch([() => user.user.phone_number, () => user.user.phone_code], ([num, country
     phoneError.value = lang.value === 'en' ? 'Invalid phone number' : 'Número inválido'
   }
 }, { immediate: true })
+
+// Watch para validar email cuando cambia
+watch(
+  () => user.user.email,
+  () => {
+    if (user.user.email) {
+      validateEmail()
+    } else {
+      emailError.value = ''
+    }
+  }
+)
 
 /* ================= Tipos de orden / pagos ================= */
 const computedOrderTypesVisible = computed(() => {

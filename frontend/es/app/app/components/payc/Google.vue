@@ -81,10 +81,6 @@
                   <span>{{ t('delivery_price') }}</span>
                   <strong>{{ formatCOP(tempSiteData.delivery_cost_cop) }}</strong>
                 </div>
-                <div class="detail-row">
-                  <span>{{ t('distance') }}</span>
-                  <strong>{{ tempSiteData.distance_miles }} {{ t('km') }}</strong>
-                </div>
                 <div class="detail-row full">
                   <span>{{ t('ships_from_site') }}</span>
                   <strong>{{ tempSiteData.nearest?.site?.site_name }}</strong>
@@ -143,10 +139,14 @@
           <section class="card form-section">
             <h2 class="section-title">Datos Personales</h2>
 
-            <div class="form-row">
-              <div class="form-group full">
-                <label>{{ t('name') }}</label>
-                <InputText type="text" class="input-modern" v-model="user.user.name" :placeholder="t('name')" />
+            <div class="form-row split">
+              <div class="form-group">
+                <label>{{ t('first_name') }} <span style="color: red;">*</span></label>
+                <InputText type="text" class="input-modern" v-model="user.user.first_name" :placeholder="t('first_name')" />
+              </div>
+              <div class="form-group">
+                <label>{{ t('last_name') }} <span style="color: red;">*</span></label>
+                <InputText type="text" class="input-modern" v-model="user.user.last_name" :placeholder="t('last_name')" />
               </div>
             </div>
 
@@ -193,8 +193,16 @@
               </div>
 
               <div class="form-group">
-                <label>{{ t('email') }}</label>
-                <InputText type="email" class="input-modern" v-model="user.user.email" :placeholder="t('email')" />
+                <label>{{ t('email') }} <span style="color: red;">*</span></label>
+                <InputText 
+                  type="email" 
+                  class="input-modern" 
+                  v-model="user.user.email" 
+                  :placeholder="t('email')"
+                  @blur="validateEmail"
+                  @input="emailError = ''"
+                />
+                <span v-if="emailError" class="field-error">{{ emailError }}</span>
               </div>
             </div>
           </section>
@@ -451,6 +459,8 @@ const DICT = {
   es: {
     finalize_purchase: 'Finalizar Compra',
     name: 'Nombre Completo',
+    first_name: 'Nombre',
+    last_name: 'Apellido',
     phone: 'Celular',
     site_recoger: 'Sede para Recoger',
     payment_method: 'Método de Pago',
@@ -476,6 +486,8 @@ const DICT = {
   en: {
     finalize_purchase: 'Checkout',
     name: 'Full Name',
+    first_name: 'First Name',
+    last_name: 'Last Name',
     phone: 'Mobile Phone',
     site_recoger: 'Pickup Location',
     payment_method: 'Payment Method',
@@ -597,7 +609,13 @@ const validateAddress = async () => {
 
       if (result.matching_polygons && result.matching_polygons.length > 0) {
         // Obtener el primer polígono que coincide y tiene una sede
-        const matchingPolygon = result.matching_polygons.find(p => p.is_inside && p.site)
+        // Priorizar polígonos con is_inside: true, pero también considerar otros si no hay ninguno
+        let matchingPolygon = result.matching_polygons.find(p => p.is_inside && p.site)
+        if (!matchingPolygon) {
+          // Si no hay polígono con is_inside, usar el primero que tenga sitio
+          matchingPolygon = result.matching_polygons.find(p => p.site)
+        }
+        
         if (matchingPolygon && matchingPolygon.site) {
           const site = matchingPolygon.site
           nearestSite = {
@@ -609,9 +627,9 @@ const validateAddress = async () => {
             city: site.city_name || null,
             site_address: site.site_address || null
           }
-          inCoverage = matchingPolygon.is_inside
+          inCoverage = matchingPolygon.is_inside || false
           
-          // Calcular distancia aproximada
+          // Calcular distancia aproximada siempre que tengamos coordenadas
           if (result.latitude && result.longitude && site.location) {
             const [siteLat, siteLng] = site.location
             const R = 6371 // Radio de la Tierra en km
@@ -651,21 +669,53 @@ const validateAddress = async () => {
         deliveryCost = Number(result.delivery_cost_cop) || 0
       }
 
-      // Usar distancia de delivery_pricing si está disponible
-      const finalDistance = result.delivery_pricing?.distance_km != null
-        ? Number(result.delivery_pricing.distance_km)
-        : minDistance
+      // Calcular distancia: priorizar delivery_pricing.distance_km, luego rappi_validation.trip_distance, luego distancia calculada
+      let finalDistance = minDistance
+      if (result.delivery_pricing && result.delivery_pricing.distance_km != null) {
+        // Formato Google Maps: usar distancia de delivery_pricing
+        finalDistance = Number(result.delivery_pricing.distance_km) || 0
+      } else if (result.rappi_validation && result.rappi_validation.trip_distance != null) {
+        // Formato Rappi Cargo: usar trip_distance de rappi_validation
+        finalDistance = Number(result.rappi_validation.trip_distance) || 0
+      } else if (minDistance === Infinity && nearestSite && result.latitude && result.longitude) {
+        // Si no hay distancia disponible y hay una sede, calcularla desde las coordenadas
+        const site = nearestSite
+        // Intentar obtener coordenadas de la sede desde matching_polygons
+        const matchingPolygon = result.matching_polygons?.find(p => p.site && p.site.site_id === site.site_id)
+        if (matchingPolygon?.site?.location) {
+          const [siteLat, siteLng] = matchingPolygon.site.location
+          const R = 6371 // Radio de la Tierra en km
+          const dLat = (siteLat - result.latitude) * Math.PI / 180
+          const dLng = (siteLng - result.longitude) * Math.PI / 180
+          const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                    Math.cos(result.latitude * Math.PI / 180) * Math.cos(siteLat * Math.PI / 180) *
+                    Math.sin(dLng/2) * Math.sin(dLng/2)
+          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
+          finalDistance = R * c
+        }
+      }
+      
+      // Si aún es Infinity, usar 0 como fallback
+      if (finalDistance === Infinity || isNaN(finalDistance)) {
+        finalDistance = 0
+      }
 
+      // Compatible con ambos formatos: Rappi Cargo (latitude/longitude) y Google Maps (lat/lng)
+      const lat = result.latitude || result.lat || null
+      const lng = result.longitude || result.lng || null
+      
       tempSiteData.value = {
         formatted_address: result.formatted_address || result.address,
-        address: result.address,
-        lat: result.latitude,
-        lng: result.longitude,
+        address: result.address || result.formatted_address,
+        lat: lat,
+        lng: lng,
+        latitude: lat, // Preservar ambos formatos
+        longitude: lng, // Preservar ambos formatos
         geocoded: result.geocoded,
         is_inside_any: result.is_inside_any,
         delivery_cost_cop: deliveryCost,
-        delivery_pricing: result.delivery_pricing, // Guardar objeto completo de pricing
-        rappi_validation: result.rappi_validation,
+        delivery_pricing: result.delivery_pricing, // Guardar objeto completo de pricing (puede ser null en formato Rappi Cargo)
+        rappi_validation: result.rappi_validation, // Guardar objeto completo de validación (puede ser null en formato Google Maps)
         matching_polygons: result.matching_polygons, // Guardar polígonos coincidentes
         status: 'checked',
         in_coverage: inCoverage || result.is_inside_any,
@@ -720,10 +770,14 @@ const confirmSelection = async () => {
 }
 
 const applySiteSelection = (data) => {
+  // Compatible con ambos formatos: Rappi Cargo (latitude/longitude) y Google Maps (lat/lng)
+  const lat = data.latitude || data.lat || null
+  const lng = data.longitude || data.lng || null
+  
   user.user.site = data
-  user.user.address = data.formatted_address
-  user.user.lat = data.lat
-  user.user.lng = data.lng
+  user.user.address = data.formatted_address || data.address
+  user.user.lat = lat
+  user.user.lng = lng
   user.user.place_id = data.place_id || null
 
   // sitio real - preservar pe_site_id si está disponible
@@ -735,7 +789,8 @@ const applySiteSelection = (data) => {
       pe_site_id: newSite.pe_site_id || siteStore.location.site?.pe_site_id || null // Asegurar pe_site_id
     }
   }
-  store.address_details = data
+  // Actualizar address_details y calcular is_rappi_cargo (persistente)
+  store.setAddressDetails(data)
 
   // Obtener el costo de domicilio: priorizar delivery_pricing.price, luego rappi_validation, luego delivery_cost_cop
   let deliveryCost = 0
@@ -801,6 +856,10 @@ const handleSiteChange = async (newData) => {
       deliveryPrice = Number(newData.delivery_cost_cop) || 0
     }
 
+    // Compatible con ambos formatos: Rappi Cargo (latitude/longitude) y Google Maps (lat/lng)
+    const lat = newData.latitude || newData.lat || null
+    const lng = newData.longitude || newData.lng || null
+
     // Actualizar location en el store - asegurar que pe_site_id esté incluido
     const siteWithPeSiteId = {
       ...site,
@@ -810,21 +869,24 @@ const handleSiteChange = async (newData) => {
       site: siteWithPeSiteId,
       city: newData.city || null,
       address_details: newData,
-      formatted_address: newData.formatted_address || '',
+      formatted_address: newData.formatted_address || newData.address || '',
       place_id: newData.place_id || '',
-      lat: newData.lat || null,
-      lng: newData.lng || null,
+      lat: lat,
+      lng: lng,
       mode: 'google',
       order_type: siteStore.location?.order_type || null
     }, deliveryPrice)
+    
+    // Actualizar address_details y calcular is_rappi_cargo (persistente)
+    store.setAddressDetails(newData)
 
     // Actualizar user store
     user.user = {
       ...user.user,
       site: newData,
-      address: newData.formatted_address,
-      lat: newData.lat,
-      lng: newData.lng,
+      address: newData.formatted_address || newData.address,
+      lat: lat,
+      lng: lng,
       place_id: newData.place_id
     }
 
@@ -853,6 +915,29 @@ const countries = ref([])
 const showCountryDropdown = ref(false)
 const countryQuery = ref('')
 const countryInputRef = ref(null)
+
+/* ================= Email ================= */
+const emailError = ref('')
+
+// Función para validar email
+const validateEmail = () => {
+  const email = user.user.email?.toString().trim() || ''
+  emailError.value = ''
+  
+  if (!email) {
+    emailError.value = lang.value === 'en' ? 'Email is required' : 'El correo electrónico es obligatorio'
+    return false
+  }
+  
+  // Validar formato de email
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  if (!emailRegex.test(email)) {
+    emailError.value = lang.value === 'en' ? 'Please enter a valid email address' : 'Por favor ingresa un correo electrónico válido'
+    return false
+  }
+  
+  return true
+}
 
 const norm = (s) => (s || '').toString().trim().toLowerCase()
 const onlyDigits = (s) => (s || '').replace(/\D+/g, '')
@@ -915,6 +1000,18 @@ watch(
     }
   },
   { immediate: true }
+)
+
+// Watch para validar email cuando cambia
+watch(
+  () => user.user.email,
+  () => {
+    if (user.user.email) {
+      validateEmail()
+    } else {
+      emailError.value = ''
+    }
+  }
 )
 
 /* ================= Tipos de orden / pagos ================= */
@@ -1009,13 +1106,15 @@ watch(
       siteStore.location.neigborhood.delivery_price = 0
     } else {
       // Obtener el costo de domicilio: priorizar delivery_pricing.price, luego rappi_validation, luego delivery_cost_cop
+      // Compatible con ambos formatos: Rappi Cargo y Google Maps
+      const addressData = user.user.site || store.address_details || {}
       let deliveryCost = 0
-      if (user.user.site?.delivery_pricing?.price != null) {
-        deliveryCost = Number(user.user.site.delivery_pricing.price) || 0
-      } else if (user.user.site?.rappi_validation?.estimated_price) {
-        deliveryCost = Number(user.user.site.rappi_validation.estimated_price) || 0
+      if (addressData.delivery_pricing && addressData.delivery_pricing.price != null) {
+        deliveryCost = Number(addressData.delivery_pricing.price) || 0
+      } else if (addressData.rappi_validation && addressData.rappi_validation.estimated_price) {
+        deliveryCost = Number(addressData.rappi_validation.estimated_price) || 0
       } else {
-        deliveryCost = user.user.site?.delivery_cost_cop ?? siteStore?.delivery_price ?? 0
+        deliveryCost = addressData.delivery_cost_cop ?? siteStore?.delivery_price ?? 0
       }
       
       if (deliveryCost != null) {
