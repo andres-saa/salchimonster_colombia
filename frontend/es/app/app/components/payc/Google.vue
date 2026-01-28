@@ -806,12 +806,24 @@ const applySiteSelection = (data) => {
     siteStore.location.neigborhood.delivery_price = deliveryCost
   }
 
-  // Preservar el order_type actual si es válido, solo validar si no hay uno o no es válido
-  // NO cambiar a "recoger" automáticamente cuando se establece una dirección
+  // Preservar el order_type actual si es válido
+  // NO cambiar automáticamente cuando se establece una dirección
+  // El usuario debe poder cambiar manualmente el tipo de orden en pay si quiere
   const currentOrderType = user.user.order_type
   const dispatcherOrderType = siteStore.location?.order_type
   
-  // Si hay un order_type del dispatcher y es válido, usarlo
+  // Si hay un order_type actual válido, mantenerlo (no cambiar)
+  if (currentOrderType && currentOrderType.id) {
+    const list = computedOrderTypesVisible.value
+    const isValidCurrentType = list.some((o) => Number(o.id) === Number(currentOrderType.id))
+    
+    // Si es válido, mantenerlo sin importar si es delivery o pickup
+    if (isValidCurrentType) {
+      return // Mantener el order_type actual (permite que el usuario lo cambie manualmente después)
+    }
+  }
+  
+  // Si no hay order_type válido, usar el del dispatcher si existe y es válido
   if (dispatcherOrderType && dispatcherOrderType.id) {
     const list = computedOrderTypesVisible.value
     const isValidDispatcherType = list.some((o) => Number(o.id) === Number(dispatcherOrderType.id))
@@ -821,19 +833,7 @@ const applySiteSelection = (data) => {
     }
   }
   
-  // Si el order_type actual es válido y es delivery (no pickup), mantenerlo
-  if (currentOrderType && currentOrderType.id) {
-    const list = computedOrderTypesVisible.value
-    const isValidCurrentType = list.some((o) => Number(o.id) === Number(currentOrderType.id))
-    const isDelivery = ![2, 6].includes(currentOrderType.id)
-    
-    // Si es válido y es delivery, mantenerlo (no cambiar a recoger)
-    if (isValidCurrentType && isDelivery) {
-      return // Mantener el order_type actual
-    }
-  }
-  
-  // Solo validar si no hay order_type válido o si es pickup y queremos cambiarlo
+  // Solo validar si no hay order_type válido
   ensureValidOrderTypeForCurrentSite()
 }
 
