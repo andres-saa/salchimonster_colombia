@@ -5,11 +5,53 @@
         <h5 class="title">Resumen</h5>
       </div>
 
+      <!-- Indicador de cuponera/cupón activo -->
+      <div v-if="store.applied_cuponera || store.applied_coupon" class="active-discount-banner">
+        <div class="discount-icon">
+          <i class="pi" :class="(store.applied_cuponera?.buy_m_pay_n) ? 'pi-shopping-cart' : 'pi-tag'"></i>
+        </div>
+        <div class="discount-info">
+          <span class="discount-name">
+            {{ store.applied_cuponera?.discount_name || store.applied_cuponera?.cuponera_name || store.applied_coupon?.discount_name || store.applied_coupon?.name || 'Descuento' }}
+          </span>
+          <!-- Lleva M paga N: bloque dedicado más legible -->
+          <template v-if="store.applied_cuponera?.buy_m_pay_n">
+            <div class="discount-lleva-paga">
+              <span class="lleva-paga-main">
+                Lleva <strong>{{ store.applied_cuponera.m }}</strong> · paga <strong>{{ store.applied_cuponera.n }}</strong>
+              </span>
+              <span class="lleva-paga-hint">{{ store.applied_cuponera.m - store.applied_cuponera.n }} {{ (store.applied_cuponera.m - store.applied_cuponera.n) === 1 ? 'unidad gratis' : 'unidades gratis' }} por cada {{ store.applied_cuponera.m }}</span>
+              <span class="discount-scope" v-if="store.applied_cuponera?.discount_categories?.length">
+                En: {{ store.applied_cuponera.discount_categories.map(c => c.name).join(', ') }}
+              </span>
+              <span class="discount-scope" v-else-if="store.applied_cuponera?.discount_products?.length">
+                En: {{ store.applied_cuponera.discount_products.map(p => p.name).join(', ') }}
+              </span>
+            </div>
+          </template>
+          <template v-else>
+            <span class="discount-detail" v-if="store.applied_cuponera?.percent || store.applied_coupon?.percent">
+              {{ store.applied_cuponera?.percent || store.applied_coupon?.percent }}% de descuento
+            </span>
+            <span class="discount-detail" v-else-if="store.applied_cuponera?.amount || store.applied_coupon?.amount">
+              {{ formatoPesosColombianos(store.applied_cuponera?.amount || store.applied_coupon?.amount) }} de descuento
+            </span>
+            <span class="discount-scope" v-if="store.applied_cuponera?.discount_categories?.length">
+              En: {{ store.applied_cuponera.discount_categories.map(c => c.name).join(', ') }}
+            </span>
+            <span class="discount-scope" v-else-if="store.applied_cuponera?.free_product">
+              Producto gratis: {{ store.applied_cuponera.free_product.name }}
+            </span>
+          </template>
+        </div>
+      </div>
+
       <div class="product-list">
         <div 
           v-for="product in store.cart" 
           :key="product.productogeneral_id || product.signature" 
           class="product-item"
+          :class="{ 'has-discount': product.pedido_descuento > 0 }"
         >
           <div class="product-main-row">
             <div class="product-info">
@@ -20,13 +62,40 @@
             </div>
             
             <div class="product-price">
-              <span v-if="product.modificadorseleccionList.length < 1">
-                {{ formatoPesosColombianos(product.pedido_base_price * product.pedido_cantidad) }}
-              </span>
-              <span v-else>
-                {{ formatoPesosColombianos(store.calculateSubtotalProduct(product)) }}
-              </span>
+              <!-- Precio original tachado si hay descuento -->
+              <template v-if="product.pedido_descuento > 0">
+                <span class="original-price">
+                  {{ formatoPesosColombianos(getProductSubtotal(product)) }}
+                </span>
+                <span class="discounted-price">
+                  {{ formatoPesosColombianos(getProductSubtotal(product) - (product.pedido_descuento * product.pedido_cantidad)) }}
+                </span>
+              </template>
+              <template v-else>
+                <span v-if="product.modificadorseleccionList.length < 1">
+                  {{ formatoPesosColombianos(product.pedido_base_price * product.pedido_cantidad) }}
+                </span>
+                <span v-else>
+                  {{ formatoPesosColombianos(store.calculateSubtotalProduct(product)) }}
+                </span>
+              </template>
             </div>
+          </div>
+
+          <!-- Badge de descuento por producto -->
+          <div v-if="product.pedido_descuento > 0" class="product-discount-badge" :class="{ 'badge-lleva-paga': store.applied_cuponera?.buy_m_pay_n, 'badge-free-item': store.applied_cuponera?.free_product && !store.applied_cuponera?.buy_m_pay_n }">
+            <template v-if="store.applied_cuponera?.buy_m_pay_n">
+              <i class="pi pi-shopping-cart"></i>
+              <span>{{ getLlevaPagaFreeUnits(product) }} gratis</span>
+            </template>
+            <template v-else-if="store.applied_cuponera?.free_product">
+              <i class="pi pi-gift"></i>
+              <span>Gratis</span>
+            </template>
+            <template v-else>
+              <i class="pi pi-percentage"></i>
+              <span>-{{ formatoPesosColombianos(product.pedido_descuento * product.pedido_cantidad) }}</span>
+            </template>
           </div>
 
           <div 
@@ -71,8 +140,17 @@
           <span class="value">{{ formatoPesosColombianos(store.cartSubtotal) }}</span>
         </div>
 
-        <div class="total-row" v-if="store.cartTotalDiscount > 0">
-          <span class="label discount">Descuento</span>
+        <!-- Desglose de descuento mejorado -->
+        <div class="total-row discount-row" v-if="store.cartTotalDiscount > 0">
+          <div class="discount-label-wrapper">
+            <span class="label discount">
+              <i class="pi pi-tag"></i>
+              Descuento
+            </span>
+            <span class="discount-source" v-if="store.applied_cuponera?.code || store.applied_coupon?.code">
+              ({{ store.applied_cuponera?.code || store.applied_coupon?.code }})
+            </span>
+          </div>
           <span class="value discount">- {{ formatoPesosColombianos(store.cartTotalDiscount) }}</span>
         </div>
 
@@ -114,6 +192,12 @@
           <span class="value">
          {{ formatoPesosColombianos(store.cartTotal + (deliveryPrice || 0)) }}
           </span>
+        </div>
+
+        <!-- Ahorro total -->
+        <div v-if="store.cartTotalDiscount > 0" class="savings-banner">
+          <i class="pi pi-check-circle"></i>
+          <span>¡Estás ahorrando {{ formatoPesosColombianos(store.cartTotalDiscount) }}!</span>
         </div>
       </div>
 
@@ -283,6 +367,31 @@ const formatName = (str) => {
   if (!str) return ''
   const lower = str.toLowerCase()
   return lower.charAt(0).toUpperCase() + lower.slice(1)
+}
+
+// Calcular subtotal de un producto (precio base + adiciones)
+const getProductSubtotal = (product) => {
+  const basePrice = Number(product.pedido_base_price) || 0
+  const qty = Number(product.pedido_cantidad) || 1
+  
+  let adiciones = 0
+  if (Array.isArray(product.modificadorseleccionList)) {
+    adiciones = product.modificadorseleccionList.reduce(
+      (total, item) => total + (Number(item.pedido_precio) || 0) * (Number(item.modificadorseleccion_cantidad) || 1),
+      0
+    )
+  }
+  
+  return (basePrice + adiciones) * qty
+}
+
+// Unidades gratis en este ítem por promo Lleva M paga N (100% descuento en algunas unidades)
+const getLlevaPagaFreeUnits = (product) => {
+  const basePrice = Number(product.pedido_base_price) || 0
+  if (basePrice <= 0) return 0
+  const qty = Number(product.pedido_cantidad) || 1
+  const totalDiscount = (Number(product.pedido_descuento) || 0) * qty
+  return Math.round(totalDiscount / basePrice)
 }
 
 // Validar monto mínimo de compra del cupón
@@ -499,6 +608,174 @@ const payWithEpayco = (id) => {
 .discount { color: var(--success-text); }
 .strike { text-decoration: line-through; opacity: 0.6; }
 .free-delivery { color: var(--success-text); font-weight: 700; font-size: 0.8rem; }
+
+/* --- Banner de descuento activo --- */
+.active-discount-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+  border: 1px solid #6ee7b7;
+  border-radius: 8px;
+  padding: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.discount-icon {
+  background: #10b981;
+  color: white;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.discount-icon i { font-size: 0.9rem; }
+
+.discount-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.discount-name {
+  font-weight: 700;
+  color: #065f46;
+  font-size: 0.9rem;
+  text-transform: uppercase;
+}
+
+.discount-detail {
+  font-size: 0.8rem;
+  color: #047857;
+  font-weight: 500;
+}
+
+.discount-scope {
+  font-size: 0.75rem;
+  color: #059669;
+  font-style: italic;
+}
+
+/* Lleva M paga N: bloque dedicado */
+.discount-lleva-paga {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin-top: 0.15rem;
+}
+.lleva-paga-main {
+  font-size: 0.95rem;
+  color: #047857;
+  font-weight: 600;
+}
+.lleva-paga-main strong {
+  color: #065f46;
+  font-weight: 700;
+}
+.lleva-paga-hint {
+  font-size: 0.75rem;
+  color: #059669;
+  opacity: 0.95;
+}
+.discount-lleva-paga .discount-scope {
+  margin-top: 0.1rem;
+}
+
+/* --- Producto con descuento --- */
+.product-item.has-discount {
+  background: linear-gradient(135deg, #fefce8 0%, #fef9c3 100%);
+  border-radius: 8px;
+  padding: 0.5rem;
+  margin: 0 -0.5rem;
+  border-left: 3px solid #eab308;
+}
+
+.product-discount-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  background: #dc2626;
+  color: white;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  margin-top: 0.25rem;
+  margin-left: 1.8rem;
+}
+
+.product-discount-badge i { font-size: 0.6rem; }
+
+.product-discount-badge.badge-lleva-paga {
+  background: #059669;
+  color: white;
+}
+
+.product-discount-badge.badge-free-item {
+  background: #7c3aed;
+  color: white;
+}
+
+.original-price {
+  text-decoration: line-through;
+  color: #9ca3af;
+  font-size: 0.8rem;
+  margin-right: 0.5rem;
+}
+
+.discounted-price {
+  color: #dc2626;
+  font-weight: 700;
+}
+
+/* --- Fila de descuento mejorada --- */
+.discount-row {
+  background: #f0fdf4;
+  padding: 0.5rem;
+  border-radius: 6px;
+  margin: 0 -0.5rem;
+}
+
+.discount-label-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.discount-label-wrapper .label {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.discount-label-wrapper i { font-size: 0.8rem; }
+
+.discount-source {
+  font-size: 0.7rem;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+/* --- Banner de ahorro --- */
+.savings-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  padding: 0.6rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-top: 0.75rem;
+}
+
+.savings-banner i { font-size: 1rem; }
 
 .final-total {
   margin-top: 0.5rem;

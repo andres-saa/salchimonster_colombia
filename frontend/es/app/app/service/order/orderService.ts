@@ -120,8 +120,8 @@ function preparar_orden() {
 
   const phone = buildPhone();
   
-  // Obtener código de descuento si existe
-  const discount_code = cart.applied_coupon?.code || null;
+  // Obtener código de descuento: priorizar cuponera sobre cupón normal
+  const discount_code = cart.applied_cuponera?.code || cart.applied_coupon?.code || null;
 
   /* -------------------------------------------------------------------------- */
   /* LÓGICA DE DIRECCIÓN MODIFICADA                       */
@@ -516,6 +516,23 @@ export const orderService = {
         cart.sending_order = false;
         cart.last_order = response.data;
         report.setLoading(false, "enviando tu pedido");
+
+        // ✅ Si se usó una cuponera, registrar el uso
+        if (cart.applied_cuponera?.code) {
+          try {
+            const runtimeConfig = typeof useRuntimeConfig === 'function' ? useRuntimeConfig() : null;
+            const cuponeraApi = runtimeConfig?.public?.cuponeraApi || 'http://localhost:8000';
+            const cuponeraCode = cart.applied_cuponera.code;
+            
+            // Llamar a /redeem con record_use=true
+            const redeemUrl = `${cuponeraApi}/redeem?code=${encodeURIComponent(cuponeraCode)}&record_use=true`;
+            await fetch(redeemUrl);
+            // No necesitamos manejar la respuesta, solo registrar el uso
+          } catch (e) {
+            console.error('Error registrando uso de cuponera:', e);
+            // No bloqueamos el flujo por un error en el registro de uso
+          }
+        }
 
         // Redirección condicional: mantiene tu lógica original
         if (order.payment_method_id !== 9 || user.user.token) {

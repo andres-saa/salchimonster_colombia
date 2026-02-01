@@ -47,6 +47,200 @@
             <p>{{ lang === 'en' ? 'Loading delivery options...' : 'Cargando opciones de entrega...' }}</p>
           </div>
 
+          <!-- Cuponera al inicio: código para autocompletar datos -->
+          <section class="card form-section cuponera-top">
+            <h2 class="section-title">
+              <Icon name="mdi:ticket-account-outline" size="22" />
+              {{ lang === 'en' ? 'Have a cuponera?' : '¿Tienes cuponera?' }}
+            </h2>
+            <p class="cuponera-subtitle">
+              {{ lang === 'en' ? 'Enter your code and your data will be filled in automatically.' : 'Ingresa tu código y se completarán tus datos automáticamente.' }}
+            </p>
+            <div class="cuponera-input-row">
+              <input
+                type="text"
+                v-model="cuponeraCodeInput"
+                :placeholder="t('code_placeholder')"
+                :disabled="temp_code?.status === 'active'"
+                class="cuponera-input"
+              />
+              <button
+                v-if="temp_code?.status === 'active'"
+                class="btn-coupon remove"
+                @click="clearCuponeraTop"
+                type="button"
+              >
+                <Icon name="mdi:trash-can-outline" />
+              </button>
+              <button
+                v-else
+                class="btn-coupon apply"
+                @click="applyCuponeraFromTop"
+                :disabled="!cuponeraCodeInput?.trim() || isApplyingCoupon"
+                type="button"
+              >
+                {{ isApplyingCoupon ? (lang === 'en' ? 'Applying...' : 'Aplicando...') : (lang === 'en' ? 'Apply' : 'Aplicar') }}
+              </button>
+            </div>
+            <div
+              v-if="temp_code?.status"
+              class="coupon-feedback cuponera-feedback"
+              :class="temp_code.status === 'active' ? 'positive' : 'negative'"
+            >
+              <Icon :name="temp_code.status === 'active' ? 'mdi:check-circle' : 'mdi:alert-circle'" size="18" />
+              <div class="feedback-info">
+                <template v-if="temp_code.status === 'active'">
+                  <span class="discount-title">{{ temp_code.discount_name }}</span>
+                  <span v-if="store.applied_coupon?._fromCuponera" class="data-filled-msg">
+                    {{ lang === 'en' ? 'Your data has been filled in.' : 'Tus datos se han completado.' }}
+                  </span>
+                  <span class="discount-amount" v-if="temp_code.free_item || temp_code.free_product">
+                    <Icon name="mdi:gift-outline" size="16" />
+                    {{ temp_code.free_product?.name || (lang === 'en' ? 'Free product' : 'Producto gratis') }}
+                    <template v-if="store.applied_cuponera?._freeProductInCart">
+                      <span class="product-note applied">
+                        <Icon name="mdi:check" size="14" />
+                        ({{ lang === 'en' ? 'Applied!' : '¡Aplicado!' }})
+                      </span>
+                    </template>
+                    <template v-else>
+                      <span class="product-note warning">
+                        <Icon name="mdi:alert" size="14" />
+                        ({{ lang === 'en' ? 'Add to cart to apply discount' : 'Agrégalo al carrito para aplicar el descuento' }})
+                      </span>
+                    </template>
+                  </span>
+                  <span class="discount-amount" v-else-if="temp_code.amount && temp_code.amount > 0">
+                    {{ lang === 'en' ? 'You save' : 'Ahorras' }}: <strong>{{ formatCOP(temp_code.amount) }}</strong>
+                    <span v-if="temp_code.discount_categories?.length" class="scope-info">
+                      <br>{{ lang === 'en' ? 'On:' : 'En:' }} {{ temp_code.discount_categories.map(c => c.name).join(', ') }}
+                      <template v-if="store.applied_cuponera?._categoryProductInCart === false">
+                        <span class="product-note warning">
+                          <br><Icon name="mdi:alert" size="14" />
+                          {{ lang === 'en' ? 'Add a product from this category to apply' : 'Agrega un producto de esta categoría para aplicar' }}
+                        </span>
+                      </template>
+                      <template v-else-if="store.applied_cuponera?._categoryProductInCart === true">
+                        <span class="product-note applied">
+                          <br><Icon name="mdi:check" size="14" />
+                          {{ lang === 'en' ? 'Applied!' : '¡Aplicado!' }}
+                        </span>
+                      </template>
+                    </span>
+                    <span v-if="temp_code.discount_products?.length" class="scope-info">
+                      <br>{{ lang === 'en' ? 'On:' : 'En:' }} {{ temp_code.discount_products.map(p => p.name).join(', ') }}
+                      <template v-if="store.applied_cuponera?._productScopeInCart === false">
+                        <span class="product-note warning">
+                          <br><Icon name="mdi:alert" size="14" />
+                          {{ lang === 'en' ? 'Add one of these products to apply' : 'Agrega uno de estos productos para aplicar' }}
+                        </span>
+                      </template>
+                      <template v-else-if="store.applied_cuponera?._productScopeInCart === true">
+                        <span class="product-note applied">
+                          <br><Icon name="mdi:check" size="14" />
+                          {{ lang === 'en' ? 'Applied!' : '¡Aplicado!' }}
+                        </span>
+                      </template>
+                    </span>
+                  </span>
+                  <span class="discount-amount" v-else-if="temp_code.percent">
+                    {{ lang === 'en' ? 'You save' : 'Ahorras' }}: <strong>{{ temp_code.percent }}%</strong>
+                    <span v-if="temp_code.discount_categories?.length" class="scope-info">
+                      <br>{{ lang === 'en' ? 'On:' : 'En:' }} {{ temp_code.discount_categories.map(c => c.name).join(', ') }}
+                      <template v-if="store.applied_cuponera?._categoryProductInCart === false">
+                        <span class="product-note warning">
+                          <br><Icon name="mdi:alert" size="14" />
+                          {{ lang === 'en' ? 'Add a product from this category to apply' : 'Agrega un producto de esta categoría para aplicar' }}
+                        </span>
+                      </template>
+                      <template v-else-if="store.applied_cuponera?._categoryProductInCart === true">
+                        <span class="product-note applied">
+                          <br><Icon name="mdi:check" size="14" />
+                          {{ lang === 'en' ? 'Applied!' : '¡Aplicado!' }}
+                        </span>
+                      </template>
+                    </span>
+                    <span v-if="temp_code.discount_products?.length" class="scope-info">
+                      <br>{{ lang === 'en' ? 'On:' : 'En:' }} {{ temp_code.discount_products.map(p => p.name).join(', ') }}
+                      <template v-if="store.applied_cuponera?._productScopeInCart === false">
+                        <span class="product-note warning">
+                          <br><Icon name="mdi:alert" size="14" />
+                          {{ lang === 'en' ? 'Add one of these products to apply' : 'Agrega uno de estos productos para aplicar' }}
+                        </span>
+                      </template>
+                      <template v-else-if="store.applied_cuponera?._productScopeInCart === true">
+                        <span class="product-note applied">
+                          <br><Icon name="mdi:check" size="14" />
+                          {{ lang === 'en' ? 'Applied!' : '¡Aplicado!' }}
+                        </span>
+                      </template>
+                    </span>
+                  </span>
+                  <span class="discount-amount" v-else-if="temp_code.buy_m_pay_n">
+                    <Icon name="mdi:package-variant" size="16" />
+                    {{ lang === 'en' ? 'Buy' : 'Lleva' }} {{ temp_code.m }} {{ lang === 'en' ? 'pay' : 'paga' }} {{ temp_code.n }}
+                    <span v-if="temp_code.discount_categories?.length" class="scope-info">
+                      <br>{{ lang === 'en' ? 'On:' : 'En:' }} {{ temp_code.discount_categories.map(c => c.name).join(', ') }}
+                      <template v-if="store.applied_cuponera?._buyMPayNNeedsMore">
+                        <span class="product-note warning">
+                          <br><Icon name="mdi:alert" size="14" />
+                          {{ lang === 'en' ? 'Add at least' : 'Agrega al menos' }} {{ temp_code.m }} {{ lang === 'en' ? 'eligible units to apply' : 'unidades elegibles para aplicar' }}
+                        </span>
+                      </template>
+                      <template v-else-if="store.applied_cuponera?._buyMPayNInCart">
+                        <span class="product-note applied">
+                          <br><Icon name="mdi:check" size="14" />
+                          {{ lang === 'en' ? 'Applied!' : '¡Aplicado!' }}
+                        </span>
+                      </template>
+                    </span>
+                    <span v-else-if="temp_code.discount_products?.length" class="scope-info">
+                      <br>{{ lang === 'en' ? 'On:' : 'En:' }} {{ temp_code.discount_products.map(p => p.name).join(', ') }}
+                      <template v-if="store.applied_cuponera?._buyMPayNNeedsMore">
+                        <span class="product-note warning">
+                          <br><Icon name="mdi:alert" size="14" />
+                          {{ lang === 'en' ? 'Add at least' : 'Agrega al menos' }} {{ temp_code.m }} {{ lang === 'en' ? 'eligible units to apply' : 'unidades elegibles para aplicar' }}
+                        </span>
+                      </template>
+                      <template v-else-if="store.applied_cuponera?._buyMPayNInCart">
+                        <span class="product-note applied">
+                          <br><Icon name="mdi:check" size="14" />
+                          {{ lang === 'en' ? 'Applied!' : '¡Aplicado!' }}
+                        </span>
+                      </template>
+                    </span>
+                    <span v-else class="scope-info">
+                      <template v-if="store.applied_cuponera?._buyMPayNNeedsMore">
+                        <span class="product-note warning">
+                          <Icon name="mdi:alert" size="14" />
+                          {{ lang === 'en' ? 'Add at least' : 'Agrega al menos' }} {{ temp_code.m }} {{ lang === 'en' ? 'eligible units to apply' : 'unidades elegibles para aplicar' }}
+                        </span>
+                      </template>
+                      <template v-else-if="store.applied_cuponera?._buyMPayNInCart">
+                        <span class="product-note applied">
+                          <Icon name="mdi:check" size="14" />
+                          {{ lang === 'en' ? 'Applied!' : '¡Aplicado!' }}
+                        </span>
+                      </template>
+                    </span>
+                  </span>
+                  <span v-if="temp_code.uses_remaining_today != null" class="uses-remaining">
+                    {{ lang === 'en' ? 'Uses left today' : 'Usos restantes hoy' }}: <strong>{{ temp_code.uses_remaining_today }}</strong>
+                  </span>
+                </template>
+                <template v-else>
+                  <span>{{
+                    temp_code.status === 'invalid_site'
+                      ? (lang === 'en' ? 'Not valid for this site' : 'No válido en esta sede')
+                      : temp_code.status === 'min_purchase'
+                      ? temp_code.detail
+                      : (temp_code.detail || (lang === 'en' ? 'Invalid code' : 'Código no válido'))
+                  }}</span>
+                </template>
+              </div>
+            </div>
+          </section>
+
           <section class="card form-section">
             <h2 class="section-title">Datos Personales</h2>
 
@@ -186,7 +380,8 @@
           <section class="card form-section">
             <h2 class="section-title">Pago & Detalles</h2>
 
-            <div class="coupon-wrapper">
+            <!-- ✅ CUPONES NORMALES - Solo se muestra si NO hay cuponera activa -->
+            <div v-if="!store.applied_cuponera" class="coupon-wrapper">
               <div class="coupon-toggle" @click="toggleCouponUi">
                 <div class="coupon-left">
                   <Icon name="mdi:ticket-percent-outline" size="20" />
@@ -235,11 +430,18 @@
                   <div class="feedback-info">
                     <template v-if="temp_code.status === 'active'">
                       <span class="discount-title">{{ temp_code.discount_name }}</span>
-                      <span class="discount-amount" v-if="temp_code.amount">
+                      <span class="discount-amount" v-if="temp_code.free_item">
+                        <Icon name="mdi:gift-outline" size="16" />
+                        {{ lang === 'en' ? 'Free product' : 'Producto gratis' }}
+                      </span>
+                      <span class="discount-amount" v-else-if="temp_code.amount && temp_code.amount > 0">
                         Ahorras: <strong>{{ formatCOP(temp_code.amount) }}</strong>
                       </span>
                       <span class="discount-amount" v-else-if="temp_code.percent">
                         Ahorras: <strong>{{ temp_code.percent }}%</strong>
+                      </span>
+                      <span v-if="temp_code.uses_remaining_today != null" class="uses-remaining">
+                        {{ lang === 'en' ? 'Uses left today' : 'Usos restantes hoy' }}: <strong>{{ temp_code.uses_remaining_today }}</strong>
                       </span>
                     </template>
                     <template v-else>
@@ -288,17 +490,19 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch, computed } from 'vue'
+import { ref, onMounted, watch, computed, nextTick } from 'vue'
 import resumen from '../resumen.vue'
 import { usecartStore, useSitesStore, useUserStore } from '#imports'
 import { URI } from '~/service/conection'
+import { redeemCuponeraCode, mapCuponeraDiscountToCoupon } from '~/service/cuponeraService'
 import { buildCountryOptions } from '~/service/utils/countries'
 import { parsePhoneNumberFromString } from 'libphonenumber-js/min'
 
-/* ================= STORES ================= */
+/* ================= STORES & CONFIG ================= */
 const user = useUserStore()
 const siteStore = useSitesStore()
 const store = usecartStore()
+const runtimeConfig = useRuntimeConfig()
 
 /* ================= v-click-outside ================= */
 const vClickOutside = {
@@ -589,6 +793,146 @@ const temp_discount = computed({
 })
 const temp_code = ref({})
 const isApplyingCoupon = ref(false)
+const cuponeraCodeInput = ref('')
+const cuponeraValidationErrors = ref([]) // ✅ Errores de validación de cuponera
+
+const applyCuponeraFromTop = () => {
+  validateCuponera(cuponeraCodeInput.value)
+}
+
+const clearCuponeraTop = () => {
+  cuponeraCodeInput.value = ''
+  temp_code.value = {}
+  cuponeraValidationErrors.value = []
+  store.removeCuponera()
+  store.setCouponUi({ enabled: false, draft_code: '' })
+}
+
+// ===== VALIDACIÓN COMPLETA DE CUPONERA =====
+const validateCuponera = async (code) => {
+  const site = siteStore.location?.site
+  if (!site) {
+    temp_code.value = { status: 'error', detail: lang.value === 'en' ? 'Select a site first' : 'Selecciona una sede primero' }
+    return
+  }
+
+  const finalCode = (code || '').toString().trim()
+  if (!finalCode) return
+
+  isApplyingCoupon.value = true
+  cuponeraValidationErrors.value = []
+
+  try {
+    // 1) Llamar a la API de cuponera
+    const redeemRes = await redeemCuponeraCode(finalCode, undefined, false, runtimeConfig.public?.cuponeraApi)
+    
+    if (!redeemRes?.success) {
+      temp_code.value = { status: 'invalid', detail: redeemRes?.message || (lang.value === 'en' ? 'Invalid code' : 'Código no válido') }
+      store.removeCuponera()
+      isApplyingCoupon.value = false
+      return
+    }
+
+    // 2) VALIDACIÓN DE SEDE
+    const siteIds = redeemRes.cuponera_site_ids
+    if (Array.isArray(siteIds) && siteIds.length > 0) {
+      const siteIdNum = Number(site.site_id)
+      if (!siteIds.some((id) => Number(id) === siteIdNum)) {
+        temp_code.value = { status: 'invalid_site', detail: lang.value === 'en' ? 'Not valid for this site' : 'No válido en esta sede' }
+        cuponeraValidationErrors.value.push({ type: 'sede', message: temp_code.value.detail })
+        store.removeCuponera()
+        isApplyingCoupon.value = false
+        return
+      }
+    }
+
+    // 3) VALIDACIÓN DE USOS RESTANTES
+    const usesRemaining = redeemRes.uses_remaining_today ?? 0
+    if (usesRemaining <= 0) {
+      temp_code.value = { status: 'no_uses', detail: lang.value === 'en' ? 'No uses remaining today' : 'No quedan usos para hoy' }
+      cuponeraValidationErrors.value.push({ type: 'usos', message: temp_code.value.detail })
+      store.removeCuponera()
+      isApplyingCoupon.value = false
+      return
+    }
+
+    // 4) AUTOCOMPLETAR DATOS DEL USUARIO
+    if (redeemRes.user) {
+      const u = redeemRes.user
+      user.user.first_name = u.first_name || user.user.first_name || ''
+      user.user.last_name = u.last_name || user.user.last_name || ''
+      if (u.phone) user.user.phone_number = u.phone
+      if (u.phone_code) {
+        const matchingCountry = countries.value.find(c => c.dialCode === u.phone_code)
+        if (matchingCountry) {
+          user.user.phone_code = matchingCountry
+        }
+      }
+      if (u.email) user.user.email = u.email
+      if (u.address != null) user.user.address = u.address
+    }
+
+    // 5) MAPEAR DESCUENTO (solo CART_PERCENT_OFF o CART_AMOUNT_OFF)
+    const cuponeraDiscount = mapCuponeraDiscountToCoupon(redeemRes, finalCode, site.site_id)
+    
+    if (!cuponeraDiscount) {
+      // No hay descuento configurado para hoy o no es válido para esta sede
+      temp_code.value = { 
+        status: 'no_discount', 
+        detail: redeemRes.message || (lang.value === 'en' ? 'Discount not available for this site' : 'Descuento no disponible en esta sede'),
+        cuponera_name: redeemRes.cuponera_name,
+        uses_remaining_today: usesRemaining
+      }
+      store.removeCuponera()
+      isApplyingCoupon.value = false
+      return
+    }
+
+    // 6) VALIDACIÓN DE MONTO MÍNIMO
+    if (cuponeraDiscount.min_purchase != null && cuponeraDiscount.min_purchase > 0) {
+      const subtotal = store.cartSubtotal
+      if (subtotal < cuponeraDiscount.min_purchase) {
+        const minPurchaseFormatted = formatCOP(cuponeraDiscount.min_purchase)
+        temp_code.value = { 
+          status: 'min_purchase', 
+          detail: lang.value === 'en' ? `Minimum purchase required: ${minPurchaseFormatted}` : `El monto mínimo de compra es: ${minPurchaseFormatted}`, 
+          min_purchase: cuponeraDiscount.min_purchase 
+        }
+        cuponeraValidationErrors.value.push({ type: 'min_purchase', message: temp_code.value.detail, min_purchase: cuponeraDiscount.min_purchase })
+        store.removeCuponera()
+        isApplyingCoupon.value = false
+        return
+      }
+    }
+
+    // 7) TODO OK - APLICAR CUPONERA
+    const cuponeraData = {
+      code: finalCode,
+      ...cuponeraDiscount,
+      uses_remaining_today: usesRemaining,
+      cuponera_site_ids: siteIds,
+      cuponera_name: redeemRes.cuponera_name,
+      free_product: redeemRes.free_product || null
+    }
+    
+    store.applyCuponera(cuponeraData)
+
+    temp_code.value = { 
+      ...cuponeraDiscount, 
+      status: 'active', 
+      discount_name: cuponeraDiscount.discount_name || redeemRes.cuponera_name || 'Cuponera', 
+      uses_remaining_today: usesRemaining,
+      free_product: redeemRes.free_product || null
+    }
+
+  } catch (e) {
+    console.error('Error validando cuponera:', e)
+    temp_code.value = { status: 'error', detail: lang.value === 'en' ? 'Connection error' : 'Error de conexión' }
+    store.removeCuponera()
+  } finally {
+    isApplyingCoupon.value = false
+  }
+}
 
 const toggleCouponUi = () => {
   const next = !have_discount.value
@@ -601,12 +945,53 @@ const toggleCouponUi = () => {
   }
 }
 
+// Re-aplicar cuponera cuando cambian los items del carrito (agregar/quitar)
+// Solo observar cambios estructurales, no cambios en propiedades como pedido_descuento
+watch(
+  () => store.cart.map(item => `${item.pedido_productoid || item.signature}-${item.pedido_cantidad}`).join('|'),
+  () => {
+    if (store.applied_cuponera) {
+      store.applyCuponera(store.applied_cuponera)
+      temp_code.value = {
+        ...temp_code.value,
+        _freeProductInCart: store.applied_cuponera._freeProductInCart,
+        _categoryProductInCart: store.applied_cuponera._categoryProductInCart,
+        _productScopeInCart: store.applied_cuponera._productScopeInCart,
+        _buyMPayNInCart: store.applied_cuponera._buyMPayNInCart,
+        _buyMPayNNeedsMore: store.applied_cuponera._buyMPayNNeedsMore,
+        _totalDiscountApplied: store.applied_cuponera._totalDiscountApplied
+      }
+    }
+  }
+)
+
+watch(() => store.applied_cuponera, (newCuponera) => {
+  if (newCuponera && newCuponera.code) {
+    cuponeraCodeInput.value = newCuponera.code
+    temp_code.value = { 
+      ...newCuponera, 
+      status: 'active', 
+      discount_name: newCuponera.discount_name || newCuponera.cuponera_name || 'Cuponera', 
+      uses_remaining_today: newCuponera.uses_remaining_today 
+    }
+  } else {
+    if (!store.applied_coupon) {
+      temp_code.value = {}
+      cuponeraCodeInput.value = ''
+    }
+  }
+}, { immediate: true, deep: true })
+
 watch(() => store.applied_coupon, (newCoupon) => {
   if (newCoupon && newCoupon.code) {
     store.setCouponUi({ enabled: true, draft_code: newCoupon.code })
-    temp_code.value = { ...newCoupon, status: 'active', discount_name: newCoupon.discount_name || newCoupon.name || 'Descuento' }
+    temp_code.value = { ...newCoupon, status: 'active', discount_name: newCoupon.discount_name || newCoupon.name || 'Descuento', uses_remaining_today: newCoupon.uses_remaining_today }
+    if (newCoupon._fromCuponera) cuponeraCodeInput.value = newCoupon.code
   } else {
-    temp_code.value = {}
+    if (!store.applied_cuponera) {
+      temp_code.value = {}
+      cuponeraCodeInput.value = ''
+    }
   }
 }, { immediate: true, deep: true })
 
@@ -622,6 +1007,74 @@ const validateDiscount = async (code, opts = { silent: false }) => {
 
   isApplyingCoupon.value = true
   try {
+    // 1) Intentar primero cuponera vigente (API descuentos)
+    let cuponeraUsed = false
+    try {
+      const redeemRes = await redeemCuponeraCode(finalCode, undefined, false, runtimeConfig.public?.cuponeraApi)
+      if (redeemRes?.success) {
+        const siteIds = redeemRes.cuponera_site_ids
+        if (Array.isArray(siteIds) && siteIds.length > 0) {
+          const siteIdNum = Number(site.site_id)
+          if (!siteIds.some((id) => Number(id) === siteIdNum)) {
+            temp_code.value = { status: 'invalid_site', detail: lang.value === 'en' ? 'Not valid for this site' : 'No válido en esta sede' }
+            store.removeCoupon()
+            isApplyingCoupon.value = false
+            return
+          }
+        }
+        const usesRemaining = redeemRes.uses_remaining_today ?? 0
+        if (usesRemaining < 0) {
+          temp_code.value = { status: 'invalid', detail: lang.value === 'en' ? 'No uses remaining today' : 'No quedan usos para hoy' }
+          store.removeCoupon()
+          isApplyingCoupon.value = false
+          return
+        }
+        if (redeemRes.user) {
+          const u = redeemRes.user
+          // El backend ya devuelve first_name y last_name separados
+          user.user.first_name = u.first_name || user.user.first_name || ''
+          user.user.last_name = u.last_name || user.user.last_name || ''
+          if (u.phone) user.user.phone_number = u.phone
+          // Actualizar phone_code si viene del backend
+          if (u.phone_code) {
+            const matchingCountry = countries.value.find(c => c.dialCode === u.phone_code)
+            if (matchingCountry) {
+              user.user.phone_code = matchingCountry
+            }
+          }
+          if (u.email) user.user.email = u.email
+          if (u.address != null) user.user.address = u.address
+        }
+        const coupon = mapCuponeraDiscountToCoupon(redeemRes, finalCode, site.site_id)
+        if (coupon) {
+          if (coupon.min_purchase != null && coupon.min_purchase > 0) {
+            const subtotal = store.cartSubtotal
+            if (subtotal < coupon.min_purchase) {
+              const fmt = (v) => v === 0 ? 'Gratis' : new Intl.NumberFormat(lang.value === 'en' ? 'en-CO' : 'es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(v)
+              temp_code.value = { status: 'min_purchase', detail: lang.value === 'en' ? `Minimum purchase required: ${fmt(coupon.min_purchase)}` : `El monto mínimo de compra es: ${fmt(coupon.min_purchase)}`, min_purchase: coupon.min_purchase }
+              store.removeCoupon()
+              isApplyingCoupon.value = false
+              return
+            }
+          }
+          store.applyCoupon(coupon)
+          temp_code.value = { ...coupon, status: 'active', discount_name: coupon.discount_name || coupon.name || 'Descuento', uses_remaining_today: redeemRes.uses_remaining_today }
+          store.setCouponUi({ enabled: true, draft_code: coupon.code || finalCode })
+          cuponeraUsed = true
+        } else {
+          temp_code.value = { status: 'active', discount_name: redeemRes.cuponera_name || 'Cuponera', detail: redeemRes.message || (lang.value === 'en' ? 'No discount for today' : 'No hay descuento para hoy') }
+          store.setCouponUi({ enabled: true, draft_code: finalCode })
+          cuponeraUsed = true
+        }
+      }
+    } catch (_) {}
+
+    if (cuponeraUsed) {
+      isApplyingCoupon.value = false
+      return
+    }
+
+    // 2) Cupón normal (API principal)
     const r = await fetch(`${URI}/discount/get-discount-by-code/${encodeURIComponent(finalCode)}`)
     const payload = await r.json().catch(() => null)
     const backendDetail = getErrorDetail(payload)
@@ -643,25 +1096,18 @@ const validateDiscount = async (code, opts = { silent: false }) => {
       store.removeCoupon()
       return
     }
-    
-    // Validar monto mínimo de compra
+
     if (coupon.min_purchase != null && coupon.min_purchase > 0) {
       const subtotal = store.cartSubtotal
       if (subtotal < coupon.min_purchase) {
         const formatCOP = (v) => v === 0 ? 'Gratis' : new Intl.NumberFormat(lang.value === 'en' ? 'en-CO' : 'es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(v)
         const minPurchaseFormatted = formatCOP(coupon.min_purchase)
-        temp_code.value = { 
-          status: 'min_purchase', 
-          detail: lang.value === 'en' 
-            ? `Minimum purchase required: ${minPurchaseFormatted}` 
-            : `El monto mínimo de compra es: ${minPurchaseFormatted}`,
-          min_purchase: coupon.min_purchase
-        }
+        temp_code.value = { status: 'min_purchase', detail: lang.value === 'en' ? `Minimum purchase required: ${minPurchaseFormatted}` : `El monto mínimo de compra es: ${minPurchaseFormatted}`, min_purchase: coupon.min_purchase }
         store.removeCoupon()
         return
       }
     }
-    
+
     store.applyCoupon(coupon)
     temp_code.value = { ...coupon, status: 'active', discount_name: coupon.discount_name || coupon.name || 'Descuento' }
     store.setCouponUi({ enabled: true, draft_code: coupon.code || finalCode })
@@ -780,6 +1226,15 @@ label { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.5
 .flag-mini { width: 18px; }
 
 /* Coupon Wrapper */
+/* Cuponera al inicio */
+.cuponera-top .section-title { display: flex; align-items: center; gap: 0.5rem; }
+.cuponera-subtitle { font-size: 0.9rem; color: var(--text-light); margin: -0.5rem 0 1rem 0; line-height: 1.4; }
+.cuponera-input-row { display: flex; gap: 0.5rem; }
+.cuponera-input { flex: 1; padding: 0.5rem 0.75rem; border: 1px solid var(--border); border-radius: 6px; outline: none; font-size: 0.95rem; }
+.cuponera-input:focus { border-color: var(--border-focus); }
+.cuponera-feedback { margin-top: 0.75rem; }
+.data-filled-msg { display: block; font-size: 0.9rem; color: #047857; margin-top: 4px; font-weight: 600; }
+
 .coupon-wrapper { border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; margin-bottom: 1.5rem; }
 .coupon-toggle { display: flex; justify-content: space-between; align-items: center; padding: 0.8rem 1rem; background: #f9fafb; cursor: pointer; }
 .coupon-left { display: flex; gap: 0.5rem; align-items: center; font-weight: 600; font-size: 0.9rem; }
@@ -799,6 +1254,11 @@ label { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.5
 .feedback-info { display: flex; flex-direction: column; }
 .discount-title { font-weight: 700; color: #065f46; font-size: 0.9rem; text-transform: uppercase; }
 .discount-amount { font-size: 0.85rem; color: #047857; margin-top: 2px; }
+.product-note { font-size: 0.8rem; display: block; margin-top: 2px; }
+.product-note.applied { color: #059669; font-weight: 600; }
+.product-note.warning { color: #d97706; font-weight: 500; }
+.scope-info { font-size: 0.75rem; color: #6b7280; font-weight: 400; }
+.uses-remaining { font-size: 0.85rem; color: #047857; margin-top: 4px; display: block; }
 
 .mt-3 { margin-top: 1rem; }
 </style>

@@ -17,6 +17,7 @@ export const usecartStore = defineStore('salchi_supegwseasr2_cart_web443', {
       'address_details',
       'is_rappi_cargo',
       'applied_coupon',
+      'applied_cuponera',
       'coupon_ui',
       'order_notes'
     ],
@@ -29,9 +30,21 @@ export const usecartStore = defineStore('salchi_supegwseasr2_cart_web443', {
 
       // ✅ Normaliza cupón persistido si venía envuelto en {data:[...]}
       ctx.store.applied_coupon = normalizeCoupon(ctx.store.applied_coupon)
+      
+      // ✅ Normaliza cuponera persistida
+      if (ctx.store.applied_cuponera && typeof ctx.store.applied_cuponera === 'object') {
+        ctx.store.applied_cuponera = {
+          ...ctx.store.applied_cuponera,
+          _isCuponera: true
+        }
+      }
 
-      // ✅ Recalcular descuentos si hay cupón y carrito
-      if (ctx.store.applied_coupon && Array.isArray(ctx.store.cart) && ctx.store.cart.length > 0) {
+      // ✅ Recalcular descuentos: priorizar cuponera sobre cupón
+      if (ctx.store.applied_cuponera && typeof ctx.store.applied_cuponera === 'object') {
+        if (Array.isArray(ctx.store.cart) && ctx.store.cart.length > 0) {
+          ctx.store.applyCuponera(ctx.store.applied_cuponera)
+        }
+      } else if (ctx.store.applied_coupon && Array.isArray(ctx.store.cart) && ctx.store.cart.length > 0) {
         ctx.store.applyCoupon(ctx.store.applied_coupon)
       }
 
@@ -55,6 +68,7 @@ export const usecartStore = defineStore('salchi_supegwseasr2_cart_web443', {
     discount_codes: [],
 
     applied_coupon: null,
+    applied_cuponera: null, // ✅ Cuponera aplicada (separada de cupones normales)
 
     // ✅ UI de cupón persistente (switch + draft)
     coupon_ui: {
@@ -156,10 +170,284 @@ export const usecartStore = defineStore('salchi_supegwseasr2_cart_web443', {
       this.coupon_ui = { ...this.coupon_ui, ...patch }
     },
 
-    // ===== LÓGICA DE CUPONES =====
+    // ===== LÓGICA DE CUPONERAS (SEPARADA) =====
+    applyCuponera(cuponeraData) {
+      // cuponeraData debe incluir: code, discount (con percent o amount), discount_name, uses_remaining_today, cuponera_site_ids, min_purchase
+      // Para FREE_ITEM: free_item: true, free_product: { product_id, name, price, max_qty }
+      if (!cuponeraData) return
+      
+      // Guardar cuponera aplicada
+      this.applied_cuponera = {
+        ...cuponeraData,
+        _isCuponera: true
+      }
+      
+      // Limpiar cupón normal si había uno
+      this.applied_coupon = null
+      
+      // Aplicar descuento en el carrito
+      if (!Array.isArray(this.cart) || this.cart.length === 0) return
+      
+      const clampNonNegativeInt = (n) => {
+        n = Number.isFinite(n) ? Math.floor(n) : 0
+        return n < 0 ? 0 : n
+      }
+      
+      // ===== BUY_M_PAY_N: Lleva M paga N =====
+      if (cuponeraData.buy_m_pay_n && cuponeraData.m != null && cuponeraData.n != null) {
+        const m = Number(cuponeraData.m) || 3
+        const n = Number(cuponeraData.n) || 2
+        const selectionRule = (cuponeraData.selection_rule || 'CHEAPEST_UNITS').toUpperCase()
+        const maxGroups = cuponeraData.max_groups != null ? Number(cuponeraData.max_groups) : null
+
+        const isEligible = (item) => {
+          if (cuponeraData.scope_type === 'CATEGORY') {
+            const ids = (cuponeraData.category_ids || []).map(id => String(id))
+            return ids.includes(String(item.categoria_id || item.pedido_categoriaid || ''))
+          }
+          if (cuponeraData.scope_type === 'PRODUCT') {
+            const ids = (cuponeraData.product_ids || []).map(id => String(id))
+            const pid = String(item.pedido_productoid || item.producto_id || item.productogeneral_id || '')
+            return ids.includes(pid)
+          }
+          return true
+        }
+
+        this.cart.forEach((item) => { item.pedido_descuento = 0 })
+        const units = []
+        for (const item of this.cart) {
+          if (!isEligible(item)) continue
+          const qty = Number(item.pedido_cantidad) || 1
+          const price = Number(item.pedido_base_price) || 0
+          for (let i = 0; i < qty; i++) {
+            units.push({ item, price })
+          }
+        }
+        const totalEligible = units.length
+        let groups = Math.floor(totalEligible / m)
+        if (maxGroups != null && maxGroups > 0) groups = Math.min(groups, maxGroups)
+        const discountUnits = groups * (m - n)
+        this.applied_cuponera._buyMPayNInCart = totalEligible >= m
+        this.applied_cuponera._buyMPayNNeedsMore = totalEligible < m
+        if (discountUnits <= 0) return
+        units.sort((a, b) => selectionRule === 'MOST_EXPENSIVE_UNITS' ? b.price - a.price : a.price - b.price)
+        const toDiscount = units.slice(0, discountUnits)
+        const discountByItem = new Map()
+        for (const { item } of toDiscount) {
+          const prev = discountByItem.get(item) || { item, count: 0 }
+          prev.count++
+          discountByItem.set(item, prev)
+        }
+        for (const { item, count } of discountByItem.values()) {
+          const qty = Number(item.pedido_cantidad) || 1
+          const basePrice = Number(item.pedido_base_price) || 0
+          const totalDiscount = basePrice * count
+          item.pedido_descuento = clampNonNegativeInt(totalDiscount / qty)
+        }
+        this.applied_cuponera._buyMPayNInCart = true
+        this.applied_cuponera._buyMPayNNeedsMore = false
+        return
+      }
+
+      // ===== FREE_ITEM: Producto gratis =====
+      if (cuponeraData.free_item && cuponeraData.free_product) {
+        const freeProductId = String(cuponeraData.free_product.product_id)
+        const maxFreeQty = cuponeraData.free_product.max_qty || 1
+        
+        // Primero resetear descuentos
+        this.cart.forEach((item) => {
+          item.pedido_descuento = 0
+        })
+        
+        // Buscar el producto gratis en el carrito
+        for (const item of this.cart) {
+          const itemProductId = String(
+            item.pedido_productoid || 
+            item.producto_id || 
+            item.productogeneral_id || 
+            this.getProductId(item) || 
+            ''
+          )
+          
+          if (itemProductId === freeProductId) {
+            const qty = Number(item.pedido_cantidad) || 1
+            const unitsToDiscount = Math.min(qty, maxFreeQty)
+            const basePrice = Number(item.pedido_base_price) || 0
+            
+            item.pedido_descuento = clampNonNegativeInt((basePrice * unitsToDiscount) / qty)
+            
+            this.applied_cuponera._freeProductInCart = true
+            this.applied_cuponera._freeProductApplied = {
+              product_id: freeProductId,
+              units_discounted: unitsToDiscount,
+              discount_amount: basePrice * unitsToDiscount
+            }
+            break
+          }
+        }
+        
+        if (!this.applied_cuponera._freeProductInCart) {
+          this.applied_cuponera._freeProductInCart = false
+        }
+        
+        return
+      }
+      
+      // ===== DESCUENTOS POR CATEGORÍA =====
+      if (cuponeraData.scope_type === 'CATEGORY' && Array.isArray(cuponeraData.category_ids) && cuponeraData.category_ids.length > 0) {
+        const categoryIds = cuponeraData.category_ids.map(id => String(id))
+        const maxDiscountAmount = cuponeraData.max_discount_amount || Infinity
+        let totalDiscountApplied = 0
+        let hasMatchingProduct = false
+        
+        // Primero resetear descuentos
+        this.cart.forEach((item) => {
+          item.pedido_descuento = 0
+        })
+        
+        // Aplicar descuento solo a productos de las categorías especificadas
+        for (const item of this.cart) {
+          const itemCategoryId = String(item.categoria_id || item.pedido_categoriaid || '')
+          
+          if (categoryIds.includes(itemCategoryId)) {
+            hasMatchingProduct = true
+            const qty = Number(item.pedido_cantidad) || 1
+            const basePrice = Number(item.pedido_base_price) || 0
+            let discountPerUnit = 0
+            
+            // Porcentaje
+            if (cuponeraData.percent != null) {
+              const decimal = Number(cuponeraData.percent) / 100
+              discountPerUnit = clampNonNegativeInt(basePrice * decimal)
+            }
+            // Monto fijo
+            else if (cuponeraData.amount != null) {
+              discountPerUnit = clampNonNegativeInt(Number(cuponeraData.amount))
+            }
+            
+            // Verificar límite máximo
+            const itemTotalDiscount = discountPerUnit * qty
+            if (totalDiscountApplied + itemTotalDiscount > maxDiscountAmount) {
+              // Ajustar para no exceder el límite
+              const remainingDiscount = maxDiscountAmount - totalDiscountApplied
+              discountPerUnit = clampNonNegativeInt(remainingDiscount / qty)
+            }
+            
+            item.pedido_descuento = discountPerUnit
+            totalDiscountApplied += discountPerUnit * qty
+            
+            if (totalDiscountApplied >= maxDiscountAmount) break
+          }
+        }
+        
+        // Guardar estado de si hay producto de la categoría
+        this.applied_cuponera._categoryProductInCart = hasMatchingProduct
+        this.applied_cuponera._totalDiscountApplied = totalDiscountApplied
+        
+        return
+      }
+      
+      // ===== DESCUENTOS POR PRODUCTO =====
+      if (cuponeraData.scope_type === 'PRODUCT' && Array.isArray(cuponeraData.product_ids) && cuponeraData.product_ids.length > 0) {
+        const productIds = cuponeraData.product_ids.map(id => String(id))
+        const maxDiscountAmount = cuponeraData.max_discount_amount || Infinity
+        let totalDiscountApplied = 0
+        let hasMatchingProduct = false
+        
+        // Primero resetear descuentos
+        this.cart.forEach((item) => {
+          item.pedido_descuento = 0
+        })
+        
+        // Aplicar descuento solo a productos específicos
+        for (const item of this.cart) {
+          const itemProductId = String(
+            item.pedido_productoid || 
+            item.producto_id || 
+            item.productogeneral_id || 
+            this.getProductId(item) || 
+            ''
+          )
+          
+          if (productIds.includes(itemProductId)) {
+            hasMatchingProduct = true
+            const qty = Number(item.pedido_cantidad) || 1
+            const basePrice = Number(item.pedido_base_price) || 0
+            let discountPerUnit = 0
+            
+            // Porcentaje
+            if (cuponeraData.percent != null) {
+              const decimal = Number(cuponeraData.percent) / 100
+              discountPerUnit = clampNonNegativeInt(basePrice * decimal)
+            }
+            // Monto fijo
+            else if (cuponeraData.amount != null) {
+              discountPerUnit = clampNonNegativeInt(Number(cuponeraData.amount))
+            }
+            
+            // Verificar límite máximo
+            const itemTotalDiscount = discountPerUnit * qty
+            if (totalDiscountApplied + itemTotalDiscount > maxDiscountAmount) {
+              const remainingDiscount = maxDiscountAmount - totalDiscountApplied
+              discountPerUnit = clampNonNegativeInt(remainingDiscount / qty)
+            }
+            
+            item.pedido_descuento = discountPerUnit
+            totalDiscountApplied += discountPerUnit * qty
+            
+            if (totalDiscountApplied >= maxDiscountAmount) break
+          }
+        }
+        
+        // Guardar estado
+        this.applied_cuponera._productScopeInCart = hasMatchingProduct
+        this.applied_cuponera._totalDiscountApplied = totalDiscountApplied
+        
+        return
+      }
+      
+      // ===== DESCUENTO GLOBAL (TODO EL CARRITO) =====
+      // Porcentaje
+      if (cuponeraData.percent != null) {
+        const decimal = Number(cuponeraData.percent) / 100
+        this.cart.forEach((item) => {
+          const basePrice = Number(item.pedido_base_price) || 0
+          item.pedido_descuento = clampNonNegativeInt(basePrice * decimal)
+        })
+      }
+      // Monto fijo
+      else if (cuponeraData.amount != null) {
+        const totalUnits = this.totalItems
+        if (!totalUnits) return
+        
+        const discountPerUnit = clampNonNegativeInt(Number(cuponeraData.amount) / totalUnits)
+        
+        this.cart.forEach((item) => {
+          item.pedido_descuento = discountPerUnit
+        })
+      }
+    },
+    
+    removeCuponera() {
+      this.applied_cuponera = null
+      
+      if (Array.isArray(this.cart) && this.cart.length > 0) {
+        this.cart.forEach((item) => {
+          item.pedido_descuento = 0
+        })
+      }
+    },
+
+    // ===== LÓGICA DE CUPONES (NO se aplica si hay cuponera activa) =====
     applyCoupon(coupon) {
       coupon = normalizeCoupon(coupon)
       if (!coupon) return
+      
+      // ✅ Si hay cuponera activa, NO se puede aplicar cupón normal
+      if (this.applied_cuponera) {
+        console.warn('No se puede aplicar cupón normal cuando hay una cuponera activa')
+        return
+      }
 
       this.applied_coupon = coupon
 
@@ -316,6 +604,7 @@ export const usecartStore = defineStore('salchi_supegwseasr2_cart_web443', {
         pedido_base_price: basePrice,
         pedido_productoid: this.getProductId(product),
         pedido_descuento: 0,
+        categoria_id: product.categoria_id || null, // ✅ Guardar categoría para descuentos por categoría
 
         lista_productocombo: product.lista_productobase
           ? product.lista_productobase.map((p) => ({
@@ -351,8 +640,10 @@ export const usecartStore = defineStore('salchi_supegwseasr2_cart_web443', {
         this.cart.push(newProduct)
       }
 
-      // ✅ Si hay cupón aplicado, recalcula descuentos
-      if (this.applied_coupon) {
+      // ✅ Recalcular descuentos: priorizar cuponera sobre cupón
+      if (this.applied_cuponera) {
+        this.applyCuponera(this.applied_cuponera)
+      } else if (this.applied_coupon) {
         this.applyCoupon(this.applied_coupon)
       }
     },
@@ -361,7 +652,12 @@ export const usecartStore = defineStore('salchi_supegwseasr2_cart_web443', {
       const existIndex = this.cart.findIndex((p) => p.signature === signature)
       if (existIndex !== -1) {
         this.cart.splice(existIndex, 1)
-        if (this.applied_coupon) this.applyCoupon(this.applied_coupon)
+        // ✅ Recalcular descuentos: priorizar cuponera sobre cupón
+        if (this.applied_cuponera) {
+          this.applyCuponera(this.applied_cuponera)
+        } else if (this.applied_coupon) {
+          this.applyCoupon(this.applied_coupon)
+        }
       }
     },
 
@@ -373,7 +669,12 @@ export const usecartStore = defineStore('salchi_supegwseasr2_cart_web443', {
         if (existingProduct.pedido_cantidad <= 0) {
           this.cart.splice(existIndex, 1)
         }
-        if (this.applied_coupon) this.applyCoupon(this.applied_coupon)
+        // ✅ Recalcular descuentos: priorizar cuponera sobre cupón
+        if (this.applied_cuponera) {
+          this.applyCuponera(this.applied_cuponera)
+        } else if (this.applied_coupon) {
+          this.applyCoupon(this.applied_coupon)
+        }
       }
     },
 
@@ -382,7 +683,12 @@ export const usecartStore = defineStore('salchi_supegwseasr2_cart_web443', {
       if (existIndex !== -1) {
         const existingProduct = this.cart[existIndex]
         existingProduct.pedido_cantidad += 1
-        if (this.applied_coupon) this.applyCoupon(this.applied_coupon)
+        // ✅ Recalcular descuentos: priorizar cuponera sobre cupón
+        if (this.applied_cuponera) {
+          this.applyCuponera(this.applied_cuponera)
+        } else if (this.applied_coupon) {
+          this.applyCoupon(this.applied_coupon)
+        }
       }
     },
 
