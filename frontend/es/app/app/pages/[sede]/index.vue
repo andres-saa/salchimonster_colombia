@@ -127,20 +127,21 @@ const loadSiteFromUrl = async () => {
         if (prevId !== newId) {
           sitesStore.initStatusWatcher()
         }
-      } else {
-        // La sede no existe, redirigir al dispatcher
+      } else if (!(userStore.user?.token && userStore.user?.inserted_by)) {
+        // La sede no existe, redirigir al dispatcher (salvo usuario logueado/admin)
         console.warn(`[Sede] Sede "${sedeFromRoute.value}" no encontrada, redirigiendo al dispatcher`)
         await navigateTo('/', { replace: true })
       }
-    } else {
-      // La respuesta no fue OK (404, etc.), redirigir al dispatcher
+    } else if (!(userStore.user?.token && userStore.user?.inserted_by)) {
+      // La respuesta no fue OK (404, etc.), redirigir al dispatcher (salvo admin)
       console.warn(`[Sede] Error al buscar sede "${sedeFromRoute.value}" (${response.status}), redirigiendo al dispatcher`)
       await navigateTo('/', { replace: true })
     }
   } catch (err) {
     console.error('Error loading site by slug:', err)
-    // En caso de error, redirigir al dispatcher
-    await navigateTo('/', { replace: true })
+    if (!(userStore.user?.token && userStore.user?.inserted_by)) {
+      await navigateTo('/', { replace: true })
+    }
   }
 }
 
@@ -148,8 +149,9 @@ const loadSiteFromUrl = async () => {
 if (import.meta.client && sedeFromRoute.value) {
   loadSiteFromUrl().catch((err) => {
     console.error('[Sede] Error en validación inicial:', err)
-    // Si falla la validación inicial, redirigir al dispatcher
-    navigateTo('/', { replace: true })
+    if (!(userStore.user?.token && userStore.user?.inserted_by)) {
+      navigateTo('/', { replace: true })
+    }
   })
 }
 

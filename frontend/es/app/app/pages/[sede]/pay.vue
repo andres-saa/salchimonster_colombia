@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { navigateTo } from '#app'
 import { useSedeFromRoute } from '~/composables/useSedeFromRoute'
-import { useSitesStore } from '~/stores/site'
+import { useSitesStore, useUserStore } from '#imports'
 import { URI } from '@/service/conection'
 
 const CONFIG_URL = 'https://api.locations.salchimonster.com/data/cities_google_map_status'
@@ -13,7 +13,10 @@ const cityConfig = ref<any[]>([])
 const errorMsg = ref<string>('')
 
 const sitesStore = useSitesStore()
+const userStore = useUserStore()
 const sedeFromRoute = useSedeFromRoute()
+
+const isLoggedIn = computed(() => !!userStore.user?.token && !!userStore.user?.inserted_by)
 
 // ✅ Obtener slug desde la ruta o desde el store
 function getCurrentSiteSlug(): string | null {
@@ -110,11 +113,15 @@ async function loadSiteData() {
           // Si no se encontró por slug, intentar usar el del store
           if (sitesStore?.location?.site?.site_id) {
             site.value = sitesStore.location.site
+          } else if (isLoggedIn.value) {
+            // Usuario logueado (admin): no redirigir al dispatcher; usar site del store si existe
+            site.value = sitesStore?.location?.site || null
+            if (!site.value) errorMsg.value = 'No se pudo cargar la sede.'
           } else {
-          // La sede no existe, redirigir al dispatcher
-          console.warn(`[Pay] Sede con slug "${slug}" no encontrada, redirigiendo al dispatcher`)
-          await navigateTo('/', { replace: true })
-          return
+            // La sede no existe, redirigir al dispatcher (solo si no es admin)
+            console.warn(`[Pay] Sede con slug "${slug}" no encontrada, redirigiendo al dispatcher`)
+            await navigateTo('/', { replace: true })
+            return
           }
         }
       }

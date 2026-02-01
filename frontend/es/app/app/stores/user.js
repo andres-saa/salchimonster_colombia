@@ -39,11 +39,18 @@ export const useUserStore = defineStore(
       }
     }
 
+    /** Cierra la sesión de admin: elimina token, inserted_by e iframe para que la persistencia se actualice. */
+    function clearSession() {
+      const { token, inserted_by, iframe, ...rest } = user.value
+      user.value = { ...rest }
+    }
+
     return {
       user,
       fucion,
       setUser,
       resetUser,
+      clearSession,
     }
   },
   {

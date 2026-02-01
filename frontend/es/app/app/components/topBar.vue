@@ -107,15 +107,14 @@ const goToNewOrder = () => {
 
 // Acción: Cerrar Sesión
 const handleLogout = () => {
-  // Limpiar token y inserted_by del store
-  user.user.token = null
-  user.user.inserted_by = null
-  
-  // Limpiar localStorage de sesión externa
+  // Eliminar sesión en el store (token, inserted_by, iframe) para que la persistencia se actualice
+  user.clearSession()
+
+  // Eliminar sesión externa guardada en localStorage (evita que al volver siga logueado)
   if (typeof window !== 'undefined' && window.localStorage) {
     localStorage.removeItem('session_external_data')
   }
-  
+
   // Redirigir al dispatcher (página principal)
   router.push('/')
 }

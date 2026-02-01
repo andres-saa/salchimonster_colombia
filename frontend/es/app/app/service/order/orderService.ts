@@ -95,7 +95,13 @@ function preparar_orden() {
   user.user.was_reserva = false;
   cart.sending_order = true;
 
-  const order_products = cart.cart; // se envía como pe_json
+  const order_products = cart.cart || []; // OBLIGATORIO: pe_json y order_products (legacy)
+
+  // NUNCA permitir orden sin productos
+  if (!order_products.length) {
+    cart.sending_order = false;
+    return null;
+  }
   const site_id = site.location?.site?.site_id;
   // pe_site_id es requerido - asegurarse de que siempre tenga un valor
   // Si no está disponible, usar site_id como fallback (aunque idealmente debería venir del backend)
@@ -332,7 +338,7 @@ function preparar_orden() {
   }
 
   const order = {
-    order_products: [], // backend recibe pe_json del carrito completo
+    order_products: [], // legacy: backend lo espera vacío, los productos van en pe_json
     site_id,
     pe_site_id: final_pe_site_id, // Asegurar que siempre tenga un valor
     order_type_id,
@@ -343,7 +349,7 @@ function preparar_orden() {
     order_notes: order_notes || "SIN NOTAS",
     user_data,
     order_aditionals: [],
-    pe_json: order_products,
+    pe_json: order_products, // OBLIGATORIO: siempre enviar productos del carrito
     address_details: address_details,
     discount_code: discount_code,
     total: 0,
@@ -361,6 +367,14 @@ function preparar_orden() {
  */
 function validateOrder(order: any): boolean {
   const { cart, user } = getStores();
+
+  // 0) Productos obligatorios: una orden NUNCA puede estar sin productos
+  const products = order.pe_json || order.order_products || [];
+  if (!products.length) {
+    alertMissing("Error: El carrito está vacío. Agrega productos antes de enviar el pedido.");
+    cart.sending_order = false;
+    return false;
+  }
 
   // 1) Método de entrega obligatorio
   if (!order.order_type_id) {
@@ -484,7 +498,7 @@ export const orderService = {
     if (!order) {
       cart.sending_order = false;
       alertMissing(
-        "Error: No se pudo preparar el pedido. Recargue e intente de nuevo."
+        "Error: El carrito está vacío. Agrega productos antes de enviar el pedido."
       );
       return null;
     }

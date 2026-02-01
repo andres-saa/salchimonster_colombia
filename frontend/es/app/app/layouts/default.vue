@@ -42,13 +42,16 @@ const siteStore = useSitesStore()
 const user = useUserStore()
 const config = useRuntimeConfig()
 
+const isMounted = ref(false)
+
 // Modo rendimiento: oculta sidebar y otros elementos pesados
 const isPerformanceMode = computed(() => config.public.rendimiento === true)
 
 // ===== LÓGICA IFRAME =====
+// Solo evaluar isIframeMode tras montar para evitar mismatch (user viene de localStorage en cliente)
 const isIframeMode = computed(() => {
-  // Verificamos que user.user exista para evitar errores, y luego las propiedades
-  return user.user?.iframe && user.user?.token
+  if (!isMounted.value) return false
+  return !!(user.user?.iframe && user.user?.token)
 })
 
 const isOpen = computed(() => {
@@ -109,6 +112,7 @@ const isCartaRoute = computed(() => {
 
 onMounted(() => {
   if (typeof window === 'undefined') return
+  isMounted.value = true
   lastScrollY.value = window.scrollY || 0
   window.addEventListener('scroll', handleScroll, { passive: true })
 

@@ -163,31 +163,6 @@ const imageSrc = computed(() => {
   return `${props.imageBaseUrl}/placeholder.png`
 })
 
-// Determinar si la imagen es externa (no optimizable con NuxtImg)
-// img.restpe.com está en la lista de dominios permitidos, así que SÍ se puede optimizar
-const isExternalImage = computed(() => {
-  const p = props.product || {}
-  
-  // Si tiene productogeneral_urlimagen, viene de img.restpe.com (optimizable)
-  if (p.productogeneral_urlimagen) {
-    return false // img.restpe.com está en dominios permitidos
-  }
-  
-  // Si image_url es de img.restpe.com, también es optimizable
-  const imageUrl = p.image_url || ''
-  if (imageUrl.includes('img.restpe.com')) {
-    return false
-  }
-  
-  // Solo marcar como externa si es otra URL HTTP que NO es de img.restpe.com
-  if (imageUrl.startsWith('http')) {
-    return true
-  }
-  
-  // El resto (rutas relativas, etc.) son optimizables
-  return false
-})
-
 const onImgLoad = () => { imgLoaded.value = true }
 
 const onImgError = (event) => {
@@ -255,25 +230,7 @@ onBeforeUnmount(() => {
     </div>
 
     <div class="menu-product-card__image-wrapper" :class="{ 'is-loaded': imgLoaded }">
-      <!-- Usar NuxtImg para imágenes optimizables, img normal para externas -->
-      <NuxtImg
-        v-if="!isExternalImage"
-        ref="imgRef"
-        class="menu-product-card__image"
-        :src="imageSrc"
-        :alt="displayName"
-        loading="lazy"
-        format="webp"
-        width="96"
-        height="96"
-        sizes="(max-width: 768px) 100vw, 96px"
-        quality="70"
-        fit="cover"
-        @load="onImgLoad"
-        @error="onImgError"
-      />
       <img
-        v-else
         ref="imgRef"
         class="menu-product-card__image"
         :src="imageSrc"

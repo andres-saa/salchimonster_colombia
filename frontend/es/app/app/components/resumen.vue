@@ -119,12 +119,16 @@
 
       <div class="actions-container">
         
-        <div v-if="siteStore.status?.status == 'closed' && route.path != '/reservas'" class="closed-alert">
+        <div v-if="siteStore.status?.status == 'closed' && route.path != '/reservas' && !isLoggedIn" class="closed-alert">
           <i class="pi pi-clock"></i> Cerrado, abre a las {{ siteStore.status.next_opening_time }}
         </div>
 
         <div v-if="!minPurchaseValidation.valid && route.path.includes('/pay')" class="closed-alert" style="background-color: #fef2f2; border-color: #fecaca; color: #b91c1c;">
           <i class="pi pi-exclamation-triangle"></i> {{ minPurchaseValidation.message }}
+        </div>
+
+        <div v-if="!hasProducts && route.path.includes('/pay')" class="closed-alert" style="background-color: #fef2f2; border-color: #fecaca; color: #b91c1c;">
+          <i class="pi pi-shopping-cart"></i> Agrega productos al carrito para continuar
         </div>
 
         <div class="buttons-stack">
@@ -143,7 +147,7 @@
 
             <NuxtLink 
                 to="/pay" 
-                v-if="route.path.includes('cart') && (siteStore.status?.status !== 'closed' && route.path == '/reservas')"
+                v-if="route.path.includes('cart') && canPurchase && route.path == '/reservas'"
                 class="link-wrapper"
             >
                 <button type="button" class="btn btn-primary">
@@ -151,14 +155,14 @@
                 </button>
             </NuxtLink>
 
-            <NuxtLink to="/pay" v-else-if="route.path.includes('/cart') && !route.path.includes('/pay')" class="link-wrapper">
+            <NuxtLink to="/pay" v-else-if="route.path.includes('/cart') && !route.path.includes('/pay') && hasProducts" class="link-wrapper">
                 <button type="button" class="btn btn-primary">
 Finalizar pedido
                 </button>
             </NuxtLink>
 
             <button
-                v-else-if="route.path.includes('/pay') && !reportes.loading.visible && siteStore.status?.status !== 'closed' && (isLoggedIn || user.user.payment_method_option?.id != 9)"
+                v-else-if="route.path.includes('/pay') && !reportes.loading.visible && canPurchase && (isLoggedIn || user.user.payment_method_option?.id != 9)"
                 type="button"
                 class="btn btn-primary"
                 :disabled="reportes.loading.visible || !canProceedToPayment"
@@ -171,7 +175,7 @@ Finalizar pedido
             </button>
 
             <button
-                v-else-if="route.path.includes('/pay') && !reportes.loading.visible && siteStore.status?.status !== 'closed' && !isLoggedIn && user.user.payment_method_option?.id == 9"
+                v-else-if="route.path.includes('/pay') && !reportes.loading.visible && canPurchase && !isLoggedIn && user.user.payment_method_option?.id == 9"
                 type="button"
                 class="btn btn-primary"
                 :disabled="reportes.loading.visible || !canProceedToPayment"
@@ -265,6 +269,11 @@ const isLoggedIn = computed(() => {
   return !!user.user?.token && !!user.user?.inserted_by
 })
 
+// Si hay usuario logueado (admin), puede comprar aunque la sede esté cerrada
+const canPurchase = computed(() => {
+  return siteStore.status?.status !== 'closed' || isLoggedIn.value
+})
+
 const toggleEditDelivery = () => {
   isEditingDelivery.value = !isEditingDelivery.value
 }
@@ -295,8 +304,9 @@ const validateMinPurchase = () => {
 }
 
 const minPurchaseValidation = computed(() => validateMinPurchase())
+const hasProducts = computed(() => (store.cart?.length || 0) > 0)
 const canProceedToPayment = computed(() => {
-  return minPurchaseValidation.value.valid
+  return minPurchaseValidation.value.valid && hasProducts.value
 })
 
 onMounted(() => {

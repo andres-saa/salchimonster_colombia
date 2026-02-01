@@ -8,18 +8,12 @@
         :class="{ 'has-link': !!banner.link }"
         @click="onBannerClick(banner)"
       >
-        <NuxtImg
+        <img
           class="slide-image"
           :src="`${URI}/read-photo-product/${banner.img_identifier}`"
           :alt="`Banner Colombia ${idx + 1}`"
           :loading="idx === 0 ? 'eager' : 'lazy'"
           :fetchpriority="idx === 0 ? 'high' : 'auto'"
-          format="webp"
-          width="1200"
-          height="675"
-          sizes="(max-width: 768px) 180px, 1200px"
-          quality="65"
-          fit="cover"
         />
       </div>
     </div>

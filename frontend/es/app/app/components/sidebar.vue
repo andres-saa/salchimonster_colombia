@@ -278,18 +278,14 @@ onBeforeUnmount(() => {
           rel="noopener noreferrer"
         >
           <div class="post-card">
-            <NuxtImg
+            <img
               v-if="post.img_identifier"
               :src="getImageUrl(post.img_identifier)"
               :alt="networkLabel(post.type)"
               :key="`post-img-${post.id || index}-${post.img_identifier}`"
               class="post-image"
               loading="lazy"
-              format="webp"
-              width="300"
-              height="375"
-              sizes="(max-width: 768px) 250px, 300px"
-              quality="70"
+              decoding="async"
             />
 
             <div class="post-overlay" :class="`post-overlay--${post.type}`">
