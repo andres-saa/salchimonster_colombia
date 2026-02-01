@@ -12,7 +12,7 @@
  * @returns {Promise<{ success: boolean, message: string, cuponera_name?: string, discounts?: Array<{ discount_id: string, discount: object }>, uses_remaining_today?: number, user?: { name: string, first_name?: string, last_name?: string, phone: string, phone_code?: string, email: string, address?: string }, cuponera_site_ids?: number[] | null, free_product?: { product_id: string, name: string, price: number, image: string, max_qty: number } }>}
  */
 export async function redeemCuponeraCode(code, date, recordUse = false, baseUrl) {
-  const base = (baseUrl || '').toString().replace(/\/$/, '') || 'http://localhost:8000'
+  const base = (baseUrl || '').toString().replace(/\/$/, '') || 'https://discounts.salchimonster.com'
   const params = new URLSearchParams({ code: String(code).trim() })
   if (date) params.set('date', date)
   if (recordUse) params.set('record_use', 'true')
