@@ -449,6 +449,31 @@ const shouldShowMoreButton = computed(() => {
   // En desktop mostrar si hay más de 4 menús
   return overflowMenus.value.length > 0
 })
+
+// --- Diálogo Cambiar sede / Quedarme ---
+const showSiteChangeDialog = ref(false)
+const currentSiteDisplayName = computed(() => {
+  const name = siteStore?.location?.site?.site_name
+  return name ? name.toLowerCase() : 'Salchimonster'
+})
+
+const openSiteChangeDialog = (e) => {
+  e.preventDefault()
+  showSiteChangeDialog.value = true
+}
+
+const closeSiteChangeDialog = () => {
+  showSiteChangeDialog.value = false
+}
+
+const goToChangeSite = () => {
+  showSiteChangeDialog.value = false
+  router.push('/')
+}
+
+const stayOnCurrentSite = () => {
+  showSiteChangeDialog.value = false
+}
 </script>
 
 <template>
@@ -489,11 +514,11 @@ const shouldShowMoreButton = computed(() => {
           <div class="title-block">
             <div class="site-info">
               <Icon name="mdi:map-marker" class="marker-icon" />
-              <NuxtLink to="/" class="site-name-link">
+              <button type="button" class="site-name-link" @click="openSiteChangeDialog">
                 <span class="site-name">
-                  {{ siteStore?.location?.site?.site_name?.toLowerCase() || 'Salchimonster' }}
+                  {{ currentSiteDisplayName }}
                 </span>
-              </NuxtLink>
+              </button>
               <div v-if="isOpen" class="live-dot-container" title="Estamos Abiertos">
                 <div class="live-dot"></div>
               </div>
@@ -662,6 +687,35 @@ const shouldShowMoreButton = computed(() => {
 
       </div>
     </header>
+
+    <!-- Diálogo: Cambiar sede o quedarme -->
+    <Teleport to="body">
+      <div
+        v-if="showSiteChangeDialog"
+        class="site-change-dialog-overlay"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="site-change-dialog-title"
+        @click.self="closeSiteChangeDialog"
+      >
+        <div class="site-change-dialog">
+          <button type="button" class="site-change-dialog-close" @click="closeSiteChangeDialog" aria-label="Cerrar">
+            <Icon name="mdi:close" />
+          </button>
+          <h2 id="site-change-dialog-title" class="site-change-dialog-title">
+            ¿Cambiar de sede o quedarte en {{ currentSiteDisplayName }}?
+          </h2>
+          <div class="site-change-dialog-actions">
+            <button type="button" class="site-change-btn site-change-btn--primary" @click="goToChangeSite">
+              Cambiar sede
+            </button>
+            <button type="button" class="site-change-btn site-change-btn--secondary" @click="stayOnCurrentSite">
+              Quedarme en {{ currentSiteDisplayName }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -753,12 +807,16 @@ const shouldShowMoreButton = computed(() => {
 .logo-link:hover { opacity: 0.9; }
 
 .site-name-link {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
   text-decoration: none;
   color: inherit;
   display: inline-flex;
   align-items: center;
   transition: opacity 0.2s;
-  cursor: pointer;
 }
 .site-name-link:hover { opacity: 0.8; }
 .site-name-link:hover .site-name {
@@ -1244,5 +1302,101 @@ const shouldShowMoreButton = computed(() => {
   cursor: pointer;
   background-color: var(--primary-color, #b91c1c);
   color: #ffffff;
+}
+
+/* --- Diálogo Cambiar sede --- */
+.site-change-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10001;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.site-change-dialog {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+  padding: 1.5rem;
+  max-width: 90%;
+  width: 22rem;
+  position: relative;
+}
+
+.site-change-dialog-close {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  background: none;
+  border: none;
+  padding: 0.25rem;
+  cursor: pointer;
+  color: #666;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  transition: background 0.2s, color 0.2s;
+}
+
+.site-change-dialog-close:hover {
+  background: #f0f0f0;
+  color: #333;
+}
+
+.site-change-dialog-close .icon,
+.site-change-dialog-close svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.site-change-dialog-title {
+  margin: 0 0 1.25rem 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #333;
+  line-height: 1.4;
+  padding-right: 1.75rem;
+}
+
+.site-change-dialog-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.site-change-btn {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+  border: 1px solid transparent;
+}
+
+.site-change-btn--primary {
+  background-color: var(--primary-color, #b91c1c);
+  color: white;
+  border-color: var(--primary-color, #b91c1c);
+}
+
+.site-change-btn--primary:hover {
+  filter: brightness(1.05);
+}
+
+.site-change-btn--secondary {
+  background: #f5f5f5;
+  color: #333;
+  border-color: #e0e0e0;
+}
+
+.site-change-btn--secondary:hover {
+  background: #eee;
+  border-color: #ccc;
 }
 </style>

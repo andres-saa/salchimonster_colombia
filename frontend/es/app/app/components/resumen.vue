@@ -5,6 +5,12 @@
         <h5 class="title">Resumen</h5>
       </div>
 
+      <!-- Aviso: carrito no persiste al recargar -->
+      <div v-if="store.cart?.length > 0" class="cart-reload-notice">
+        <i class="pi pi-info-circle"></i>
+        <span>Al recargar la página el carrito puede vaciarse.</span>
+      </div>
+
       <!-- Indicador de cuponera/cupón activo -->
       <div v-if="store.applied_cuponera || store.applied_coupon" class="active-discount-banner">
         <div class="discount-icon">
@@ -39,8 +45,11 @@
             <span class="discount-scope" v-if="store.applied_cuponera?.discount_categories?.length">
               En: {{ store.applied_cuponera.discount_categories.map(c => c.name).join(', ') }}
             </span>
-            <span class="discount-scope" v-else-if="store.applied_cuponera?.free_product">
+            <span class="discount-scope" v-if="store.applied_cuponera?.free_product">
               Producto gratis: {{ store.applied_cuponera.free_product.name }}
+            </span>
+            <span class="discount-requirement" v-if="store.applied_cuponera?.free_product && (store.applied_cuponera._requiresPurchaseMinSubtotal || store.applied_cuponera.requires_purchase?.min_subtotal)">
+              Requisito: subtotal mínimo {{ formatoPesosColombianos(store.applied_cuponera._requiresPurchaseMinSubtotal || store.applied_cuponera.requires_purchase?.min_subtotal) }} en {{ (store.applied_cuponera.discount_categories || []).map(c => c.name).join(', ') || 'scope' }}
             </span>
           </template>
         </div>
@@ -87,6 +96,10 @@
             <template v-if="store.applied_cuponera?.buy_m_pay_n">
               <i class="pi pi-shopping-cart"></i>
               <span>{{ getLlevaPagaFreeUnits(product) }} gratis</span>
+            </template>
+            <template v-else-if="store.applied_cuponera?.free_product && isFreeProductItem(product)">
+              <i class="pi pi-gift"></i>
+              <span>Gratis · Incluido por cuponera</span>
             </template>
             <template v-else-if="store.applied_cuponera?.free_product">
               <i class="pi pi-gift"></i>
@@ -385,6 +398,14 @@ const getProductSubtotal = (product) => {
   return (basePrice + adiciones) * qty
 }
 
+// Saber si este ítem es el producto gratis de la cuponera
+const isFreeProductItem = (product) => {
+  const fp = store.applied_cuponera?.free_product
+  if (!fp?.product_id) return false
+  const pid = String(product.pedido_productoid || product.producto_id || product.productogeneral_id || '')
+  return pid === String(fp.product_id)
+}
+
 // Unidades gratis en este ítem por promo Lleva M paga N (100% descuento en algunas unidades)
 const getLlevaPagaFreeUnits = (product) => {
   const basePrice = Number(product.pedido_base_price) || 0
@@ -659,6 +680,25 @@ const payWithEpayco = (id) => {
   color: #059669;
   font-style: italic;
 }
+.discount-requirement {
+  display: block;
+  font-size: 0.7rem;
+  color: #0d9488;
+  margin-top: 0.2rem;
+}
+.cart-reload-notice {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  color: #b45309;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.75rem;
+}
+.cart-reload-notice .pi { font-size: 1rem; }
 
 /* Lleva M paga N: bloque dedicado */
 .discount-lleva-paga {

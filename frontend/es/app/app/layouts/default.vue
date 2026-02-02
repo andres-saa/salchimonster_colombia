@@ -34,12 +34,13 @@
 
 <script setup>
 import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
-import { useRoute, useSitesStore, useUserStore } from '#imports'
+import { useRoute, useSitesStore, useUserStore, usecartStore } from '#imports'
 import sidebar from '~/components/sidebar.vue'
 
 const route = useRoute()
 const siteStore = useSitesStore()
 const user = useUserStore()
+const cartStore = usecartStore()
 const config = useRuntimeConfig()
 
 const isMounted = ref(false)
@@ -110,11 +111,19 @@ const isCartaRoute = computed(() => {
   return keywords.some(keyword => path.includes(keyword))
 })
 
+const handleBeforeUnload = (e) => {
+  if (cartStore.cart?.length > 0) {
+    e.preventDefault()
+    e.returnValue = ''
+  }
+}
+
 onMounted(() => {
   if (typeof window === 'undefined') return
   isMounted.value = true
   lastScrollY.value = window.scrollY || 0
   window.addEventListener('scroll', handleScroll, { passive: true })
+  window.addEventListener('beforeunload', handleBeforeUnload)
 
   measureTopbar()
 
@@ -132,6 +141,7 @@ onBeforeUnmount(() => {
   if (typeof window === 'undefined') return
   window.removeEventListener('scroll', handleScroll)
   window.removeEventListener('resize', measureTopbar)
+  window.removeEventListener('beforeunload', handleBeforeUnload)
   if (ro) ro.disconnect()
 })
 </script>
