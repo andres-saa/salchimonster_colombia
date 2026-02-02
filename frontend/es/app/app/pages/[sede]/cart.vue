@@ -152,9 +152,12 @@
 
 <script setup>
 import { ref, onMounted, watch, onBeforeMount, computed } from 'vue'
+import { useRoute } from 'vue-router'
+import { navigateTo } from '#app'
 import { usecartStore, useSitesStore, useUserStore, useHead } from '#imports'
 import { formatoPesosColombianos } from '@/service/utils/formatoPesos'
 
+const route = useRoute()
 const store = usecartStore()
 const siteStore = useSitesStore()
 const user = useUserStore()
@@ -193,7 +196,14 @@ const formatName = (str) => {
   return lower.charAt(0).toUpperCase() + lower.slice(1)
 }
 
-onBeforeMount(() => {
+onBeforeMount(async () => {
+  // Carrito vacío: no podemos estar en cart; volver a domicilios (menú)
+  const cartLength = store?.cart?.length ?? 0
+  if (cartLength === 0) {
+    const slug = route.params?.sede
+    await navigateTo(slug ? `/${slug}/` : '/', { replace: true })
+    return
+  }
   if (!siteStore.location.site?.site_id) {
     siteStore.visibles.currentSite = true
   }

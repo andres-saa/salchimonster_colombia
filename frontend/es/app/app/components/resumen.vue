@@ -5,12 +5,6 @@
         <h5 class="title">Resumen</h5>
       </div>
 
-      <!-- Aviso: carrito no persiste al recargar -->
-      <div v-if="store.cart?.length > 0" class="cart-reload-notice">
-        <i class="pi pi-info-circle"></i>
-        <span>Al recargar la página el carrito puede vaciarse.</span>
-      </div>
-
       <!-- Indicador de cuponera/cupón activo -->
       <div v-if="store.applied_cuponera || store.applied_coupon" class="active-discount-banner">
         <div class="discount-icon">
@@ -42,14 +36,8 @@
             <span class="discount-detail" v-else-if="store.applied_cuponera?.amount || store.applied_coupon?.amount">
               {{ formatoPesosColombianos(store.applied_cuponera?.amount || store.applied_coupon?.amount) }} de descuento
             </span>
-            <span class="discount-scope" v-if="store.applied_cuponera?.discount_categories?.length">
+            <span class="discount-scope" v-if="store.applied_cuponera?.discount_categories?.length && !store.applied_cuponera?.free_product">
               En: {{ store.applied_cuponera.discount_categories.map(c => c.name).join(', ') }}
-            </span>
-            <span class="discount-scope" v-if="store.applied_cuponera?.free_product">
-              Producto gratis: {{ store.applied_cuponera.free_product.name }}
-            </span>
-            <span class="discount-requirement" v-if="store.applied_cuponera?.free_product && (store.applied_cuponera._requiresPurchaseMinSubtotal || store.applied_cuponera.requires_purchase?.min_subtotal)">
-              Requisito: subtotal mínimo {{ formatoPesosColombianos(store.applied_cuponera._requiresPurchaseMinSubtotal || store.applied_cuponera.requires_purchase?.min_subtotal) }} en {{ (store.applied_cuponera.discount_categories || []).map(c => c.name).join(', ') || 'scope' }}
             </span>
           </template>
         </div>
@@ -91,24 +79,30 @@
             </div>
           </div>
 
-          <!-- Badge de descuento por producto -->
-          <div v-if="product.pedido_descuento > 0" class="product-discount-badge" :class="{ 'badge-lleva-paga': store.applied_cuponera?.buy_m_pay_n, 'badge-free-item': store.applied_cuponera?.free_product && !store.applied_cuponera?.buy_m_pay_n }">
-            <template v-if="store.applied_cuponera?.buy_m_pay_n">
-              <i class="pi pi-shopping-cart"></i>
-              <span>{{ getLlevaPagaFreeUnits(product) }} gratis</span>
-            </template>
-            <template v-else-if="store.applied_cuponera?.free_product && isFreeProductItem(product)">
-              <i class="pi pi-gift"></i>
-              <span>Gratis · Incluido por cuponera</span>
-            </template>
-            <template v-else-if="store.applied_cuponera?.free_product">
-              <i class="pi pi-gift"></i>
-              <span>Gratis</span>
-            </template>
-            <template v-else>
-              <i class="pi pi-percentage"></i>
-              <span>-{{ formatoPesosColombianos(product.pedido_descuento * product.pedido_cantidad) }}</span>
-            </template>
+          <!-- Badge de descuento por producto (aviso de producto gratis va aquí en la línea del producto) -->
+          <div v-if="product.pedido_descuento > 0" class="product-discount-block" :class="{ 'badge-lleva-paga': store.applied_cuponera?.buy_m_pay_n, 'badge-free-item': store.applied_cuponera?.free_product && !store.applied_cuponera?.buy_m_pay_n }">
+            <div class="product-discount-badge">
+              <template v-if="store.applied_cuponera?.buy_m_pay_n">
+                <i class="pi pi-shopping-cart"></i>
+                <span>{{ getLlevaPagaFreeUnits(product) }} gratis</span>
+              </template>
+              <template v-else-if="store.applied_cuponera?.free_product && isFreeProductItem(product)">
+                <i class="pi pi-gift"></i>
+                <span>Gratis · Incluido por cuponera</span>
+              </template>
+              <template v-else-if="store.applied_cuponera?.free_product">
+                <i class="pi pi-gift"></i>
+                <span>Gratis</span>
+              </template>
+              <template v-else>
+                <i class="pi pi-percentage"></i>
+                <span>-{{ formatoPesosColombianos(product.pedido_descuento * product.pedido_cantidad) }}</span>
+              </template>
+            </div>
+            <!-- Aviso de requisito solo en la línea del producto gratis -->
+            <div v-if="store.applied_cuponera?.free_product && isFreeProductItem(product) && (store.applied_cuponera._requiresPurchaseMinSubtotal || store.applied_cuponera.requires_purchase?.min_subtotal)" class="product-free-requirement">
+              Requisito: subtotal mínimo {{ formatoPesosColombianos(store.applied_cuponera._requiresPurchaseMinSubtotal || store.applied_cuponera.requires_purchase?.min_subtotal) }} en {{ (store.applied_cuponera.discount_categories || []).map(c => c.name).join(', ') || 'productos aplicables' }}
+            </div>
           </div>
 
           <div 
@@ -680,26 +674,6 @@ const payWithEpayco = (id) => {
   color: #059669;
   font-style: italic;
 }
-.discount-requirement {
-  display: block;
-  font-size: 0.7rem;
-  color: #0d9488;
-  margin-top: 0.2rem;
-}
-.cart-reload-notice {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-size: 0.8rem;
-  color: #b45309;
-  background: #fffbeb;
-  border: 1px solid #fcd34d;
-  border-radius: 6px;
-  padding: 0.5rem 0.75rem;
-  margin-bottom: 0.75rem;
-}
-.cart-reload-notice .pi { font-size: 1rem; }
-
 /* Lleva M paga N: bloque dedicado */
 .discount-lleva-paga {
   display: flex;
@@ -734,6 +708,14 @@ const payWithEpayco = (id) => {
   border-left: 3px solid #eab308;
 }
 
+.product-discount-block {
+  margin-top: 0.25rem;
+  margin-left: 1.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
 .product-discount-badge {
   display: inline-flex;
   align-items: center;
@@ -744,18 +726,23 @@ const payWithEpayco = (id) => {
   font-weight: 700;
   padding: 0.2rem 0.5rem;
   border-radius: 4px;
-  margin-top: 0.25rem;
-  margin-left: 1.8rem;
+  width: fit-content;
 }
 
 .product-discount-badge i { font-size: 0.6rem; }
 
-.product-discount-badge.badge-lleva-paga {
+.product-free-requirement {
+  font-size: 0.7rem;
+  color: #0d9488;
+  line-height: 1.3;
+}
+
+.product-discount-block.badge-lleva-paga .product-discount-badge {
   background: #059669;
   color: white;
 }
 
-.product-discount-badge.badge-free-item {
+.product-discount-block.badge-free-item .product-discount-badge {
   background: #7c3aed;
   color: white;
 }

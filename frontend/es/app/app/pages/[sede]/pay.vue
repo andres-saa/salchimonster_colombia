@@ -2,8 +2,10 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { navigateTo } from '#app'
 import { useSedeFromRoute } from '~/composables/useSedeFromRoute'
-import { useSitesStore, useUserStore } from '#imports'
+import { useSitesStore, useUserStore, usecartStore } from '#imports'
 import { URI } from '@/service/conection'
+
+const cartStore = usecartStore()
 
 const CONFIG_URL = 'https://api.locations.salchimonster.com/data/cities_google_map_status'
 
@@ -142,7 +144,15 @@ async function loadSiteData() {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
+  // No podemos estar en pay sin productos: redirigir a domicilios (menú)
+  const cartLength = cartStore?.cart?.length ?? 0
+  if (cartLength === 0) {
+    const slug = getCurrentSiteSlug()
+    await navigateTo(slug ? `/${slug}/` : '/', { replace: true })
+    return
+  }
+
   // Si ya hay una sede en el store, usarla inmediatamente
   if (sitesStore?.location?.site?.site_id) {
     site.value = sitesStore.location.site
