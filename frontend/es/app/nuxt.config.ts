@@ -86,7 +86,7 @@ export default defineNuxtConfig({
     apiSecret: process.env.API_SECRET || 'dev-secret',
     public: {
       apiBase: process.env.API_BASE_URL || 'http://localhost:8000',
-      cuponeraApi: 'https://discounts.salchimonster.com', // API descuentos/cuponera
+      cuponeraApi: process.env.NODE_ENV === 'development' ? 'http://localhost:8000' : 'https://discounts.salchimonster.com', // API descuentos/cuponera
       googleMapsKey: process.env.NUXT_PUBLIC_GOOGLE_MAPS_KEY || '',
       rendimiento: process.env.NUXT_PUBLIC_RENDIMIENTO === 'true' || false, // Variable para pruebas de rendimiento
     },

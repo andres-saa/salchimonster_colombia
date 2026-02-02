@@ -97,10 +97,39 @@
                   <span class="discount-amount" v-if="temp_code.free_item || temp_code.free_product">
                     <Icon name="mdi:gift-outline" size="16" />
                     {{ temp_code.free_product?.name || (lang === 'en' ? 'Free product' : 'Producto gratis') }}
-                    <template v-if="store.applied_cuponera?._freeProductInCart">
+                    <template v-if="store.applied_cuponera?._requiresPurchaseNotMet">
+                      <span class="product-note warning">
+                        <Icon name="mdi:alert" size="14" />
+                        <template v-if="store.applied_cuponera._requiresPurchaseType === 'MIN_SUBTOTAL_IN_SCOPE'">
+                          {{ lang === 'en' ? 'Minimum subtotal in scope:' : 'Subtotal mínimo en scope:' }} {{ formatCOP(store.applied_cuponera._requiresPurchaseMinSubtotal ?? 0) }}
+                          ({{ lang === 'en' ? 'current' : 'actual' }}: {{ formatCOP(store.applied_cuponera._subtotalInScope ?? 0) }})
+                          {{ lang === 'en' ? ' to get the free product' : ' para obtener el producto gratis' }}
+                        </template>
+                        <template v-else-if="store.applied_cuponera._requiresPurchaseType === 'MIN_QTY_IN_SCOPE'">
+                          {{ lang === 'en' ? 'Add at least' : 'Agrega al menos' }} {{ store.applied_cuponera._requiresPurchaseMinQty ?? temp_code.requires_purchase?.min_qty ?? 1 }} {{ lang === 'en' ? 'units from' : 'unidades de' }}
+                          <template v-if="temp_code.discount_products?.length">{{ temp_code.discount_products.map(p => p.name).join(', ') }}</template>
+                          <template v-else-if="temp_code.discount_categories?.length">{{ temp_code.discount_categories.map(c => c.name).join(', ') }}</template>
+                          <template v-else>{{ lang === 'en' ? 'the scope' : 'el scope' }}</template>
+                          {{ lang === 'en' ? ' to get the free product' : ' para obtener el producto gratis' }}
+                        </template>
+                        <template v-else>
+                          {{ lang === 'en' ? 'Add at least' : 'Agrega al menos' }} {{ temp_code.requires_purchase?.buy_x ?? store.applied_cuponera._requiresPurchaseBuyX ?? 2 }} {{ lang === 'en' ? 'products from' : 'productos de' }}
+                          <template v-if="temp_code.discount_products?.length">{{ temp_code.discount_products.map(p => p.name).join(', ') }}</template>
+                          <template v-else-if="temp_code.discount_categories?.length">{{ temp_code.discount_categories.map(c => c.name).join(', ') }}</template>
+                          <template v-else>{{ lang === 'en' ? 'the category' : 'la categoría' }}</template>
+                          {{ lang === 'en' ? ' to get the free product' : ' para obtener el producto gratis' }}
+                        </template>
+                      </span>
+                    </template>
+                    <template v-else-if="store.applied_cuponera?._freeProductInCart">
                       <span class="product-note applied">
                         <Icon name="mdi:check" size="14" />
-                        ({{ lang === 'en' ? 'Applied!' : '¡Aplicado!' }})
+                        <template v-if="store.applied_cuponera._freeProductApplied?.units_in_cart > store.applied_cuponera._actualMaxFree">
+                          ({{ store.applied_cuponera._actualMaxFree }} {{ lang === 'en' ? 'of' : 'de' }} {{ store.applied_cuponera._freeProductApplied.units_in_cart }} {{ lang === 'en' ? 'free' : 'gratis' }})
+                        </template>
+                        <template v-else>
+                          ({{ lang === 'en' ? 'Applied!' : '¡Aplicado!' }})
+                        </template>
                       </span>
                     </template>
                     <template v-else>
@@ -184,7 +213,7 @@
                       <template v-if="store.applied_cuponera?._buyMPayNNeedsMore">
                         <span class="product-note warning">
                           <br><Icon name="mdi:alert" size="14" />
-                          {{ lang === 'en' ? 'Add at least' : 'Agrega al menos' }} {{ temp_code.m }} {{ lang === 'en' ? 'eligible units to apply' : 'unidades elegibles para aplicar' }}
+                          {{ lang === 'en' ? 'Add at least' : 'Agrega al menos' }} {{ temp_code.m }} {{ lang === 'en' ? 'of the same product to apply (e.g. 3 of the same)' : 'del mismo producto para aplicar (ej. 3 del mismo)' }}
                         </span>
                       </template>
                       <template v-else-if="store.applied_cuponera?._buyMPayNInCart">
@@ -199,7 +228,7 @@
                       <template v-if="store.applied_cuponera?._buyMPayNNeedsMore">
                         <span class="product-note warning">
                           <br><Icon name="mdi:alert" size="14" />
-                          {{ lang === 'en' ? 'Add at least' : 'Agrega al menos' }} {{ temp_code.m }} {{ lang === 'en' ? 'eligible units to apply' : 'unidades elegibles para aplicar' }}
+                          {{ lang === 'en' ? 'Add at least' : 'Agrega al menos' }} {{ temp_code.m }} {{ lang === 'en' ? 'of the same product to apply (e.g. 3 of the same)' : 'del mismo producto para aplicar (ej. 3 del mismo)' }}
                         </span>
                       </template>
                       <template v-else-if="store.applied_cuponera?._buyMPayNInCart">
@@ -213,7 +242,7 @@
                       <template v-if="store.applied_cuponera?._buyMPayNNeedsMore">
                         <span class="product-note warning">
                           <Icon name="mdi:alert" size="14" />
-                          {{ lang === 'en' ? 'Add at least' : 'Agrega al menos' }} {{ temp_code.m }} {{ lang === 'en' ? 'eligible units to apply' : 'unidades elegibles para aplicar' }}
+                          {{ lang === 'en' ? 'Add at least' : 'Agrega al menos' }} {{ temp_code.m }} {{ lang === 'en' ? 'of the same product to apply (e.g. 3 of the same)' : 'del mismo producto para aplicar (ej. 3 del mismo)' }}
                         </span>
                       </template>
                       <template v-else-if="store.applied_cuponera?._buyMPayNInCart">
@@ -224,6 +253,28 @@
                       </template>
                     </span>
                   </span>
+                  <span class="discount-amount" v-else-if="temp_code.buy_x_get_y_pct_off">
+                    <Icon name="mdi:percent-outline" size="16" />
+                    {{ lang === 'en' ? 'Buy' : 'Compra' }} {{ temp_code.buy_qty }} {{ lang === 'en' ? 'get' : 'lleva' }} {{ temp_code.get_qty }} {{ lang === 'en' ? 'more at' : 'más al' }} {{ temp_code.y_discount_pct }}% {{ lang === 'en' ? 'off' : 'de descuento' }}
+                    <template v-if="store.applied_cuponera?._buyXGetYPctOffNeedsMore">
+                      <span class="product-note warning">
+                        <br><Icon name="mdi:alert" size="14" />
+                        {{ lang === 'en' ? 'Add at least' : 'Agrega al menos' }} {{ temp_code.buy_qty + temp_code.get_qty }} {{ lang === 'en' ? 'of the same product to apply' : 'del mismo producto para aplicar' }}
+                      </span>
+                    </template>
+                    <template v-else-if="store.applied_cuponera?._buyXGetYPctOffInCart">
+                      <span class="product-note applied">
+                        <br><Icon name="mdi:check" size="14" />
+                        {{ lang === 'en' ? 'Applied!' : '¡Aplicado!' }}
+                      </span>
+                    </template>
+                  </span>
+                  <span v-if="temp_code.min_purchase != null && temp_code.min_purchase > 0" class="discount-condition">
+                    {{ lang === 'en' ? 'Min. purchase' : 'Compra mín.' }}: <strong>{{ formatCOP(temp_code.min_purchase) }}</strong>
+                  </span>
+                  <span v-if="temp_code.max_discount_amount != null && temp_code.max_discount_amount > 0" class="discount-condition">
+                    {{ lang === 'en' ? 'Max. discount' : 'Máx. descuento' }}: <strong>{{ formatCOP(temp_code.max_discount_amount) }}</strong>
+                  </span>
                   <span v-if="temp_code.uses_remaining_today != null" class="uses-remaining">
                     {{ lang === 'en' ? 'Uses left today' : 'Usos restantes hoy' }}: <strong>{{ temp_code.uses_remaining_today }}</strong>
                   </span>
@@ -231,7 +282,7 @@
                 <template v-else>
                   <span>{{
                     temp_code.status === 'invalid_site'
-                      ? (lang === 'en' ? 'Not valid for this site' : 'No válido en esta sede')
+                      ? (lang === 'en' ? 'Not available for current site' : 'No está disponible para la sede actual')
                       : temp_code.status === 'min_purchase'
                       ? temp_code.detail
                       : (temp_code.detail || (lang === 'en' ? 'Invalid code' : 'Código no válido'))
@@ -440,6 +491,12 @@
                       <span class="discount-amount" v-else-if="temp_code.percent">
                         Ahorras: <strong>{{ temp_code.percent }}%</strong>
                       </span>
+                      <span v-if="temp_code.min_purchase != null && temp_code.min_purchase > 0" class="discount-condition">
+                        {{ lang === 'en' ? 'Min. purchase' : 'Compra mín.' }}: <strong>{{ formatCOP(temp_code.min_purchase) }}</strong>
+                      </span>
+                      <span v-if="temp_code.max_discount_amount != null && temp_code.max_discount_amount > 0" class="discount-condition">
+                        {{ lang === 'en' ? 'Max. discount' : 'Máx. descuento' }}: <strong>{{ formatCOP(temp_code.max_discount_amount) }}</strong>
+                      </span>
                       <span v-if="temp_code.uses_remaining_today != null" class="uses-remaining">
                         {{ lang === 'en' ? 'Uses left today' : 'Usos restantes hoy' }}: <strong>{{ temp_code.uses_remaining_today }}</strong>
                       </span>
@@ -448,7 +505,7 @@
                       <span>
                         {{
                           temp_code.status === 'invalid_site'
-                            ? (lang === 'en' ? 'Not valid for this site' : 'No válido en esta sede')
+                            ? (lang === 'en' ? 'Not available for current site' : 'No está disponible para la sede actual')
                             : temp_code.status === 'min_purchase'
                             ? temp_code.detail
                             : (temp_code.detail || (lang === 'en' ? 'Invalid code' : 'Código no válido'))
@@ -838,7 +895,7 @@ const validateCuponera = async (code) => {
     if (Array.isArray(siteIds) && siteIds.length > 0) {
       const siteIdNum = Number(site.site_id)
       if (!siteIds.some((id) => Number(id) === siteIdNum)) {
-        temp_code.value = { status: 'invalid_site', detail: lang.value === 'en' ? 'Not valid for this site' : 'No válido en esta sede' }
+        temp_code.value = { status: 'invalid_site', detail: lang.value === 'en' ? 'Not available for current site' : 'No está disponible para la sede actual' }
         cuponeraValidationErrors.value.push({ type: 'sede', message: temp_code.value.detail })
         store.removeCuponera()
         isApplyingCoupon.value = false
@@ -876,10 +933,14 @@ const validateCuponera = async (code) => {
     const cuponeraDiscount = mapCuponeraDiscountToCoupon(redeemRes, finalCode, site.site_id)
     
     if (!cuponeraDiscount) {
-      // No hay descuento configurado para hoy o no es válido para esta sede
+      // No hay descuento para hoy O el descuento no es válido para esta sede (site_ids del descuento)
+      const hasDiscountsButNotForSite = redeemRes.discounts?.length > 0
+      const detailMsg = hasDiscountsButNotForSite
+        ? (lang.value === 'en' ? 'Not available for current site' : 'No está disponible para la sede actual')
+        : (redeemRes.message || (lang.value === 'en' ? 'No discount for today' : 'No hay descuento para hoy'))
       temp_code.value = { 
-        status: 'no_discount', 
-        detail: redeemRes.message || (lang.value === 'en' ? 'Discount not available for this site' : 'Descuento no disponible en esta sede'),
+        status: hasDiscountsButNotForSite ? 'invalid_site' : 'no_discount', 
+        detail: detailMsg,
         cuponera_name: redeemRes.cuponera_name,
         uses_remaining_today: usesRemaining
       }
@@ -955,10 +1016,14 @@ watch(
       temp_code.value = {
         ...temp_code.value,
         _freeProductInCart: store.applied_cuponera._freeProductInCart,
+        _requiresPurchaseNotMet: store.applied_cuponera._requiresPurchaseNotMet,
+        _requiresPurchaseBuyX: store.applied_cuponera._requiresPurchaseBuyX,
         _categoryProductInCart: store.applied_cuponera._categoryProductInCart,
         _productScopeInCart: store.applied_cuponera._productScopeInCart,
         _buyMPayNInCart: store.applied_cuponera._buyMPayNInCart,
         _buyMPayNNeedsMore: store.applied_cuponera._buyMPayNNeedsMore,
+        _buyXGetYPctOffInCart: store.applied_cuponera._buyXGetYPctOffInCart,
+        _buyXGetYPctOffNeedsMore: store.applied_cuponera._buyXGetYPctOffNeedsMore,
         _totalDiscountApplied: store.applied_cuponera._totalDiscountApplied
       }
     }
@@ -981,6 +1046,25 @@ watch(() => store.applied_cuponera, (newCuponera) => {
     }
   }
 }, { immediate: true, deep: true })
+
+// Revalidar cuponera contra la API cuando hay sede + código (obtiene uses_remaining_today actualizado; evita usar solo el valor persistido)
+const lastRevalidatedCode = ref('')
+const lastRevalidatedSiteId = ref(null)
+watch(
+  () => [siteStore.location?.site?.site_id, store.applied_cuponera?.code],
+  ([siteId, code]) => {
+    if (!siteId || !code) {
+      lastRevalidatedCode.value = ''
+      lastRevalidatedSiteId.value = null
+      return
+    }
+    if (lastRevalidatedCode.value === code && lastRevalidatedSiteId.value === siteId) return
+    lastRevalidatedCode.value = code
+    lastRevalidatedSiteId.value = siteId
+    validateCuponera(code)
+  },
+  { immediate: true }
+)
 
 watch(() => store.applied_coupon, (newCoupon) => {
   if (newCoupon && newCoupon.code) {
@@ -1016,7 +1100,7 @@ const validateDiscount = async (code, opts = { silent: false }) => {
         if (Array.isArray(siteIds) && siteIds.length > 0) {
           const siteIdNum = Number(site.site_id)
           if (!siteIds.some((id) => Number(id) === siteIdNum)) {
-            temp_code.value = { status: 'invalid_site', detail: lang.value === 'en' ? 'Not valid for this site' : 'No válido en esta sede' }
+            temp_code.value = { status: 'invalid_site', detail: lang.value === 'en' ? 'Not available for current site' : 'No está disponible para la sede actual' }
             store.removeCoupon()
             isApplyingCoupon.value = false
             return
@@ -1062,8 +1146,13 @@ const validateDiscount = async (code, opts = { silent: false }) => {
           store.setCouponUi({ enabled: true, draft_code: coupon.code || finalCode })
           cuponeraUsed = true
         } else {
-          temp_code.value = { status: 'active', discount_name: redeemRes.cuponera_name || 'Cuponera', detail: redeemRes.message || (lang.value === 'en' ? 'No discount for today' : 'No hay descuento para hoy') }
-          store.setCouponUi({ enabled: true, draft_code: finalCode })
+          // Descuento existe pero no es válido para esta sede (site_ids del descuento)
+          const hasDiscountsButNotForSite = redeemRes.discounts?.length > 0
+          const detailMsg = hasDiscountsButNotForSite
+            ? (lang.value === 'en' ? 'Not available for current site' : 'No está disponible para la sede actual')
+            : (redeemRes.message || (lang.value === 'en' ? 'No discount for today' : 'No hay descuento para hoy'))
+          temp_code.value = { status: hasDiscountsButNotForSite ? 'invalid_site' : 'no_discount', detail: detailMsg, cuponera_name: redeemRes.cuponera_name, uses_remaining_today: redeemRes.uses_remaining_today }
+          store.removeCuponera()
           cuponeraUsed = true
         }
       }
@@ -1092,7 +1181,7 @@ const validateDiscount = async (code, opts = { silent: false }) => {
       return
     }
     if (Array.isArray(coupon.sites) && !coupon.sites.some((s) => String(s.site_id) === String(site.site_id))) {
-      temp_code.value = { status: 'invalid_site', detail: lang.value === 'en' ? 'Not valid for this site' : 'No válido en esta sede' }
+      temp_code.value = { status: 'invalid_site', detail: lang.value === 'en' ? 'Not available for current site' : 'No está disponible para la sede actual' }
       store.removeCoupon()
       return
     }
@@ -1140,6 +1229,7 @@ onMounted(async () => {
   } catch (e) {
     console.error('Error loading payment config', e)
   }
+
 })
 
 watch(lang, initCountries)
@@ -1258,6 +1348,7 @@ label { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.5
 .product-note.applied { color: #059669; font-weight: 600; }
 .product-note.warning { color: #d97706; font-weight: 500; }
 .scope-info { font-size: 0.75rem; color: #6b7280; font-weight: 400; }
+.discount-condition { font-size: 0.85rem; color: #047857; margin-top: 2px; display: block; }
 .uses-remaining { font-size: 0.85rem; color: #047857; margin-top: 4px; display: block; }
 
 .mt-3 { margin-top: 1rem; }

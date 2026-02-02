@@ -521,7 +521,8 @@ export const orderService = {
         if (cart.applied_cuponera?.code) {
           try {
             const runtimeConfig = typeof useRuntimeConfig === 'function' ? useRuntimeConfig() : null;
-            const cuponeraApi = runtimeConfig?.public?.cuponeraApi || 'https://discounts.salchimonster.com';
+            const defaultCuponeraApi = (typeof import.meta !== 'undefined' && import.meta.dev) ? 'http://localhost:8000' : 'https://discounts.salchimonster.com';
+            const cuponeraApi = runtimeConfig?.public?.cuponeraApi || defaultCuponeraApi;
             const cuponeraCode = cart.applied_cuponera.code;
             
             // Llamar a /redeem con record_use=true
