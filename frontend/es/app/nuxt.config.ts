@@ -40,6 +40,12 @@ export default defineNuxtConfig({
     '@primevue/nuxt-module'
 
   ],
+
+  // Carrito y cuponera en localStorage para que no se pierdan al recargar (cookies ~4KB)
+  piniaPersistedstate: {
+    storage: 'localStorage',
+  },
+
   primevue: {
         options: {
             theme: {

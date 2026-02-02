@@ -636,12 +636,25 @@ const sitesStore = useSitesStore()
 const userStore = useUserStore()
 const cartStore = usecartStore()
 
-// Al montar el dispatcher: solo limpiar order_type y formulario. NO resetear la sede
-// para que al pulsar "atrás" el usuario vuelva a su sede anterior con la sede correcta en el store.
+// Al montar el dispatcher: si llegó por "Cambiar sede" (?cambiar_sede=1), no borrar datos
+// para que al dar "atrás" el usuario vuelva con su carrito, cuponera y sede intactos.
 onMounted(() => {
+  const fromChangeSite = route.query?.cambiar_sede === '1'
+  if (fromChangeSite) {
+    // Solo resetear el formulario local del dispatcher; no tocar store (cart, sede, cuponera, address)
+    selectedCityId.value = 0
+    addressQuery.value = ''
+    selectedNeighborhood.value = null
+    paramExactAddress.value = ''
+    coverageResult.value = null
+    modalCoverageResult.value = null
+    nbSuggestions.value = []
+    selectedStoreId.value = null
+    dropoffMarker.value = null
+    return
+  }
   if (sitesStore.location?.site?.site_id && sitesStore.location?.order_type) {
     sitesStore.clearOrderType()
-    // Limpiar solo dirección/barrio, no la sede (así "atrás" restaura la sede correcta)
     sitesStore.updateLocation({
       city: sitesStore.location?.city ?? null,
       site: sitesStore.location?.site ?? undefined,

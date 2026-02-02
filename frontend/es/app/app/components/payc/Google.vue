@@ -343,6 +343,12 @@
                   <span class="discount-amount" v-else-if="temp_code.buy_x_get_y_pct_off">
                     <Icon name="mdi:percent-outline" size="16" />
                     {{ lang === 'en' ? 'Buy' : 'Compra' }} {{ temp_code.buy_qty }} {{ lang === 'en' ? 'get' : 'lleva' }} {{ temp_code.get_qty }} {{ lang === 'en' ? 'more at' : 'más al' }} {{ temp_code.y_discount_pct }}% {{ lang === 'en' ? 'off' : 'de descuento' }}
+                    <span v-if="temp_code.discount_categories?.length" class="scope-info">
+                      <br>{{ lang === 'en' ? 'On:' : 'En:' }} {{ temp_code.discount_categories.map(c => c.name).join(', ') }}
+                    </span>
+                    <span v-if="temp_code.discount_products?.length" class="scope-info">
+                      <br>{{ lang === 'en' ? 'On:' : 'En:' }} {{ temp_code.discount_products.map(p => p.name).join(', ') }}
+                    </span>
                     <template v-if="store.applied_cuponera?._buyXGetYPctOffNeedsMore">
                       <span class="product-note warning">
                         <br><Icon name="mdi:alert" size="14" />

@@ -468,7 +468,8 @@ const closeSiteChangeDialog = () => {
 
 const goToChangeSite = () => {
   showSiteChangeDialog.value = false
-  router.push('/')
+  // Ir al dispatcher sin borrar datos: si el usuario da "atrás" vuelve con su carrito y sede
+  router.push({ path: '/', query: { cambiar_sede: '1' } })
 }
 
 const stayOnCurrentSite = () => {
