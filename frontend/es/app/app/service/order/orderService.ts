@@ -120,8 +120,9 @@ function preparar_orden() {
 
   const phone = buildPhone();
   
-  // Obtener código de descuento: priorizar cuponera sobre cupón normal
+  // Obtener código de descuento (discount_code) y cuponera (string de cuponera si aplicada; distinto de discount_code)
   const discount_code = cart.applied_cuponera?.code || cart.applied_coupon?.code || null;
+  const cuponera = cart.applied_cuponera?.code ?? null; // string de cuponera si aplicada, null sino
 
   /* -------------------------------------------------------------------------- */
   /* LÓGICA DE DIRECCIÓN MODIFICADA                       */
@@ -352,6 +353,7 @@ function preparar_orden() {
     pe_json: order_products, // OBLIGATORIO: siempre enviar productos del carrito
     address_details: address_details,
     discount_code: discount_code,
+    cuponera: cuponera,
     total: 0,
     cargo: isRappiCargo, // Campo boolean indicando si es rappi cargo
     ...(json_cargo ? { json_cargo } : {}), // Incluir json_cargo solo si es rappi cargo
