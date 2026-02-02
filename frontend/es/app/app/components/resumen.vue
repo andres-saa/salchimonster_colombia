@@ -101,7 +101,7 @@
             </div>
             <!-- Aviso de requisito solo en la línea del producto gratis -->
             <div v-if="store.applied_cuponera?.free_product && isFreeProductItem(product) && (store.applied_cuponera._requiresPurchaseMinSubtotal || store.applied_cuponera.requires_purchase?.min_subtotal)" class="product-free-requirement">
-              Requisito: subtotal mínimo {{ formatoPesosColombianos(store.applied_cuponera._requiresPurchaseMinSubtotal || store.applied_cuponera.requires_purchase?.min_subtotal) }} en {{ (store.applied_cuponera.discount_categories || []).map(c => c.name).join(', ') || 'productos aplicables' }}
+              Compra mínimo {{ formatoPesosColombianos(store.applied_cuponera._requiresPurchaseMinSubtotal || store.applied_cuponera.requires_purchase?.min_subtotal) }} en {{ (store.applied_cuponera.discount_categories || []).map(c => c.name).join(', ') || 'productos seleccionados' }} y te lo regalamos.
             </div>
           </div>
 

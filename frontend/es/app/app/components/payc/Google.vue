@@ -189,23 +189,22 @@
                       <span class="product-note warning">
                         <Icon name="mdi:alert" size="14" />
                         <template v-if="store.applied_cuponera._requiresPurchaseType === 'MIN_SUBTOTAL_IN_SCOPE'">
-                          {{ lang === 'en' ? 'Minimum subtotal in scope:' : 'Subtotal mínimo en scope:' }} {{ formatCOP(store.applied_cuponera._requiresPurchaseMinSubtotal ?? 0) }}
-                          ({{ lang === 'en' ? 'current' : 'actual' }}: {{ formatCOP(store.applied_cuponera._subtotalInScope ?? 0) }})
-                          {{ lang === 'en' ? ' to get the free product' : ' para obtener el producto gratis' }}
+                          <template v-if="lang === 'en'">To get it free: spend at least {{ formatCOP(store.applied_cuponera._requiresPurchaseMinSubtotal ?? 0) }} on {{ (temp_code.discount_categories?.length ? temp_code.discount_categories.map(c => c.name).join(', ') : temp_code.discount_products?.length ? temp_code.discount_products.map(p => p.name).join(', ') : 'selected items') }}. (So far: {{ formatCOP(store.applied_cuponera._subtotalInScope ?? 0) }})</template>
+                          <template v-else>Para llevártelo gratis: compra mínimo {{ formatCOP(store.applied_cuponera._requiresPurchaseMinSubtotal ?? 0) }} en {{ (temp_code.discount_categories?.length ? temp_code.discount_categories.map(c => c.name).join(', ') : temp_code.discount_products?.length ? temp_code.discount_products.map(p => p.name).join(', ') : 'productos aplicables') }}. (Llevas: {{ formatCOP(store.applied_cuponera._subtotalInScope ?? 0) }})</template>
                         </template>
                         <template v-else-if="store.applied_cuponera._requiresPurchaseType === 'MIN_QTY_IN_SCOPE'">
-                          {{ lang === 'en' ? 'Add at least' : 'Agrega al menos' }} {{ store.applied_cuponera._requiresPurchaseMinQty ?? temp_code.requires_purchase?.min_qty ?? 1 }} {{ lang === 'en' ? 'units from' : 'unidades de' }}
+                          {{ lang === 'en' ? 'Add at least' : 'Agrega al menos' }} {{ store.applied_cuponera._requiresPurchaseMinQty ?? temp_code.requires_purchase?.min_qty ?? 1 }} {{ lang === 'en' ? 'units of' : 'unidades de' }}
                           <template v-if="temp_code.discount_products?.length">{{ temp_code.discount_products.map(p => p.name).join(', ') }}</template>
                           <template v-else-if="temp_code.discount_categories?.length">{{ temp_code.discount_categories.map(c => c.name).join(', ') }}</template>
-                          <template v-else>{{ lang === 'en' ? 'the scope' : 'el scope' }}</template>
-                          {{ lang === 'en' ? ' to get the free product' : ' para obtener el producto gratis' }}
+                          <template v-else>{{ lang === 'en' ? 'these products' : 'estos productos' }}</template>
+                          {{ lang === 'en' ? ' to get the free product' : ' y te lo regalamos' }}
                         </template>
                         <template v-else>
                           {{ lang === 'en' ? 'Add at least' : 'Agrega al menos' }} {{ temp_code.requires_purchase?.buy_x ?? store.applied_cuponera._requiresPurchaseBuyX ?? 2 }} {{ lang === 'en' ? 'products from' : 'productos de' }}
                           <template v-if="temp_code.discount_products?.length">{{ temp_code.discount_products.map(p => p.name).join(', ') }}</template>
                           <template v-else-if="temp_code.discount_categories?.length">{{ temp_code.discount_categories.map(c => c.name).join(', ') }}</template>
-                          <template v-else>{{ lang === 'en' ? 'the category' : 'la categoría' }}</template>
-                          {{ lang === 'en' ? ' to get the free product' : ' para obtener el producto gratis' }}
+                          <template v-else>{{ lang === 'en' ? 'this category' : 'esta categoría' }}</template>
+                          {{ lang === 'en' ? ' to get the free product' : ' y te lo regalamos' }}
                         </template>
                       </span>
                     </template>
@@ -364,7 +363,7 @@
                     {{ lang === 'en' ? 'Max. discount' : 'Máx. descuento' }}: <strong>{{ formatCOP(temp_code.max_discount_amount) }}</strong>
                   </span>
                   <span v-if="temp_code.uses_remaining_today != null" class="uses-remaining">
-                    {{ lang === 'en' ? 'Uses left today' : 'Usos restantes hoy' }}: <strong>{{ temp_code.uses_remaining_today }}</strong>
+                    {{ lang === 'en' ? 'You have' : 'Te quedan' }} <strong>{{ temp_code.uses_remaining_today }}</strong> {{ lang === 'en' ? 'uses left today' : 'usos hoy' }}
                   </span>
                 </template>
                 <template v-else>
