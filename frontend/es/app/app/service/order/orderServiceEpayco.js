@@ -553,6 +553,15 @@ export const orderServiceEpayco = {
         cart.last_order = response.data;
         report.setLoading(false, "enviando tu pedido");
 
+        // Meta Pixel: evento Purchase (ingresar pedido)
+        const totalValue =
+          (cart.cartSubtotal || 0) +
+          (order.delivery_price || 0) -
+          (cart.cartTotalDiscount || 0);
+        if (typeof window !== "undefined" && window.trackMetaPurchase) {
+          window.trackMetaPurchase(response.data, totalValue, "USD");
+        }
+
         if (order.payment_method_id == 9) {
           router.push(`/pagar/${response.data}`);
         }
@@ -607,6 +616,15 @@ export const orderServiceEpayco = {
         cart.sending_order = false;
         cart.last_order = response.data;
         report.setLoading(false, "enviando tu pedido");
+
+        // Meta Pixel: evento Purchase (reserva)
+        const totalValue =
+          (cart.cartSubtotal || 0) +
+          (order.delivery_price || 0) -
+          (cart.cartTotalDiscount || 0);
+        if (typeof window !== "undefined" && window.trackMetaPurchase) {
+          window.trackMetaPurchase(response.data, totalValue, "USD");
+        }
 
         router.push("/gracias");
         return cart.last_order;

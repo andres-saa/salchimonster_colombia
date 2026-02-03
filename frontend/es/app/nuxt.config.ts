@@ -95,6 +95,8 @@ export default defineNuxtConfig({
       cuponeraApi: process.env.NODE_ENV === 'development' ? 'http://localhost:8000' : 'https://discounts.salchimonster.com', // API descuentos/cuponera
       googleMapsKey: process.env.NUXT_PUBLIC_GOOGLE_MAPS_KEY || '',
       rendimiento: process.env.NUXT_PUBLIC_RENDIMIENTO === 'true' || false, // Variable para pruebas de rendimiento
+      /** ID del Pixel de Meta (Facebook). Configurar en .env como NUXT_PUBLIC_META_PIXEL_ID o aquí. */
+      metaPixelId: process.env.NUXT_PUBLIC_META_PIXEL_ID || '',
     },
   },
 

@@ -519,6 +519,19 @@ export const orderService = {
         cart.last_order = response.data;
         report.setLoading(false, "enviando tu pedido");
 
+        // Meta Pixel: evento Purchase (ingresar pedido)
+        const totalValue =
+          (cart.cartSubtotal || 0) +
+          (order.delivery_price || 0) -
+          (cart.cartTotalDiscount || 0);
+        if (typeof window !== "undefined" && (window as any).trackMetaPurchase) {
+          (window as any).trackMetaPurchase(
+            response.data,
+            totalValue,
+            "USD"
+          );
+        }
+
         // ✅ Si se usó una cuponera, registrar el uso
         if (cart.applied_cuponera?.code) {
           try {
