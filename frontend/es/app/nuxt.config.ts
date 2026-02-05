@@ -33,12 +33,12 @@ export default defineNuxtConfig({
   
   modules: [
     '@nuxt/eslint',
-    '@nuxt/image', // Asegúrate de usar <NuxtImg> en lugar de <img> en tus componentes
+    '@nuxt/image',
     '@nuxt/ui',
     '@pinia/nuxt',
     'pinia-plugin-persistedstate/nuxt',
-    '@primevue/nuxt-module'
-
+    '@primevue/nuxt-module',
+    'nuxt-meta-pixel',
   ],
 
   // Carrito y cuponera en localStorage para que no se pierdan al recargar (cookies ~4KB)
@@ -92,11 +92,17 @@ export default defineNuxtConfig({
     apiSecret: process.env.API_SECRET || 'dev-secret',
     public: {
       apiBase: process.env.API_BASE_URL || 'http://localhost:8000',
-      cuponeraApi: process.env.NODE_ENV === 'development' ? 'http://localhost:8000' : 'https://discounts.salchimonster.com', // API descuentos/cuponera
+      cuponeraApi: process.env.NODE_ENV === 'development' ? 'http://localhost:8000' : 'https://discounts.salchimonster.com',
       googleMapsKey: process.env.NUXT_PUBLIC_GOOGLE_MAPS_KEY || '',
-      rendimiento: process.env.NUXT_PUBLIC_RENDIMIENTO === 'true' || false, // Variable para pruebas de rendimiento
-      /** ID del Pixel de Meta (Facebook). Configurar en .env como NUXT_PUBLIC_META_PIXEL_ID o aquí. */
-      metaPixelId: process.env.NUXT_PUBLIC_META_PIXEL_ID || '',
+      rendimiento: process.env.NUXT_PUBLIC_RENDIMIENTO === 'true' || false,
+      metaPixelId: process.env.NUXT_PUBLIC_META_PIXEL_ID || '9692941457447887',
+      // nuxt-meta-pixel: pixel ID 9692941457447887; PageView en todas las rutas
+      metapixel: {
+        default: {
+          id: process.env.NUXT_PUBLIC_METAPIXEL_DEFAULT_ID || '9692941457447887',
+          pageView: '**',
+        },
+      },
     },
   },
 
