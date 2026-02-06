@@ -114,6 +114,11 @@
                 <span class="val">{{ order.user_phone }}</span>
               </div>
 
+              <div class="info-row" v-if="order.email || order.pe_json?.cliente?.cliente_email">
+                <span class="label">Email:</span>
+                <span class="val">{{ order.email || order.pe_json?.cliente?.cliente_email }}</span>
+              </div>
+
               <div class="info-row" v-if="order.order_type !== 'Pasar a recoger'">
                 <span class="label">Dirección:</span>
                 <span class="val capitalize">{{ (order.user_address || '').toLowerCase() }}</span>
@@ -270,7 +275,7 @@ const payWithEpaycoSmartCheckout = async () => {
       numberDoc: order.value.cedula_nit || client.cliente_cedula || '',
       callingCode: '+57',
       mobilePhone: (client.cliente_telefono || order.value.user_phone || '').replace(/\D/g, '').slice(-10) || '3000000000',
-      email: client.cliente_email || order.value.user_email || `orden-${orderId}@salchimonster.com`,
+      email: (order.value.email || client.cliente_email || order.value.user_email || '').trim() || undefined,
     },
   };
 
