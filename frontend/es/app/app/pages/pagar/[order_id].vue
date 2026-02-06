@@ -172,9 +172,10 @@ import { ref, onMounted, computed } from "vue";
 import { useRoute, useRuntimeConfig, useHead, useSitesStore } from "#imports";
 import { URI, SELF_URI } from "~/service/conection";
 
-// --- Configuración ePayco ---
+// --- Configuración ePayco Smart Checkout (checkout v2) ---
 const config = useRuntimeConfig();
-const epaycoPublicKey = config.public.epaycoPublicKey || 'ad3bfbac4531d3b82ece35e36bdf320a'; 
+const epaycoApiUrl = (config.public.epaycoApiUrl || 'http://localhost:8000').replace(/\/$/, '');
+const epaycoTestMode = typeof config.public.epaycoTestMode !== 'undefined' ? config.public.epaycoTestMode : true; 
 
 const sitesStore = useSitesStore()
 const siteName = computed(() => sitesStore?.location?.site?.site_name || '')
@@ -188,7 +189,7 @@ const pageTitle = computed(() => {
 
 useHead(() => ({
   title: pageTitle.value,
-  script: [{ src: 'https://checkout.epayco.co/checkout.js', async: true, defer: true }]
+  script: [{ src: 'https://checkout.epayco.co/checkout-v2.js', async: true, defer: true }]
 }));
 
 // --- Estado ---
@@ -227,49 +228,80 @@ onMounted(async () => {
   }
 });
 
-// --- Lógica de Pago ---
-const pay = () => {
+// --- Lógica de Pago (ePayco Smart Checkout v2) ---
+const pay = async () => {
   loadingPay.value = true;
-  setTimeout(() => payWithEpayco(order.value.order_id), 300);
+  try {
+    await payWithEpaycoSmartCheckout();
+    // loadingPay se quita en onClosed / onErrors del checkout
+  } catch (e) {
+    console.error('Error al iniciar pago:', e);
+    alert(e?.message || 'No se pudo iniciar el pago. Intenta de nuevo.');
+    loadingPay.value = false;
+  }
 };
 
-const payWithEpayco = (id) => {
-  if (typeof window === 'undefined' || !window.ePayco) {
-    alert("Cargando pasarela de pagos, intenta nuevamente.");
-    loadingPay.value = false;
+const payWithEpaycoSmartCheckout = async () => {
+  if (typeof window === 'undefined' || !window.ePayco?.checkout?.configure) {
+    alert('Cargando pasarela de pagos… Espera un momento e intenta de nuevo.');
     return;
   }
 
-  const handler = window.ePayco.checkout.configure({
-    key: epaycoPublicKey,
-    test: false,
-    response_type: 'redirect',
-    onClosed: () => {
-        console.log("Modal cerrado");
-        loadingPay.value = false;
-    }
-  });
-
   const delivery = order.value.pe_json.delivery;
   const client = order.value.pe_json.cliente;
+  const orderId = order.value.order_id;
 
-  handler.open({
-    name: id,
-    description: `Pedido ${id}`,
+  const sessionPayload = {
+    checkout_version: '2',
+    name: siteName.value || 'Salchimonster',
+    currency: 'COP',
     amount: delivery.delivery_pagocon,
-    currency: "cop",
-    invoice: id,
-    country: "co",
-    lang: "es",
-    external: "false",
-    confirmation: `${URI}/confirmacion-epayco`,
+    description: `Pedido ${orderId}`,
+    invoice: orderId,
+    country: 'CO',
+    lang: 'ES',
     response: `${SELF_URI}/gracias-epayco`,
-    name_billing: `${client.cliente_nombres} ${client.cliente_apellidos}`,
-    address_billing: client.cliente_direccion || 'No especificada',
-    type_doc_billing: "cc",
-    mobilephone_billing: client.cliente_telefono,
-    methodsDisable: ["SP", "CASH"]
+    confirmation: `${URI}/confirmacion-epayco`,
+    methodsDisable: ['SP', 'CASH'],
+    billing: {
+      name: `${client.cliente_nombres || ''} ${client.cliente_apellidos || ''}`.trim() || order.value.user_name,
+      address: client.cliente_direccion || order.value.user_address || 'No especificada',
+      typeDoc: 'CC',
+      numberDoc: order.value.cedula_nit || client.cliente_cedula || '',
+      callingCode: '+57',
+      mobilePhone: (client.cliente_telefono || order.value.user_phone || '').replace(/\D/g, '').slice(-10) || '3000000000',
+      email: client.cliente_email || order.value.user_email || `orden-${orderId}@salchimonster.com`,
+    },
+  };
+
+  const response = await $fetch(`${epaycoApiUrl}/api/payment/session/create`, {
+    method: 'POST',
+    body: sessionPayload,
   });
+
+  const sessionId = response?.data?.sessionId;
+  if (!sessionId) {
+    throw new Error(response?.textResponse || 'No se obtuvo sesión de pago. Revisa la API ePayco.');
+  }
+
+  const checkout = window.ePayco.checkout.configure({
+    sessionId,
+    type: 'onpage',
+    test: epaycoTestMode,
+  });
+
+  checkout.onCreated(() => {
+    // Checkout abierto correctamente
+  });
+  checkout.onErrors((errors) => {
+    console.error('ePayco Smart Checkout error:', errors);
+    loadingPay.value = false;
+  });
+  checkout.onClosed(() => {
+    loadingPay.value = false;
+  });
+
+  checkout.open();
 };
 
 // --- Whatsapp Link ---

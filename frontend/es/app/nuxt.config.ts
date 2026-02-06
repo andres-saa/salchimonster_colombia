@@ -79,6 +79,11 @@ export default defineNuxtConfig({
     public: {
       apiBase: process.env.API_BASE_URL || 'http://localhost:8000',
       googleMapsKey: process.env.NUXT_PUBLIC_GOOGLE_MAPS_KEY || '',
+      /** API FastAPI ePayco Smart Checkout (crear sesión). Ej: https://tu-dominio.com o http://localhost:8000 */
+      epaycoApiUrl: process.env.NUXT_PUBLIC_EPAYCO_API_URL || 'http://localhost:8000',
+      epaycoPublicKey: process.env.NUXT_PUBLIC_EPAYCO_PUBLIC_KEY || 'ad3bfbac4531d3b82ece35e36bdf320a',
+      /** false en producción para pagos reales */
+      epaycoTestMode: process.env.NUXT_PUBLIC_EPAYCO_TEST_MODE !== 'false',
     },
   },
 
