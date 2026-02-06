@@ -7,8 +7,11 @@ import {
   useSidebarStore,
   useUserStore,
   useUIStore,
+  usecartStore,
   texts
 } from '#imports'
+import { getSiteSlug } from '~/composables/useSedeFromRoute'
+import { useFetch } from '#imports'
 
 const uistore = useUIStore()
 const route = useRoute()
@@ -16,6 +19,7 @@ const router = useRouter()
 const siteStore = useSitesStore()
 const sidebarStore = useSidebarStore()
 const user = useUserStore()
+const cartStore = usecartStore()
 
 const handleSearch = () => {
   uistore.isSearchOpen = true
@@ -58,20 +62,24 @@ const setLang = (lang) => {
 // --- refs para menús / "Más" ---
 const menusContainerRef = ref(null)
 const moreButtonRef = ref(null)
+const moreMenuRef = ref(null)
 
-const visibleMenus = ref([])
-const overflowMenus = ref([])
+// Inicializar con menús por defecto para SSR (asegurar que se muestren desde el inicio)
+// En móvil siempre mostramos 4 menús, así que inicializamos con 4
+const visibleMenus = ref([
+  { label: 'Domicilios', to: '/', isSpecial: true },
+  { label: 'Sedes', to: '/sedes' },
+  { label: 'Carta', to: '/carta' },
+  { label: 'Rastrear', to: '/rastrear' }
+])
+const overflowMenus = ref([
+  { label: 'Ayuda', to: '/pqr' }
+])
 const isMoreOpen = ref(false)
 const windowWidth = ref(0)
 
-// CONFIG: cuántos menús según ancho
-const menuVisibilityConfig = [
-  { maxWidth: 900, visible: 2 },
-  { maxWidth: 1024, visible: 3 },
-  { maxWidth: 1070, visible: 4 },
-  { maxWidth: 1280, visible: 5 },
-  { maxWidth: Infinity, visible: 'all' }
-]
+// En desktop siempre mostrar 4 menús y el resto en "Más"
+// En móvil se usa el burger menu, no se muestran menús aquí
 
 // --- LÓGICA DE AUTENTICACIÓN Y NAVEGACIÓN EXTERNA ---
 
@@ -84,19 +92,31 @@ const isIframe = computed(() => {
   return user.user.iframe
 })
 
-// Acción: Nuevo Pedido (Redirige al 3001)
+// Acción: Nuevo Pedido (Limpia el carrito y redirige al dispatcher)
 const goToNewOrder = () => {
-  const token = user.user.token
-  const inserted_by = user.user.inserted_by
-  const iframe = user.user?.iframe
-  window.location.href = `http://localhost:3001?token=${token}&inserted_by=${inserted_by}&iframe=${iframe}`
+  // Limpiar el carrito
+  cartStore.cart = []
+  cartStore.applied_coupon = null
+  cartStore.coupon_ui = { enabled: false, draft_code: '' }
+  cartStore.setAddressDetails({}) // Esto también limpia is_rappi_cargo
+  cartStore.order_notes = ''
+  
+  // Redirigir al dispatcher
+  router.push('/')
 }
 
 // Acción: Cerrar Sesión
 const handleLogout = () => {
-  user.user.token = null
-  user.user.inserted_by = null
-  window.location.href = 'http://localhost:3001'
+  // Eliminar sesión en el store (token, inserted_by, iframe) para que la persistencia se actualice
+  user.clearSession()
+
+  // Eliminar sesión externa guardada en localStorage (evita que al volver siga logueado)
+  if (typeof window !== 'undefined' && window.localStorage) {
+    localStorage.removeItem('session_external_data')
+  }
+
+  // Redirigir al dispatcher (página principal)
+  router.push('/')
 }
 
 // --- LÓGICA DE PERFIL DE USUARIO Y JWT ---
@@ -139,12 +159,22 @@ const toggleProfile = () => {
 }
 
 // --- MENÚS DINÁMICOS ---
+// Ruta de domicilios reactiva: si hay sede, ir a /{sede}/, sino a /
+const domiciliosRoute = computed(() => {
+  if (siteStore.location?.site?.site_id && siteStore.location?.order_type) {
+    const siteName = siteStore.location.site.site_name || ''
+    const slug = getSiteSlug(siteName)
+    return slug ? `/${slug}/` : '/'
+  }
+  return '/'
+})
+
 const menusAll = computed(() => {
   const langKey = (user.lang?.name || 'es').toLowerCase()
   const t = texts[langKey]?.menus || {}
 
   const menusPublicos = [
-    { label: t.domicilios || 'Domicilios', to: '/' },
+    { label: t.domicilios || 'Domicilios', to: domiciliosRoute.value, isSpecial: true },
     { label: t.sedes || 'Sedes', to: `/sedes` },
     { label: t.carta || 'Carta', to: `/carta` },
     { label: t.rastrear || 'Rastrear', to: `/rastrear` },
@@ -156,7 +186,7 @@ const menusAll = computed(() => {
   ]
 
   const menusLogueados = [
-    { label: 'Menu', to: '/' },
+    { label: 'Menu', to: domiciliosRoute.value, isSpecial: true },
     { label: t.rastrear || 'Rastrear', to: `/rastrear` }
   ]
 
@@ -177,19 +207,101 @@ const defaultSocialLinks = [
 
 // ✅ API: redes por país
 const SOCIAL_LINKS_API = 'https://backend.salchimonster.com/data/social_links_by_country_v1'
-const socialLinksDB = ref(null)
 
-const fetchSocialLinksDB = async () => {
+// Cache para social links con TTL de 5 minutos
+const SOCIAL_LINKS_CACHE_KEY = 'topbar-social-links-cache'
+const SOCIAL_LINKS_CACHE_TTL = 5 * 60 * 1000 // 5 minutos
+let socialLinksRefreshInterval = null
+
+const loadSocialLinksFromCache = () => {
+  if (!import.meta.client) return null
   try {
-    const res = await fetch(SOCIAL_LINKS_API).then(r => r.json())
-
-    // soporta: { data: { co:[], us:[], es:[] } } o directamente { co:[], us:[], es:[] }
-    const payload = res?.data && typeof res.data === 'object' ? res.data : res
-    socialLinksDB.value = payload && typeof payload === 'object' ? payload : null
+    const cached = localStorage.getItem(SOCIAL_LINKS_CACHE_KEY)
+    if (cached) {
+      const { data, timestamp } = JSON.parse(cached)
+      const age = Date.now() - timestamp
+      if (age < SOCIAL_LINKS_CACHE_TTL) {
+        return data
+      }
+    }
   } catch (e) {
-    console.error('Error cargando social_links_by_country_v1:', e)
-    socialLinksDB.value = null
+    console.error('Error leyendo caché de social links:', e)
   }
+  return null
+}
+
+const saveSocialLinksToCache = (data) => {
+  if (!import.meta.client) return
+  try {
+    localStorage.setItem(SOCIAL_LINKS_CACHE_KEY, JSON.stringify({
+      data,
+      timestamp: Date.now()
+    }))
+  } catch (e) {
+    console.error('Error guardando caché de social links:', e)
+  }
+}
+
+// Usar useFetch para prerenderizado en SSR y actualización periódica
+const { data: socialLinksData, refresh: refreshSocialLinks } = useFetch(SOCIAL_LINKS_API, {
+  key: 'topbar-social-links',
+  server: true,
+  default: () => {
+    // Cargar desde caché local si está disponible (para prerenderizado)
+    if (import.meta.client) {
+      const cached = loadSocialLinksFromCache()
+      return cached ? { data: cached } : null
+    }
+    return null
+  }
+})
+
+// Computed para extraer los datos del formato de respuesta
+const socialLinksDB = computed(() => {
+  if (!socialLinksData.value) {
+    // Si no hay datos de useFetch, intentar desde caché local
+    if (import.meta.client) {
+      const cached = loadSocialLinksFromCache()
+      return cached
+    }
+    return null
+  }
+  // soporta: { data: { co:[], us:[], es:[] } } o directamente { co:[], us:[], es:[] }
+  const payload = socialLinksData.value?.data && typeof socialLinksData.value.data === 'object' 
+    ? socialLinksData.value.data 
+    : socialLinksData.value
+  return payload && typeof payload === 'object' ? payload : null
+})
+
+// Persistir en caché cuando se actualicen los datos de useFetch
+if (import.meta.client) {
+  watch(
+    socialLinksData,
+    (val) => {
+      if (val) {
+        // Extraer los datos del formato de respuesta
+        const payload = val?.data && typeof val.data === 'object' 
+          ? val.data 
+          : val
+        if (payload && typeof payload === 'object') {
+          saveSocialLinksToCache(payload)
+        }
+      }
+    },
+    { immediate: true }
+  )
+}
+
+// Función para actualizar periódicamente cada 5 minutos
+const startSocialLinksRefresh = () => {
+  if (!import.meta.client) return
+  if (socialLinksRefreshInterval) {
+    clearInterval(socialLinksRefreshInterval)
+  }
+  
+  socialLinksRefreshInterval = setInterval(() => {
+    refreshSocialLinks() // Actualizar usando useFetch refresh
+  }, SOCIAL_LINKS_CACHE_TTL)
 }
 
 // ✅ socialLinks: primero DB, si no, fallback Colombia
@@ -223,33 +335,28 @@ const handleResize = () => {
   }
 }
 
-const getVisibleCountForWidth = (width, totalMenus) => {
-  const rule =
-    menuVisibilityConfig.find((rule) => width <= rule.maxWidth) ||
-    menuVisibilityConfig[menuVisibilityConfig.length - 1]
-  if (rule.visible === 'all') return totalMenus
-  return Math.min(rule.visible, totalMenus)
-}
+// Función eliminada - ya no se necesita cálculo dinámico
+// En desktop siempre mostramos 4 menús
 
 const recalcMenus = () => {
   const allMenus = menusAll.value
   if (!windowWidth.value) {
-    visibleMenus.value = allMenus
-    overflowMenus.value = []
-    isMoreOpen.value = false
+    // En SSR o sin windowWidth, mostrar 4 menús (para desktop)
+    visibleMenus.value = allMenus.slice(0, 4)
+    overflowMenus.value = allMenus.slice(4)
     return
   }
   if (windowWidth.value <= 900) {
-    visibleMenus.value = allMenus
+    // En móvil ocultar menús, se usa el burger menu
+    visibleMenus.value = []
     overflowMenus.value = []
     isMoreOpen.value = false
     return
   }
 
-  const total = allMenus.length
-  const visibleCount = getVisibleCountForWidth(windowWidth.value, total)
-  visibleMenus.value = allMenus.slice(0, visibleCount)
-  overflowMenus.value = allMenus.slice(visibleCount)
+  // En desktop siempre mostrar 4 menús y el resto en "Más"
+  visibleMenus.value = allMenus.slice(0, 4)
+  overflowMenus.value = allMenus.slice(4)
   if (!overflowMenus.value.length) isMoreOpen.value = false
 }
 
@@ -263,6 +370,22 @@ const onDocClick = (e) => {
     const menu = langMenuRef.value
     const inside = btn?.contains(e.target) || menu?.contains(e.target)
     if (!inside) isLangOpen.value = false
+  }
+  
+  // Botón "Más"
+  if (isMoreOpen.value) {
+    const btn = moreButtonRef.value
+    const menu = moreMenuRef.value
+    const inside = btn?.contains(e.target) || menu?.contains(e.target)
+    if (!inside) isMoreOpen.value = false
+  }
+  
+  // Perfil
+  if (isProfileOpen.value) {
+    const trigger = document.querySelector('.profile-trigger')
+    const card = document.querySelector('.profile-card')
+    const inside = trigger?.contains(e.target) || card?.contains(e.target)
+    if (!inside) isProfileOpen.value = false
   }
 }
 
@@ -292,7 +415,10 @@ onMounted(() => {
   }
 
   siteStore.initStatusWatcher()
-  fetchSocialLinksDB() // ✅ aquí se llama la API
+  
+  // Iniciar actualización periódica cada 5 minutos para social links
+  startSocialLinksRefresh()
+  
   nextTick().then(() => recalcMenus())
 })
 
@@ -302,11 +428,53 @@ onBeforeUnmount(() => {
     document.removeEventListener('click', onDocClick, true)
     document.removeEventListener('keydown', onKeyDown)
   }
+  
+  // Limpiar intervalo de actualización
+  if (socialLinksRefreshInterval) {
+    clearInterval(socialLinksRefreshInterval)
+    socialLinksRefreshInterval = null
+  }
 })
 
 watch([menusAll, windowWidth], () => {
   nextTick().then(() => recalcMenus())
 }, { immediate: true })
+
+// Computed para determinar si mostrar el botón "Más" (solo en desktop)
+const shouldShowMoreButton = computed(() => {
+  // Solo mostrar en desktop (no en móvil)
+  if (typeof window !== 'undefined' && window.innerWidth <= 900) {
+    return false
+  }
+  // En desktop mostrar si hay más de 4 menús
+  return overflowMenus.value.length > 0
+})
+
+// --- Diálogo Cambiar sede / Quedarme ---
+const showSiteChangeDialog = ref(false)
+const currentSiteDisplayName = computed(() => {
+  const name = siteStore?.location?.site?.site_name
+  return name ? name.toLowerCase() : 'Salchimonster'
+})
+
+const openSiteChangeDialog = (e) => {
+  e.preventDefault()
+  showSiteChangeDialog.value = true
+}
+
+const closeSiteChangeDialog = () => {
+  showSiteChangeDialog.value = false
+}
+
+const goToChangeSite = () => {
+  showSiteChangeDialog.value = false
+  // Ir al dispatcher sin borrar datos: si el usuario da "atrás" vuelve con su carrito y sede
+  router.push({ path: '/', query: { cambiar_sede: '1' } })
+}
+
+const stayOnCurrentSite = () => {
+  showSiteChangeDialog.value = false
+}
 </script>
 
 <template>
@@ -330,50 +498,70 @@ watch([menusAll, windowWidth], () => {
     <header class="app-topbar-container">
       <div class="header-inner">
 
-        <NuxtLink to="/" class="logo-link">
-          <div class="logo-sesion">
-            <button
-              v-if="isLoggedIn"
-              @click.prevent="goToNewOrder"
-              class="new"
-              type="button"
-            >
-              Nuevo pedido
-            </button>
+        <div class="logo-sesion">
+          <button
+            v-if="isLoggedIn"
+            @click.prevent="goToNewOrder"
+            class="new"
+            type="button"
+          >
+            Nuevo pedido
+          </button>
 
+          <NuxtLink :to="domiciliosRoute" class="logo-link">
             <img src="https://gestion.salchimonster.com/images/logo.png" alt="Logo" class="logo-img" />
-            <div class="title-block">
-              <div class="site-info">
-                <Icon name="mdi:map-marker" class="marker-icon" />
+          </NuxtLink>
+          
+          <div class="title-block">
+            <div class="site-info">
+              <Icon name="mdi:map-marker" class="marker-icon" />
+              <button type="button" class="site-name-link" @click="openSiteChangeDialog">
                 <span class="site-name">
-                  {{ siteStore?.location?.site?.site_name?.toLowerCase() || 'Salchimonster' }}
+                  {{ currentSiteDisplayName }}
                 </span>
-                <div v-if="isOpen" class="live-dot-container" title="Estamos Abiertos">
-                  <div class="live-dot"></div>
-                </div>
+              </button>
+              <div v-if="isOpen" class="live-dot-container" title="Estamos Abiertos">
+                <div class="live-dot"></div>
               </div>
             </div>
           </div>
-        </NuxtLink>
+        </div>
 
         <nav class="menus" ref="menusContainerRef">
-          <NuxtLink
-            v-for="item in visibleMenus"
-            :key="item.to"
-            :to="item.to"
-            class="menu-item"
-            :class="{ 'menu-item--active': isActiveRoute(item.to) }"
-          >
-            {{ item.label }}
-          </NuxtLink>
+          <template v-for="item in visibleMenus" :key="item.to">
+            <NuxtLink
+              v-if="!item.isSpecial"
+              :to="item.to"
+              class="menu-item"
+              :class="{ 'menu-item--active': isActiveRoute(item.to) }"
+            >
+              {{ item.label }}
+            </NuxtLink>
+            <NuxtLink
+              v-else
+              :to="item.to"
+              class="menu-item"
+              :class="{ 'menu-item--active': isActiveRoute(item.to) }"
+            >
+              {{ item.label }}
+            </NuxtLink>
+          </template>
 
-          <div v-if="overflowMenus.length" class="more-wrapper">
+          <!-- En móvil siempre mostrar el botón "Más" si hay más de 4 menús -->
+          <div 
+            v-if="shouldShowMoreButton" 
+            class="more-wrapper"
+          >
             <button type="button" class="more-button" ref="moreButtonRef" @click="isMoreOpen = !isMoreOpen">
               Más <Icon name="mdi:chevron-down" class="more-chevron" />
             </button>
 
             <transition name="fade-slide">
-              <ul v-if="isMoreOpen" class="dropdown-menu more-dropdown">
+              <ul 
+                v-if="isMoreOpen" 
+                ref="moreMenuRef"
+                class="dropdown-menu more-dropdown"
+              >
                 <li v-for="item in overflowMenus" :key="item.to">
                   <NuxtLink
                     :to="item.to"
@@ -500,6 +688,35 @@ watch([menusAll, windowWidth], () => {
 
       </div>
     </header>
+
+    <!-- Diálogo: Cambiar sede o quedarme -->
+    <Teleport to="body">
+      <div
+        v-if="showSiteChangeDialog"
+        class="site-change-dialog-overlay"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="site-change-dialog-title"
+        @click.self="closeSiteChangeDialog"
+      >
+        <div class="site-change-dialog">
+          <button type="button" class="site-change-dialog-close" @click="closeSiteChangeDialog" aria-label="Cerrar">
+            <Icon name="mdi:close" />
+          </button>
+          <h2 id="site-change-dialog-title" class="site-change-dialog-title">
+            ¿Cambiar de sede o quedarte en {{ currentSiteDisplayName }}?
+          </h2>
+          <div class="site-change-dialog-actions">
+            <button type="button" class="site-change-btn site-change-btn--primary" @click="goToChangeSite">
+              Cambiar sede
+            </button>
+            <button type="button" class="site-change-btn site-change-btn--secondary" @click="stayOnCurrentSite">
+              Quedarme en {{ currentSiteDisplayName }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -590,6 +807,23 @@ watch([menusAll, windowWidth], () => {
 }
 .logo-link:hover { opacity: 0.9; }
 
+.site-name-link {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+  text-decoration: none;
+  color: inherit;
+  display: inline-flex;
+  align-items: center;
+  transition: opacity 0.2s;
+}
+.site-name-link:hover { opacity: 0.8; }
+.site-name-link:hover .site-name {
+  text-decoration: underline;
+}
+
 .logo-sesion {
   display: flex;
   align-items: center;
@@ -649,6 +883,14 @@ watch([menusAll, windowWidth], () => {
   justify-content: center;
   align-items: center;
   gap: 1.5rem;
+}
+
+/* En desktop siempre mostrar máximo 4 menús visibles */
+@media (min-width: 901px) {
+  .menus {
+    /* Limitar visualmente a 4 menús + botón Más */
+    max-width: fit-content;
+  }
 }
 
 .menu-item {
@@ -989,6 +1231,7 @@ watch([menusAll, windowWidth], () => {
 }
 
 @media (max-width: 900px) {
+  /* En móvil ocultar menús, usar burger menu */
   .menus { display: none; }
   .burger-button { display: inline-flex; justify-content: center; align-items: center; }
   .header-inner { padding: 0.5rem 1rem; height: var(--nav-height-mobile); }
@@ -1060,5 +1303,101 @@ watch([menusAll, windowWidth], () => {
   cursor: pointer;
   background-color: var(--primary-color, #b91c1c);
   color: #ffffff;
+}
+
+/* --- Diálogo Cambiar sede --- */
+.site-change-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10001;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.site-change-dialog {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+  padding: 1.5rem;
+  max-width: 90%;
+  width: 22rem;
+  position: relative;
+}
+
+.site-change-dialog-close {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  background: none;
+  border: none;
+  padding: 0.25rem;
+  cursor: pointer;
+  color: #666;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  transition: background 0.2s, color 0.2s;
+}
+
+.site-change-dialog-close:hover {
+  background: #f0f0f0;
+  color: #333;
+}
+
+.site-change-dialog-close .icon,
+.site-change-dialog-close svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.site-change-dialog-title {
+  margin: 0 0 1.25rem 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #333;
+  line-height: 1.4;
+  padding-right: 1.75rem;
+}
+
+.site-change-dialog-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.site-change-btn {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+  border: 1px solid transparent;
+}
+
+.site-change-btn--primary {
+  background-color: var(--primary-color, #b91c1c);
+  color: white;
+  border-color: var(--primary-color, #b91c1c);
+}
+
+.site-change-btn--primary:hover {
+  filter: brightness(1.05);
+}
+
+.site-change-btn--secondary {
+  background: #f5f5f5;
+  color: #333;
+  border-color: #e0e0e0;
+}
+
+.site-change-btn--secondary:hover {
+  background: #eee;
+  border-color: #ccc;
 }
 </style>

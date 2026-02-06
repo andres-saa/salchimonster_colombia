@@ -33,13 +33,19 @@ export default defineNuxtConfig({
   
   modules: [
     '@nuxt/eslint',
-    '@nuxt/image', // Asegúrate de usar <NuxtImg> en lugar de <img> en tus componentes
+    '@nuxt/image',
     '@nuxt/ui',
     '@pinia/nuxt',
     'pinia-plugin-persistedstate/nuxt',
-    '@primevue/nuxt-module'
-
+    '@primevue/nuxt-module',
+    'nuxt-meta-pixel',
   ],
+
+  // Carrito y cuponera en localStorage para que no se pierdan al recargar (cookies ~4KB)
+  piniaPersistedstate: {
+    storage: 'localStorage',
+  },
+
   primevue: {
         options: {
             theme: {
@@ -55,7 +61,15 @@ export default defineNuxtConfig({
         },
       
         components: {
-        include: ['Button', 'DataTable', 'Select']
+        // Solo incluir los componentes que realmente se usan (tree-shaking)
+        include: [
+            'Dialog',
+            'Select', 
+            'AutoComplete',
+            'InputText',
+            'Button',
+            'ProgressSpinner'
+        ]
     }
     },
     
@@ -78,12 +92,22 @@ export default defineNuxtConfig({
     apiSecret: process.env.API_SECRET || 'dev-secret',
     public: {
       apiBase: process.env.API_BASE_URL || 'http://localhost:8000',
+      cuponeraApi: process.env.NODE_ENV === 'development' ? 'http://localhost:8000' : 'https://discounts.salchimonster.com',
       googleMapsKey: process.env.NUXT_PUBLIC_GOOGLE_MAPS_KEY || '',
       /** API FastAPI ePayco Smart Checkout (crear sesión). Ej: https://tu-dominio.com o http://localhost:8000 */
       epaycoApiUrl: process.env.NUXT_PUBLIC_EPAYCO_API_URL || 'http://localhost:8000',
       epaycoPublicKey: process.env.NUXT_PUBLIC_EPAYCO_PUBLIC_KEY || 'ad3bfbac4531d3b82ece35e36bdf320a',
       /** false en producción para pagos reales */
       epaycoTestMode: process.env.NUXT_PUBLIC_EPAYCO_TEST_MODE !== 'false',
+      rendimiento: process.env.NUXT_PUBLIC_RENDIMIENTO === 'true' || false,
+      metaPixelId: process.env.NUXT_PUBLIC_META_PIXEL_ID || '9692941457447887',
+      // nuxt-meta-pixel: pixel ID 9692941457447887; PageView en todas las rutas
+      metapixel: {
+        default: {
+          id: process.env.NUXT_PUBLIC_METAPIXEL_DEFAULT_ID || '9692941457447887',
+          pageView: '**',
+        },
+      },
     },
   },
 
@@ -96,7 +120,15 @@ export default defineNuxtConfig({
  
     // Reemplaza '/ayuda' por la ruta donde usas este componente
     '/pqr': { isr: 3600 } ,
- 
+
+    // Rutas dinámicas de sedes: estáticas hasta que se llame al endpoint de regeneración
+    // NO usar ISR automático - solo se regeneran cuando se llama a /api/regenerate-menus
+    // Las páginas se generan en la primera visita y se mantienen estáticas
+    '/**': { 
+      // Sin ISR - las páginas son completamente estáticas
+      // Solo se regeneran cuando se llama explícitamente al endpoint /api/regenerate-menus
+    },
+
     // Opcional: Cachear assets estáticos agresivamente
     '/_nuxt/**': { headers: { 'cache-control': 's-maxage=31536000' } },
   },
@@ -140,5 +172,10 @@ export default defineNuxtConfig({
         }
       }
     }
-  }
+  },
+
+  // Nota: El prerender dinámico se maneja vía ISR (Incremental Static Regeneration)
+  // Las rutas se generan automáticamente cuando se acceden por primera vez
+  // o cuando se llama al endpoint /api/regenerate-menus
+  // ISR está configurado en routeRules para todas las rutas dinámicas (/{sede}/)
 })

@@ -41,13 +41,40 @@ const currentCountry = computed(() => {
 // =========================================
 // 🔄 FETCH DE DATOS
 // =========================================
+// Cache de img_identifier por post para detectar cambios
+const postImgIdentifiers = ref({})
+let postsRefreshInterval = null
+
 const fetchPosts = async () => {
   loading.value = true
   try {
     const res = await fetch(API_URL).then(r => r.json())
     if (res && res.data) {
       const countryPosts = res.data[currentCountry.value] || []
-      dynamicPosts.value = Array.isArray(countryPosts) ? countryPosts : []
+      const newPosts = Array.isArray(countryPosts) ? countryPosts : []
+      
+      // Detectar cambios en img_identifier y actualizar solo si cambió
+      if (import.meta.client && dynamicPosts.value.length > 0) {
+        newPosts.forEach((newPost, index) => {
+          const oldPost = dynamicPosts.value[index]
+          const postKey = newPost.id || index
+          if (oldPost && oldPost.img_identifier !== newPost.img_identifier) {
+            // El img_identifier cambió, actualizar el cache para forzar re-render
+            postImgIdentifiers.value[postKey] = newPost.img_identifier
+          } else if (!postImgIdentifiers.value[postKey]) {
+            // Inicializar cache si no existe
+            postImgIdentifiers.value[postKey] = newPost.img_identifier
+          }
+        })
+      } else if (import.meta.client) {
+        // Inicializar cache en primera carga
+        newPosts.forEach((post, index) => {
+          const postKey = post.id || index
+          postImgIdentifiers.value[postKey] = post.img_identifier
+        })
+      }
+      
+      dynamicPosts.value = newPosts
     } else {
       dynamicPosts.value = []
     }
@@ -162,6 +189,13 @@ onMounted(() => {
   window.addEventListener('resize', updateIsMobile, { passive: true })
 
   fetchPosts()
+  
+  // Verificar cambios en posts cada 5 minutos
+  if (import.meta.client) {
+    postsRefreshInterval = setInterval(() => {
+      fetchPosts()
+    }, 5 * 60 * 1000) // 5 minutos
+  }
 
   const el = containerRef.value
   if (!el) return
@@ -174,6 +208,10 @@ onMounted(() => {
 onBeforeUnmount(() => {
   if (typeof window !== 'undefined') {
     window.removeEventListener('resize', updateIsMobile)
+  }
+  if (postsRefreshInterval) {
+    clearInterval(postsRefreshInterval)
+    postsRefreshInterval = null
   }
   const el = containerRef.value
   if (!el) return
@@ -233,7 +271,7 @@ onBeforeUnmount(() => {
       <div v-else class="posts-wrapper">
         <a
           v-for="(post, index) in dynamicPosts"
-          :key="post.id || index"
+          :key="`post-${post.id || index}-img-${post.img_identifier || ''}`"
           class="post-item"
           :href="post.to"
           target="_blank"
@@ -241,10 +279,13 @@ onBeforeUnmount(() => {
         >
           <div class="post-card">
             <img
+              v-if="post.img_identifier"
               :src="getImageUrl(post.img_identifier)"
               :alt="networkLabel(post.type)"
+              :key="`post-img-${post.id || index}-${post.img_identifier}`"
               class="post-image"
               loading="lazy"
+              decoding="async"
             />
 
             <div class="post-overlay" :class="`post-overlay--${post.type}`">

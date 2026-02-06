@@ -6,6 +6,8 @@ export const useUserStore = defineStore(
   () => {
     const user = ref({
       name: '',
+      first_name: '',
+      last_name: '',
       neigborhood: '',
       address: '',
       phone_number: '',
@@ -28,6 +30,8 @@ export const useUserStore = defineStore(
     function resetUser() {
       user.value = {
         name: '',
+        first_name: '',
+        last_name: '',
         neigborhood: '',
         address: '',
         phone_number: '',
@@ -35,11 +39,18 @@ export const useUserStore = defineStore(
       }
     }
 
+    /** Cierra la sesión de admin: elimina token, inserted_by e iframe para que la persistencia se actualice. */
+    function clearSession() {
+      const { token, inserted_by, iframe, ...rest } = user.value
+      user.value = { ...rest }
+    }
+
     return {
       user,
       fucion,
       setUser,
       resetUser,
+      clearSession,
     }
   },
   {

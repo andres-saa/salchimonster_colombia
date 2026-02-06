@@ -68,17 +68,13 @@ import CarouselBanners from '~/components/carouselBanners.vue'
 import MenuCategoriesBar from '~/components/MenuCategoriesBar.vue'
 import MenuProductCard from '~/components/MenuProductCard.vue'
 import { URI } from '~/service/conection'
-import { useHead, useFetch, useSitesStore, useMenuStore } from '#imports'
+import { useHead, useSitesStore } from '#imports'
+import { useSiteRouter } from '~/composables/useSiteRouter'
+import { useMenuData } from '~/composables/useMenuData'
 
 const route = useRoute()
 const router = useRouter()
 const sitesStore = useSitesStore()
-const menuStore = useMenuStore()
-
-/* ==========================
-   CONFIGURACIÓN DE CACHÉ
-   ========================== */
-const CACHE_TTL = 30 * 60 * 1000
 
 /* ==========================
    ESTADO PARA REFRESCO EN CLIENTE
@@ -96,55 +92,15 @@ const doClientRefresh = async (refreshFn) => {
 }
 
 /* ==========================
-   SITE ID
-   ========================== */
-const siteId = computed(
-  () => (sitesStore?.location?.site?.site_id) || 1
-)
-
-/* ==========================
    FETCH & HIDRATACIÓN INTELIGENTE
    ========================== */
-const {
-  data: rawCategoriesData,
-  refresh,
-  pending: menuPending
-} = useFetch(
-  () => `${URI}/tiendas/${siteId.value}/products`,
-  {
-    key: () => `menu-data-${siteId.value}`,
-    server: true,
-    default: () => ({ categorias: [] })
-  }
-)
-
-if (process.client) {
-  const cachedWrapper = menuStore.getMenuBySite(siteId.value)
-
-  if (cachedWrapper && cachedWrapper.data && cachedWrapper.timestamp) {
-    const now = Date.now()
-    const age = now - cachedWrapper.timestamp
-
-    if (age < CACHE_TTL) {
-      console.log(
-        `[Menu] Usando caché fresca (Edad: ${Math.round(age / 1000)}s)`
-      )
-      rawCategoriesData.value = cachedWrapper.data
-    } else {
-      console.log('[Menu] Caché expirada. Usando datos de red/SSR.')
-    }
-  }
-}
+// Usar el composable compartido para asegurar consistencia
+const { rawCategoriesData, refresh, menuPending } = useMenuData()
 
 /* ==========================
-   DATA FUENTE & PERSISTENCIA
+   DATA FUENTE
    ========================== */
 const sourceData = computed(() => rawCategoriesData.value)
-
-watch(
-  rawCategoriesData,
-  (val) => {
-    if (!process.client) return
     if (val && Array.isArray(val.categorias) && val.categorias.length) {
       menuStore.setMenuForSite(siteId.value, {
         data: val,
@@ -189,22 +145,37 @@ const categories = computed(() => {
       const category_name =
         cat.categoria_descripcion || cat.english_name || ''
 
-      const products = (cat.products || []).map((p) => ({
-        ...p,
-        id: p.producto_id,
-        product_name:
-          p.productogeneral_descripcionweb ||
-          p.productogeneral_descripcion ||
-          p.english_name ||
-          '',
-        price: Number(p.productogeneral_precio ?? 0),
-        image_url:
-          p.productogeneral_urlimagen ||
-          (p.lista_productobase &&
-            p.lista_productobase[0] &&
-            p.lista_productobase[0].producto_urlimagen) ||
-          ''
-      }))
+      const products = (cat.products || [])
+        .map((p) => {
+          // Calcular precio de la misma manera que MenuProductCard
+          const presentationPrice = Number(p.lista_presentacion?.[0]?.producto_precio ?? 0)
+          const generalPrice = Number(p.productogeneral_precio ?? 0)
+          const fallbackPrice = Number(p.price ?? 0)
+          
+          const calculatedPrice = presentationPrice > 0 
+            ? presentationPrice 
+            : generalPrice > 0 
+            ? generalPrice 
+            : fallbackPrice
+
+          return {
+            ...p,
+            id: p.producto_id,
+            product_name:
+              p.productogeneral_descripcionweb ||
+              p.productogeneral_descripcion ||
+              p.english_name ||
+              '',
+            price: calculatedPrice,
+            image_url:
+              p.productogeneral_urlimagen ||
+              (p.lista_productobase &&
+                p.lista_productobase[0] &&
+                p.lista_productobase[0].producto_urlimagen) ||
+              ''
+          }
+        })
+        .filter((p) => p.price > 0) // Filtrar productos con precio 0
 
       return {
         ...cat,
@@ -227,7 +198,8 @@ const showLoader = computed(() => {
    NAVEGACIÓN DE PRODUCTOS
    ========================== */
 const onClickProduct = (category, product) => {
-  router.push(`/producto/${product.id}`)
+  const { pushWithSite } = useSiteRouter()
+  pushWithSite(`/producto/${product.id}`)
 }
 
 /* ==========================
@@ -485,6 +457,14 @@ useHead(() => ({
   padding-bottom: 5rem;
 }
 
+/* En PC: ajustar grid para cards horizontales con imagen 96px */
+@media (min-width: 769px) {
+  .menu-category-section__grid {
+    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+    max-width: 100%;
+  }
+}
+
 /* RESPONSIVE */
 @media (max-width: 768px) {
   .menu-content {
@@ -499,7 +479,7 @@ useHead(() => ({
     font-size: 1.5rem;
   }
   .menu-category-section__grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: 1fr;
     gap: 0.55rem;
   }
 }

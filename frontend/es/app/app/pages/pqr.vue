@@ -313,16 +313,11 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { URI } from '~/service/conection'
-import { useHead, useSitesStore } from '#imports'
+import { useHead } from '#imports'
 
-const sitesStore = useSitesStore()
-const siteName = computed(() => sitesStore?.location?.site?.site_name || '')
+// PQR no depende de una sede específica - siempre usa el título genérico
 const pageTitle = computed(() => {
-  const pageName = 'AYUDA'
-  if (siteName.value) {
-    return `SM - ${siteName.value.toUpperCase()} | ${pageName}`
-  }
-  return `SM | ${pageName}`
+  return 'SM | AYUDA'
 })
 
 const pageDescription = computed(() => {

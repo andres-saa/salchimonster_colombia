@@ -12,7 +12,8 @@
           class="slide-image"
           :src="`${URI}/read-photo-product/${banner.img_identifier}`"
           :alt="`Banner Colombia ${idx + 1}`"
-          loading="lazy"
+          :loading="idx === 0 ? 'eager' : 'lazy'"
+          :fetchpriority="idx === 0 ? 'high' : 'auto'"
         />
       </div>
     </div>
@@ -80,6 +81,15 @@ const isTransitionEnabled = ref(true)
 
 onMounted(() => {
   startAutoplay()
+  // Preload la primera imagen del banner para mejor rendimiento
+  if (banners.value.length > 0 && banners.value[0]?.img_identifier) {
+    const link = document.createElement('link')
+    link.rel = 'preload'
+    link.as = 'image'
+    link.href = `${URI}/read-photo-product/${banners.value[0].img_identifier}`
+    link.fetchPriority = 'high'
+    document.head.appendChild(link)
+  }
 })
 
 onBeforeUnmount(() => {

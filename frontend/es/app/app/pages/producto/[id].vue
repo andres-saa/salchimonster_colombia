@@ -1,13 +1,5 @@
 <template>
   <div class="page-wrapper">
-    <button
-      class="nav-btn nav-btn--back"
-      @click="goBack"
-      :aria-label="tl('back_aria', 'volver', 'back')"
-    >
-      <Icon name="mdi:arrow-left" size="24" />
-    </button>
-
     <div v-if="loading" class="loading-overlay">
       <div class="spinner-container">
         <Icon name="mdi:loading" class="spin-icon" size="60" />
@@ -292,6 +284,7 @@ import { formatoPesosColombianos } from '@/service/utils/formatoPesos'
 import { usecartStore, useFetch, useHead, useSitesStore, useState, useUserStore, texts } from '#imports'
 import { useToast } from '@/composables/useToast'
 import { URI } from '~/service/conection'
+import { useSiteRouter } from '~/composables/useSiteRouter'
 
 const route = useRoute()
 const router = useRouter()
@@ -299,6 +292,7 @@ const store = usecartStore()
 const { showToast } = useToast()
 const sitesStore = useSitesStore()
 const userStore = useUserStore()
+const { pushWithSite, getCurrentSiteSlug, replaceWithSite } = useSiteRouter()
 
 // ==========================
 // ✅ Lower en JS + Capitalize en CSS
@@ -380,56 +374,65 @@ const onImageLoad = () => { imageLoaded.value = true }
 const checkImageState = () => { if (mainImageRef.value?.complete) imageLoaded.value = true }
 
 // =======================
-// ✅ CACHE MENU
+// ✅ FETCH PRODUCTO ESPECÍFICO
 // =======================
-const menuCache = useState('menu-cache', () => ({}))
+const currentProductId = computed(() => Number(route.params.id))
 
-const menuCacheKey = computed(() => `menu-data-${siteId.value}`)
-const cachedMenu = computed(() => menuCache.value[menuCacheKey.value] || null)
+// Cache para productos individuales
+const productCache = useState('product-cache', () => ({}))
+const productCacheKey = computed(() => `product-${siteId.value}-${currentProductId.value}`)
+const cachedProduct = computed(() => productCache.value[productCacheKey.value] || null)
 
-const { data: rawCategoriesData, pending: loading, refresh } = useFetch(
-  () => `${URI}/tiendas/${siteId.value}/products`,
+// Fetch del producto específico usando el nuevo endpoint
+const { data: productData, pending: loading, refresh: refreshProduct } = useFetch(
+  () => `${URI}/tiendas/${siteId.value}/producto/${currentProductId.value}`,
   {
-    key: () => menuCacheKey.value,
-    server: false,
-    lazy: true,
-    immediate: false,
-    default: () => cachedMenu.value
+    key: () => productCacheKey.value,
+    server: true,
+    lazy: false,
+    immediate: true,
+    default: () => cachedProduct.value,
+    watch: [siteId, currentProductId]
   }
 )
 
-const ensureMenuLoaded = async () => {
-  const key = menuCacheKey.value
-  const cached = menuCache.value[key]
-
-  if (cached) {
-    rawCategoriesData.value = cached
-    return
+// Guardar en caché cuando se actualice
+watch(productData, (val) => {
+  if (val && import.meta.client) {
+    productCache.value[productCacheKey.value] = val
   }
+}, { immediate: true })
 
-  if (typeof window === 'undefined') return
+const currentProduct = computed(() => productData.value || null)
 
-  await refresh()
-  if (rawCategoriesData.value) {
-    menuCache.value[key] = rawCategoriesData.value
+// Para la navegación entre productos, necesitamos la lista de productos
+// Usamos el cache del menú si está disponible, o hacemos un fetch ligero
+const menuCache = useState('menu-cache', () => ({}))
+const menuCacheKey = computed(() => `menu-data-${siteId.value}`)
+const cachedMenu = computed(() => menuCache.value[menuCacheKey.value] || null)
+
+// Fetch ligero del menú solo para navegación (si no está en caché)
+const { data: menuDataForNav } = useFetch(
+  () => `${URI}/tiendas/${siteId.value}/products-light`,
+  {
+    key: () => `menu-nav-${siteId.value}`,
+    server: false,
+    lazy: true,
+    immediate: false,
+    default: () => {
+      // Intentar usar el caché del menú completo si existe
+      const fullMenu = cachedMenu.value
+      if (fullMenu?.categorias) {
+        return fullMenu
+      }
+      return null
+    }
   }
-}
-
-onMounted(async () => {
-  checkImageState()
-  await ensureMenuLoaded()
-})
-
-watch(siteId, async (newVal, oldVal) => {
-  if (newVal === oldVal) return
-  await ensureMenuLoaded()
-})
-
-// --- Productos ---
-const currentProductId = computed(() => Number(route.params.id))
+)
 
 const flatProducts = computed(() => {
-  const raw = rawCategoriesData.value
+  // Priorizar menú completo del caché, luego products-light para navegación
+  const raw = cachedMenu.value || menuDataForNav.value
   if (!raw || !raw.categorias) return []
 
   const list = []
@@ -447,9 +450,18 @@ const flatProducts = computed(() => {
   return list
 })
 
-const currentProduct = computed(() =>
-  flatProducts.value.find((p) => Number(p.producto_id) === currentProductId.value) || null
-)
+onMounted(() => {
+  checkImageState()
+  // Cargar menú ligero para navegación si no está en caché
+  if (!cachedMenu.value && !menuDataForNav.value && import.meta.client) {
+    // El useFetch se encargará de cargar si es necesario
+  }
+})
+
+watch(siteId, async (newVal, oldVal) => {
+  if (newVal === oldVal) return
+  // El watch en useFetch se encargará de recargar el producto
+})
 
 // ✅ radios primero en UI
 const sortedGroups = computed(() => {
@@ -743,7 +755,7 @@ const processAddToCart = (mode) => {
   }
 
   store.addProductToCart(currentProduct.value, quantity.value, Object.values(selectedAdditions.value))
-
+  
   if (mode === 'ask') {
     showPostActionModal.value = true
   } else if (mode === 'pay') {
@@ -752,31 +764,42 @@ const processAddToCart = (mode) => {
       message: tl('going_to_pay', 'yendo a pagar...', 'going to pay...'),
       severity: 'success'
     })
-    router.push('/pay')
+    pushWithSite('/pay')
   } else {
     showToast({
       title: tl('added_title', 'agregado', 'added'),
       message: tl('added_to_cart', 'producto agregado al carrito', 'product added to cart'),
       severity: 'success'
     })
-    router.push('/')
+    const siteSlug = getCurrentSiteSlug()
+    if (siteSlug) {
+      router.push(`/${siteSlug}/`)
+    } else {
+      router.push('/')
+    }
   }
 }
 
 const completeMobileAction = (destination) => {
   showPostActionModal.value = false
-  if (destination === 'pay') router.push('/pay')
-  else router.push('/')
+  if (destination === 'pay') {
+    pushWithSite('/pay')
+  } else {
+    const siteSlug = getCurrentSiteSlug()
+    if (siteSlug) {
+      router.push(`/${siteSlug}/`)
+    } else {
+      router.push('/')
+    }
+  }
 }
-
-const goBack = () => router.push('/')
 
 const goToRelative = (step) => {
   const list = flatProducts.value
   const idx = list.findIndex((p) => Number(p.producto_id) === currentProductId.value)
   if (idx === -1) return
   const nextIdx = (idx + step + list.length) % list.length
-  router.replace(`/producto/${list[nextIdx].producto_id}`)
+  replaceWithSite(`/producto/${list[nextIdx].producto_id}`)
 }
 
 const goToNext = () => goToRelative(1)
@@ -825,15 +848,65 @@ useHead({
     if (!currentProduct.value) return []
     const productName = displayName.value.toUpperCase()
     const description = `Ordena ${displayName.value} en Salchimonster. ${siteName.value ? `Disponible en ${siteName.value}.` : ''} La mejor salchipapa de Colombia.`
+    const productImage = currentProduct.value?.image_url || 
+      (currentProduct.value?.productogeneral_urlimagen ? `${URI}/read-photo-product/${currentProduct.value.productogeneral_urlimagen}` : '')
+    const siteUrl = typeof window !== 'undefined' ? window.location.origin : 'https://salchimonster.com'
+    const fullUrl = typeof window !== 'undefined' ? window.location.href : `${siteUrl}${route.fullPath}`
+    
     return [
       { name: 'description', content: description },
       { name: 'robots', content: 'index, follow' },
+      // Open Graph
       { property: 'og:title', content: `SM - ${siteName.value?.toUpperCase() || ''} | ${productName} - MENÚ` },
       { property: 'og:description', content: description },
       { property: 'og:type', content: 'product' },
+      { property: 'og:url', content: fullUrl },
+      { property: 'og:image', content: productImage },
+      { property: 'og:image:width', content: '1200' },
+      { property: 'og:image:height', content: '630' },
+      { property: 'og:image:alt', content: productName },
+      { property: 'og:site_name', content: 'Salchimonster' },
+      // Twitter Card
       { name: 'twitter:card', content: 'summary_large_image' },
       { name: 'twitter:title', content: `${productName} - MENÚ` },
-      { name: 'twitter:description', content: description }
+      { name: 'twitter:description', content: description },
+      { name: 'twitter:image', content: productImage },
+      { name: 'twitter:image:alt', content: productName },
+      // Additional SEO
+      { name: 'keywords', content: `salchimonster, ${displayName.value}, salchipapa, domicilio, delivery, ${siteName.value || 'colombia'}` }
+    ]
+  }),
+  script: computed(() => {
+    if (!currentProduct.value) return []
+    
+    const product = currentProduct.value
+    const siteUrl = typeof window !== 'undefined' ? window.location.origin : 'https://salchimonster.com'
+    const fullUrl = typeof window !== 'undefined' ? window.location.href : `${siteUrl}${route.fullPath}`
+    
+    const productSchema = {
+      '@context': 'https://schema.org',
+      '@type': 'Product',
+      name: pickByLang(product.productogeneral_descripcion || product.product_name || '', product.english_name || ''),
+      description: pickByLang(product.productogeneral_descripcionadicional || product.productogeneral_descripcionweb || '', product.english_description || ''),
+      image: product.image_url || (product.productogeneral_urlimagen ? `${URI}/read-photo-product/${product.productogeneral_urlimagen}` : ''),
+      brand: {
+        '@type': 'Brand',
+        name: 'Salchimonster'
+      },
+      offers: {
+        '@type': 'Offer',
+        price: product.price || product.productogeneral_precio || 0,
+        priceCurrency: 'COP',
+        availability: 'https://schema.org/InStock',
+        url: fullUrl
+      }
+    }
+    
+    return [
+      {
+        type: 'application/ld+json',
+        children: JSON.stringify(productSchema)
+      }
     ]
   })
 })
@@ -864,15 +937,6 @@ useHead({
 .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
-.nav-btn {
-  position: fixed; z-index: 50; background: white;
-  border: 1px solid var(--border, #e5e7eb); box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-  border-radius: 50%; width: 40px; height: 40px;
-  display: flex; align-items: center; justify-content: center;
-  cursor: pointer; transition: all 0.2s; color: var(--text-main, #1f2937);
-}
-.nav-btn:hover { background: #f3f4f6; transform: scale(1.05); }
-.nav-btn--back { top: 4rem; left: 1rem; }
 
 .product-container { display: grid; grid-template-columns: 1fr; max-width: 1200px; margin: 0 auto; }
 @media (min-width: 1024px) {

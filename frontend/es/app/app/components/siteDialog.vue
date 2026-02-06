@@ -106,11 +106,13 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch, nextTick } from 'vue'
 import Dialog from 'primevue/dialog'
 import Select from 'primevue/select'
-import { useSitesStore, useUserStore, useSedeFromSubdomain } from '#imports' // Asegúrate de importar useUserStore
+import { useSitesStore, useUserStore } from '#imports'
 import { URI } from '~/service/conection'
+import { useSiteRouter } from '~/composables/useSiteRouter'
+import { useSedeFromRoute } from '~/composables/useSedeFromRoute'
 
 /* ================= STORES ================= */
 const store = useSitesStore()
@@ -125,13 +127,27 @@ const exactAddress = ref('') // Nuevo estado para la dirección escrita
 const currentSite = ref({})
 const cachedSites = ref(null)
 const loadingSite = ref(false)
-const siteFromSubdomain = ref(null)
 
 const cities = ref([])
 const fixedCity = ref(null)
 
-// Computed para obtener ID de ciudad desde el subdominio
-const cityId = computed(() => siteFromSubdomain.value?.city_id ?? null)
+// Obtener slug de la ruta (debe estar en setup)
+const sedeFromRoute = useSedeFromRoute()
+
+// Obtener ciudad desde el store o desde la URL
+// Para domicilio, la ciudad por defecto es la de la sede actual
+const cityId = computed(() => {
+  // Prioridad 1: Ciudad de la sede actual (para domicilio)
+  if (store.location?.site?.city_id) {
+    return store.location.site.city_id
+  }
+  // Prioridad 2: Ciudad en el store
+  if (store.location?.city?.city_id) {
+    return store.location.city.city_id
+  }
+  // Si no hay ciudad en el store, retornar null
+  return null
+})
 
 /* ================= HELPERS ================= */
 const handleImageError = (e) => { e.target.style.display = 'none' }
@@ -150,7 +166,9 @@ const canSave = computed(() => {
 })
 
 /* ================= ACTIONS ================= */
-const confirmLocation = () => {
+const { pushWithSite } = useSiteRouter()
+
+const confirmLocation = async () => {
   if (!canSave.value) return
 
   const nb = currenNeigborhood.value
@@ -168,6 +186,7 @@ const confirmLocation = () => {
       neigborhood: nb,
       site: siteObj,
       mode: 'barrios',
+      formatted_address: exactAddress.value
     },
     delivery
   )
@@ -182,6 +201,11 @@ const confirmLocation = () => {
   }
 
   store.setVisible('currentSite', false)
+  
+  // Navegar a /pay usando el sistema de slugs
+  // Usar nextTick para asegurar que el modal se cierre antes de navegar
+  await nextTick()
+  pushWithSite('/pay')
 }
 
 /* ================= API CALLS ================= */
@@ -200,18 +224,42 @@ const resolveFixedCity = async () => {
   fixedCity.value = match || { city_id: cityId.value, city_name: '' }
 }
 
-const loadSiteBySubdomain = async () => {
+const loadSiteFromStore = async () => {
   loadingSite.value = true
   try {
-    const sub = getCurrentSubdomain()
-    if (!sub) return
-    const res = await fetch(`${URI}/sites/subdomain/${sub}`)
-    if (res.ok) {
-      const data = await res.json()
-      siteFromSubdomain.value = data?.[0] || data || null
+    // Intentar obtener la sede desde el store
+    const currentSiteFromStore = store.location?.site
+    if (currentSiteFromStore && currentSiteFromStore.city_id) {
+      // La ciudad ya está disponible en el store
+      return
+    }
+    
+    // Si no hay sede en el store, intentar obtenerla desde la URL
+    const siteSlug = sedeFromRoute?.value
+    
+    if (siteSlug) {
+      // Buscar la sede por slug (convertir slug a nombre de sitio)
+      const allSites = await ensureSitesLoaded()
+      // Intentar encontrar la sede que coincida con el slug
+      const foundSite = allSites.find(s => {
+        const slug = s.site_name?.toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-+|-+$/g, '')
+        return slug === siteSlug.toLowerCase()
+      })
+      
+      if (foundSite) {
+        // Actualizar el store con la sede encontrada
+        store.updateLocation({
+          site: foundSite,
+          city: foundSite.city_id ? { city_id: foundSite.city_id } : null
+        }, 0)
+      }
     }
   } catch (e) {
-    console.error(e)
+    console.error('Error loading site from store/URL:', e)
   } finally {
     loadingSite.value = false
   }
@@ -259,7 +307,7 @@ const restoreFromStore = () => {
 
 /* ================= LIFECYCLE ================= */
 onMounted(async () => {
-  await loadSiteBySubdomain()
+  await loadSiteFromStore()
   await resolveFixedCity()
   await changePossiblesNeigborhoods()
   await restoreFromStore() // Mover aquí para asegurar que los barrios ya cargaron
@@ -280,8 +328,14 @@ watch(currenNeigborhood, async (newVal) => {
 })
 
 // Watch: Si el store se abre externamente, re-sincronizar datos
-watch(() => store.visibles.currentSite, (val) => {
-  if (val) restoreFromStore()
+watch(() => store.visibles.currentSite, async (val) => {
+  if (val) {
+    // Cuando se abre el modal, asegurar que la ciudad sea la de la sede actual
+    await loadSiteFromStore()
+    await resolveFixedCity()
+    await changePossiblesNeigborhoods()
+    restoreFromStore()
+  }
 })
 
 watch(cityId, async (newId, oldId) => {
@@ -292,6 +346,22 @@ watch(cityId, async (newId, oldId) => {
   await resolveFixedCity()
   await changePossiblesNeigborhoods()
 })
+
+// Watch: Si cambia la sede en el store, actualizar la ciudad
+watch(
+  () => store.location?.site?.city_id,
+  async (newCityId, oldCityId) => {
+    // Si cambia la ciudad de la sede y estamos en modo domicilio, actualizar
+    if (newCityId && newCityId !== oldCityId) {
+      fixedCity.value = null
+      await resolveFixedCity()
+      await changePossiblesNeigborhoods()
+      // Limpiar barrio y dirección cuando cambia la sede
+      currenNeigborhood.value = null
+      exactAddress.value = ''
+    }
+  }
+)
 </script>
 
 <style scoped>

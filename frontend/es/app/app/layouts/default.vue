@@ -1,7 +1,6 @@
 <template>
   <div class="app-layout">
     <header
-      v-if="!isIframeMode"
       ref="topbarRef"
       class="app-layout__topbar"
       :style="layoutVars"
@@ -19,13 +18,13 @@
         <div style="width: 100vw; height: 100vh;"></div>
       </div>
 
-      <aside v-if="!isIframeMode" class="app-layout__sidebar" >
+      <aside v-if="!isIframeMode && !isPerformanceMode" class="app-layout__sidebar" >
         <sidebar />
       </aside>
 
       <main
         class="app-layout__content"
-        :class="{ 'app-layout__content--full': isCartaRoute || isIframeMode }"
+        :class="{ 'app-layout__content--full': isCartaRoute }"
       >   
         <slot />
       </main>
@@ -35,17 +34,25 @@
 
 <script setup>
 import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
-import { useRoute, useSitesStore, useUserStore } from '#imports'
+import { useRoute, useSitesStore, useUserStore, usecartStore } from '#imports'
 import sidebar from '~/components/sidebar.vue'
 
 const route = useRoute()
 const siteStore = useSitesStore()
 const user = useUserStore()
+const cartStore = usecartStore()
+const config = useRuntimeConfig()
+
+const isMounted = ref(false)
+
+// Modo rendimiento: oculta sidebar y otros elementos pesados
+const isPerformanceMode = computed(() => config.public.rendimiento === true)
 
 // ===== LÓGICA IFRAME =====
+// Solo evaluar isIframeMode tras montar para evitar mismatch (user viene de localStorage en cliente)
 const isIframeMode = computed(() => {
-  // Verificamos que user.user exista para evitar errores, y luego las propiedades
-  return user.user?.iframe && user.user?.token
+  if (!isMounted.value) return false
+  return !!(user.user?.iframe && user.user?.token)
 })
 
 const isOpen = computed(() => {
@@ -88,9 +95,8 @@ const measureTopbar = () => {
 
 /* CSS vars (transform) */
 const layoutVars = computed(() => {
-  // SI es iframe mode, forzamos altura 0 inmediatamente.
-  // SI NO, usamos la altura medida del ref.
-  const h = isIframeMode.value ? 0 : topbarH.value
+  // Usar la altura medida del ref (TopBar siempre visible)
+  const h = topbarH.value
 
   return {
     '--topbar-h': `${h}px`,
@@ -105,10 +111,19 @@ const isCartaRoute = computed(() => {
   return keywords.some(keyword => path.includes(keyword))
 })
 
+const handleBeforeUnload = (e) => {
+  if (cartStore.cart?.length > 0) {
+    e.preventDefault()
+    e.returnValue = ''
+  }
+}
+
 onMounted(() => {
   if (typeof window === 'undefined') return
+  isMounted.value = true
   lastScrollY.value = window.scrollY || 0
   window.addEventListener('scroll', handleScroll, { passive: true })
+  window.addEventListener('beforeunload', handleBeforeUnload)
 
   measureTopbar()
 
@@ -126,6 +141,7 @@ onBeforeUnmount(() => {
   if (typeof window === 'undefined') return
   window.removeEventListener('scroll', handleScroll)
   window.removeEventListener('resize', measureTopbar)
+  window.removeEventListener('beforeunload', handleBeforeUnload)
   if (ro) ro.disconnect()
 })
 </script>
@@ -160,7 +176,7 @@ onBeforeUnmount(() => {
   flex: 1 1 auto;
   min-height: 0;
   width: 100%;
-  max-width: 1600px;
+  max-width: 100vw;
   margin: 0 auto;
   display: flex;
 
@@ -169,7 +185,7 @@ onBeforeUnmount(() => {
 }
 
 @media (min-width: 2049px) {
-  .app-layout__shell { max-width: 1600px; margin: 0 auto; }
+  .app-layout__shell { max-width: 100vw; margin: 0 auto; }
   .app-layout__shell.app-layout__shell--full { max-width: none; margin: 0; }
 }
 
@@ -201,6 +217,17 @@ onBeforeUnmount(() => {
   padding-left: 320px;
 }
 .app-layout__content--full { padding-left: 0; }
+
+/* Modo rendimiento: sin padding para sidebar */
+.app-layout__content:has(+ .app-layout__sidebar:not(:empty)) {
+  padding-left: 320px;
+}
+
+/* Modo rendimiento: sin padding cuando no hay sidebar */
+.app-layout__shell:has(.app-layout__sidebar:empty) .app-layout__content,
+.app-layout__shell:not(:has(.app-layout__sidebar)) .app-layout__content {
+  padding-left: 0;
+}
 
 /* Transición Nuxt */
 .page-enter-active,

@@ -19,8 +19,8 @@
       <ClientOnly>
         <div class="vicio-map-shell">
           <div id="vicio-map" class="vicio-map"></div>
-          <img src="/st-1.png" alt="Sticker 1" class="map-sticker map-sticker--top-left" />
-          <img src="/st-2.png" alt="Sticker 2" class="map-sticker map-sticker--bottom-right" />
+          <img src="/st-1.png" alt="Sticker 1" class="map-sticker map-sticker--top-left" loading="lazy" />
+          <img src="/st-2.png" alt="Sticker 2" class="map-sticker map-sticker--bottom-right" loading="lazy" />
         </div>
       </ClientOnly>
 
@@ -37,7 +37,7 @@
                 @click="setLang('es')"
                 aria-label="Español"
               >
-                <img class="lang-flag" :src="FLAGS.es" alt="ES" />
+                <img class="lang-flag" :src="FLAGS.es" alt="ES" loading="lazy" />
                 <span class="lang-label">ES</span>
               </button>
 
@@ -48,7 +48,7 @@
                 @click="setLang('en')"
                 aria-label="English"
               >
-                <img class="lang-flag" :src="FLAGS.en" alt="EN" />
+                <img class="lang-flag" :src="FLAGS.en" alt="EN" loading="lazy" />
                 <span class="lang-label">EN</span>
               </button>
             </div>
@@ -72,25 +72,24 @@
           </div>
 
           <div class="search-wrapper" v-if="selectedCityId && isGoogleCity">
-            <AutoComplete
+            <InputText
               v-model="addressQuery"
-              :suggestions="suggestions"
-              optionLabel="description"
               :placeholder="t('type_address')"
               class="w-full"
-              :minLength="3"
-              :delay="250"
-              @complete="onAddressComplete"
-              @item-select="onSelectSuggestionEvent"
-              dropdown
+              @input="onAddressInput"
+              @keyup.enter="validateAddress"
+            />
+            <Button
+              v-if="addressQuery.trim().length >= 3"
+              @click="validateAddress"
+              :disabled="isCheckingAddress"
+              class="btn-validate-address"
+              style="margin-top: 0.5rem; width: 100%;"
             >
-              <template #item="{ item }">
-                <div class="ac-item">
-                  <Icon name="mdi:map-marker-outline" class="item-icon" />
-                  <span>{{ item.description }}</span>
-                </div>
-              </template>
-            </AutoComplete>
+              <ProgressSpinner v-if="isCheckingAddress" style="width: 1em; height: 1em;" />
+              <Icon v-else name="mdi:map-search-outline" size="1.2em" />
+              <span>{{ t('validate_address') }}</span>
+            </Button>
           </div>
 
           <div v-if="selectedCityId && isParamsCity" class="params-box">
@@ -232,6 +231,7 @@
                 @error="onImgError(store)"
                 class="store-img"
                 :alt="t('store_photo_alt')"
+                loading="lazy"
               />
             </div>
 
@@ -345,19 +345,26 @@
             </div>
             <div v-if="isGoogleCity">
               <h3 class="modal-title">{{ t('where_are_you') }}</h3>
-              <AutoComplete
+              <InputText
                 v-model="modalAddressQuery"
-                :suggestions="modalSuggestions"
-                optionLabel="description"
                 :placeholder="t('address_example')"
                 class="w-full"
-                :minLength="3"
                 style="width: 100%;"
-                :delay="250"
-                @complete="onModalAddressComplete"
-                @item-select="onSelectModalSuggestionEvent"
-                dropdown
+                @keyup.enter="validateModalAddress"
               />
+              <Button
+                v-if="modalAddressQuery.trim().length >= 3"
+                @click="validateModalAddress"
+                :disabled="isCheckingModalAddress"
+                class="btn-action btn-delivery full-width"
+                style="margin-top: 0.75rem;"
+              >
+                <template #icon>
+                  <ProgressSpinner v-if="isCheckingModalAddress" style="width: 1em; height: 1em;" />
+                  <Icon v-else name="mdi:map-search-outline" size="1.2em" />
+                </template>
+                <span>{{ t('validate_address') }}</span>
+              </Button>
               <div v-if="modalAddressError" class="modal-error">{{ modalAddressError }}</div>
             </div>
             <div v-else class="params-flow-modal">
@@ -482,6 +489,9 @@ import Select from 'primevue/select'
 import Button from 'primevue/button'
 import ProgressSpinner from 'primevue/progressspinner'
 
+/* Address Service */
+import { checkAddress } from '~/service/location/addressService'
+
 /* =======================
    i18n local + persistencia
    ======================= */
@@ -513,6 +523,7 @@ const I18N = {
     city: 'Ciudad',
     all_cities: 'Todas las ciudades',
     type_address: 'Escribe tu dirección...',
+    validate_address: 'Validar Dirección',
     neighborhood_sector: 'Barrio / Sector',
     loading_neighborhoods: 'Cargando barrios...',
     type_to_search: 'Escribe para buscar...',
@@ -560,6 +571,7 @@ const I18N = {
     city: 'City',
     all_cities: 'All cities',
     type_address: 'Type your address...',
+    validate_address: 'Validate Address',
     neighborhood_sector: 'Neighborhood / Area',
     loading_neighborhoods: 'Loading neighborhoods...',
     type_to_search: 'Type to search...',
@@ -612,7 +624,6 @@ function t(key) {
    ======================= */
 const route = useRoute()
 const BACKEND_BASE = 'https://backend.salchimonster.com'
-const LOCATIONS_BASE = 'https://api.locations.salchimonster.com'
 const URI = 'https://backend.salchimonster.com'
 const MAIN_DOMAIN = 'salchimonster.com'
 
@@ -743,72 +754,169 @@ const selectedCityObj = computed(() => {
 })
 
 /* =======================
-   Google Sidebar
+   Google Sidebar - Address Validation
    ======================= */
 const addressQuery = ref('')
-const suggestions = ref([])
 const coverageResult = ref(null)
 const dropoffMarker = ref(null)
+const isCheckingAddress = ref(false)
 let dropoffIcon = null
 
-function normalizePredictions(predictions) {
-  return (predictions || []).map((p) => ({
-    place_id: p.place_id,
-    description: p.description,
-  }))
-}
-
-async function onAddressComplete(e) {
-  coverageResult.value = null
-  const q = (e.query || '').trim()
-  if (q.length < 3) {
-    suggestions.value = []
+async function validateAddress() {
+  const address = addressQuery.value.trim()
+  if (address.length < 3) {
+    coverageResult.value = null
     return
   }
 
+  isCheckingAddress.value = true
+  coverageResult.value = null
+
   try {
-    const params = new URLSearchParams({
-      input: q,
-      language: lang.value,
-      countries: 'co',
-      limit: '5',
-      session_token: sessionToken.value
-    })
-    if (Number(selectedCityId.value)) {
-      const c = cities.value.find((x) => Number(x.city_id) === Number(selectedCityId.value))
-      if (c) params.append('city', c.city_name)
+    const cityObj = selectedCityId.value 
+      ? cities.value.find((x) => Number(x.city_id) === Number(selectedCityId.value))
+      : null
+
+    if (!cityObj?.city_name) {
+      throw new Error('Debe seleccionar una ciudad primero')
     }
-    const res = await fetch(`${LOCATIONS_BASE}/co/places/autocomplete?${params}`)
-    const data = await res.json()
-    suggestions.value = normalizePredictions(data.predictions)
-  } catch {
-    suggestions.value = []
+
+    const result = await checkAddress({
+      address,
+      country: 'colombia',
+      city: cityObj.city_name
+    })
+
+    // Transform the response to match the expected format
+    if (result && result.latitude && result.longitude) {
+      // Find the nearest site from matching polygons
+      let nearestSite = null
+      let minDistance = Infinity
+      let inCoverage = false
+
+      if (result.matching_polygons && result.matching_polygons.length > 0) {
+        // Get the first matching polygon with a site
+        const matchingPolygon = result.matching_polygons.find(p => p.is_inside && p.site)
+        if (matchingPolygon && matchingPolygon.site) {
+          const site = matchingPolygon.site
+          nearestSite = {
+            site_id: site.site_id,
+            site_name: site.site_name,
+            subdomain: site.subdomain || null,
+            city_id: site.city_id || null,
+            city: site.city_name || null,
+            site_address: site.site_address || null
+          }
+          inCoverage = matchingPolygon.is_inside
+          
+          // Calculate approximate distance (simple haversine)
+          if (result.latitude && result.longitude && site.location) {
+            const [siteLat, siteLng] = site.location
+            const R = 6371 // Earth radius in km
+            const dLat = (siteLat - result.latitude) * Math.PI / 180
+            const dLng = (siteLng - result.longitude) * Math.PI / 180
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                      Math.cos(result.latitude * Math.PI / 180) * Math.cos(siteLat * Math.PI / 180) *
+                      Math.sin(dLng/2) * Math.sin(dLng/2)
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
+            minDistance = R * c
+          }
+        }
+      }
+
+      // If no matching polygon, find nearest store
+      if (!nearestSite && stores.value.length > 0) {
+        let nearest = null
+        let minDist = Infinity
+        stores.value.forEach(store => {
+          const R = 6371
+          const dLat = (store.lat - result.latitude) * Math.PI / 180
+          const dLng = (store.lng - result.longitude) * Math.PI / 180
+          const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                    Math.cos(result.latitude * Math.PI / 180) * Math.cos(store.lat * Math.PI / 180) *
+                    Math.sin(dLng/2) * Math.sin(dLng/2)
+          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
+          const dist = R * c
+          if (dist < minDist) {
+            minDist = dist
+            nearest = store
+          }
+        })
+        if (nearest) {
+          nearestSite = {
+            site_id: nearest.id,
+            site_name: nearest.name.replace('SALCHIMONSTER ', ''),
+            subdomain: nearest.subdomain,
+            city_id: nearest.cityId,
+            city: nearest.city,
+            site_address: nearest.address
+          }
+          minDistance = minDist
+        }
+      }
+
+      // Obtener el costo de domicilio de Rappi si está disponible
+      let deliveryCost = 0
+      if (result.rappi_validation && result.rappi_validation.estimated_price) {
+        deliveryCost = Number(result.rappi_validation.estimated_price) || 0
+      }
+
+      // Usar formatted_address directamente del backend (como en LocationManager)
+      // El backend ya incluye zona, barrio y toda la información completa
+      coverageResult.value = {
+        formatted_address: result.formatted_address || result.address,
+        address: result.address,
+        lat: result.latitude,
+        lng: result.longitude,
+        geocoded: result.geocoded,
+        is_inside_any: result.is_inside_any,
+        delivery_cost_cop: deliveryCost,
+        rappi_validation: result.rappi_validation,
+        nearest: nearestSite ? {
+          site: nearestSite,
+          distance_km: minDistance,
+          in_coverage: inCoverage || result.is_inside_any
+        } : null
+      }
+
+      // Update map marker
+      if (map.value && leafletModule.value && result.latitude && result.longitude) {
+        const L = leafletModule.value
+        if (dropoffMarker.value) map.value.removeLayer(dropoffMarker.value)
+        dropoffMarker.value = L.marker([result.latitude, result.longitude], { icon: dropoffIcon }).addTo(map.value)
+        map.value.setView([result.latitude, result.longitude], 14)
+      }
+    } else {
+      // Usar formatted_address directamente del backend (como en LocationManager)
+      coverageResult.value = {
+        formatted_address: result.formatted_address || result.address,
+        address: result.address,
+        lat: null,
+        lng: null,
+        geocoded: false,
+        is_inside_any: false,
+        delivery_cost_cop: 0,
+        nearest: null
+      }
+    }
+  } catch (error) {
+    console.error('Error validating address:', error)
+    coverageResult.value = null
+    // Mostrar mensaje de error al usuario si es necesario
+    if (error.message && error.message.includes('conectar')) {
+      alert(lang.value === 'en'
+        ? 'Error: Could not connect to address validation server. Please try again later.'
+        : 'Error: No se pudo conectar con el servidor de validación. Intenta de nuevo más tarde.'
+      )
+    }
+  } finally {
+    isCheckingAddress.value = false
   }
 }
 
-function onSelectSuggestionEvent(ev) {
-  const item = ev.value
-  if (!item?.place_id) return
-  addressQuery.value = item.description
-  suggestions.value = []
-  fetchCoverageDetails(item.place_id)
-}
-
-async function fetchCoverageDetails(placeId) {
-  try {
-    const res = await fetch(
-      `${LOCATIONS_BASE}/co/places/coverage-details?place_id=${placeId}&session_token=${sessionToken.value}&language=${lang.value}`
-    )
-    const data = await res.json()
-    coverageResult.value = data
-
-    if (map.value && leafletModule.value && data.lat) {
-      const L = leafletModule.value
-      if (dropoffMarker.value) map.value.removeLayer(dropoffMarker.value)
-      dropoffMarker.value = L.marker([data.lat, data.lng], { icon: dropoffIcon }).addTo(map.value)
-      map.value.setView([data.lat, data.lng], 14)
-    }
-  } catch {}
+function onAddressInput() {
+  // Solo limpiar resultados cuando el usuario escribe, no validar automáticamente
+  coverageResult.value = null
 }
 
 /* =======================
@@ -861,6 +969,7 @@ async function loadNeighborhoodsByCity(cityId) {
   }
 }
 
+
 /* =======================
    MODAL STATE
    ======================= */
@@ -868,12 +977,12 @@ const isModalOpen = ref(false)
 const modalStore = ref(null)
 const modalStep = ref(1)
 const modalAddressQuery = ref('')
-const modalSuggestions = ref([])
 const modalCoverageResult = ref(null)
 const modalAddressError = ref('')
 const modalSelectedNeighborhood = ref(null)
 const modalNbSuggestions = ref([])
 const modalParamAddress = ref('')
+const isCheckingModalAddress = ref(false)
 
 /* =======================
    CITY MAP STATUS
@@ -917,6 +1026,11 @@ watch(lang, () => {
   coverageResult.value = null
 })
 
+watch(addressQuery, () => {
+  // Solo limpiar resultados cuando cambia la dirección
+  coverageResult.value = null
+})
+
 /* =======================
    MODAL LOGIC
    ======================= */
@@ -926,12 +1040,12 @@ async function openModal(store) {
   modalStep.value = 1
   isModalOpen.value = true
   modalAddressQuery.value = ''
-  modalSuggestions.value = []
   modalCoverageResult.value = null
   modalAddressError.value = ''
   modalSelectedNeighborhood.value = null
   modalNbSuggestions.value = []
   modalParamAddress.value = ''
+  isCheckingModalAddress.value = false
 
   const cityId = store.cityId || store.city_id
   if (cityId && !isGoogleMapsEnabled(cityId)) {
@@ -966,61 +1080,148 @@ async function handleModalOption(orderType) {
   dispatchToSite(modalStore.value, orderType, { mode: 'simple', city: selectedCityObj.value })
 }
 
-async function onModalAddressComplete(e) {
-  const q = (e.query || '').trim()
-  if (q.length < 3) {
-    modalSuggestions.value = []
+async function validateModalAddress() {
+  const address = modalAddressQuery.value.trim()
+  if (address.length < 3) {
+    modalCoverageResult.value = null
+    modalAddressError.value = ''
     return
   }
-  try {
-    const params = new URLSearchParams()
-    params.append('input', q)
-    params.append('language', lang.value)
-    params.append('countries', 'co')
-    params.append('limit', '4')
-    params.append('session_token', sessionToken.value)
-    if (modalStore.value?.city) params.append('city', modalStore.value.city)
 
-    const res = await fetch(`${LOCATIONS_BASE}/co/places/autocomplete?${params}`)
-    const data = await res.json()
-    modalSuggestions.value = normalizePredictions(data.predictions)
-  } catch {
-    modalSuggestions.value = []
-  }
-}
-
-function onSelectModalSuggestionEvent(ev) {
-  const item = ev.value
-  if (!item?.place_id) return
-  onSelectModalSuggestion(item)
-}
-
-async function onSelectModalSuggestion(s) {
-  modalAddressQuery.value = s.description
   modalStep.value = 3
+  modalAddressError.value = ''
+  modalCoverageResult.value = null
+  isCheckingModalAddress.value = true
+
   try {
-    const params = new URLSearchParams({
-      place_id: s.place_id,
-      session_token: sessionToken.value,
-      language: lang.value
+    // Obtener la ciudad del modal store o de la ciudad seleccionada
+    let cityName = null
+    if (modalStore.value?.city) {
+      cityName = modalStore.value.city
+    } else if (selectedCityId.value) {
+      const cityObj = cities.value.find((x) => Number(x.city_id) === Number(selectedCityId.value))
+      cityName = cityObj?.city_name
+    }
+
+    if (!cityName) {
+      modalAddressError.value = (lang.value === 'en')
+        ? 'City is required to validate the address.'
+        : 'La ciudad es requerida para validar la dirección.'
+      modalStep.value = 2
+      return
+    }
+
+    const result = await checkAddress({
+      address,
+      country: 'colombia',
+      city: cityName
     })
-    const res = await fetch(`${LOCATIONS_BASE}/co/places/coverage-details?${params}`)
-    const data = await res.json()
-    modalCoverageResult.value = data
-    const ot = getExactOrderType(modalStore.value.id, 3)
-    if (ot) {
-      modalStep.value = 4
+
+    // Transform the response to match the expected format
+    if (result && result.latitude && result.longitude) {
+      // Find the nearest site from matching polygons
+      let nearestSite = null
+      let minDistance = Infinity
+      let inCoverage = false
+
+      if (result.matching_polygons && result.matching_polygons.length > 0) {
+        // Get the first matching polygon with a site
+        const matchingPolygon = result.matching_polygons.find(p => p.is_inside && p.site)
+        if (matchingPolygon && matchingPolygon.site) {
+          const site = matchingPolygon.site
+          nearestSite = {
+            site_id: site.site_id,
+            site_name: site.site_name,
+            subdomain: site.subdomain || null,
+            city_id: site.city_id || null,
+            city: site.city_name || null,
+            site_address: site.site_address || null
+          }
+          inCoverage = matchingPolygon.is_inside
+          
+          // Calculate approximate distance
+          if (result.latitude && result.longitude && site.location) {
+            const [siteLat, siteLng] = site.location
+            const R = 6371
+            const dLat = (siteLat - result.latitude) * Math.PI / 180
+            const dLng = (siteLng - result.longitude) * Math.PI / 180
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                      Math.cos(result.latitude * Math.PI / 180) * Math.cos(siteLat * Math.PI / 180) *
+                      Math.sin(dLng/2) * Math.sin(dLng/2)
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
+            minDistance = R * c
+          }
+        }
+      }
+
+      // If no matching polygon, use the modal store
+      if (!nearestSite && modalStore.value) {
+        nearestSite = {
+          site_id: modalStore.value.id,
+          site_name: modalStore.value.name.replace('SALCHIMONSTER ', ''),
+          subdomain: modalStore.value.subdomain,
+          city_id: modalStore.value.cityId,
+          city: modalStore.value.city,
+          site_address: modalStore.value.address
+        }
+        inCoverage = result.is_inside_any
+      }
+
+      // Obtener el costo de domicilio de Rappi si está disponible
+      let deliveryCost = 0
+      if (result.rappi_validation && result.rappi_validation.estimated_price) {
+        deliveryCost = Number(result.rappi_validation.estimated_price) || 0
+      }
+
+      // Usar formatted_address directamente del backend (como en LocationManager)
+      // El backend ya incluye zona, barrio y toda la información completa
+      modalCoverageResult.value = {
+        formatted_address: result.formatted_address || result.address,
+        address: result.address,
+        lat: result.latitude,
+        lng: result.longitude,
+        geocoded: result.geocoded,
+        is_inside_any: result.is_inside_any,
+        delivery_cost_cop: deliveryCost,
+        rappi_validation: result.rappi_validation,
+        nearest: nearestSite ? {
+          site: nearestSite,
+          distance_km: minDistance,
+          in_coverage: inCoverage || result.is_inside_any
+        } : null
+      }
+
+      const ot = getExactOrderType(modalStore.value.id, 3)
+      if (ot) {
+        modalStep.value = 4
+      } else {
+        modalAddressError.value = (lang.value === 'en')
+          ? 'Delivery service is not available for this store.'
+          : 'El servicio de domicilio no está disponible en esta sede.'
+        modalStep.value = 2
+      }
     } else {
       modalAddressError.value = (lang.value === 'en')
-        ? 'Delivery service is not available for this store.'
-        : 'El servicio de domicilio no está disponible en esta sede.'
+        ? 'Could not geocode the address. Please try a more specific address.'
+        : 'No se pudo geocodificar la dirección. Intenta con una dirección más específica.'
       modalStep.value = 2
     }
-  } catch {
-    modalAddressError.value = (lang.value === 'en')
-      ? 'Error validating address.'
-      : 'Error validando dirección.'
+  } catch (error) {
+    console.error('Error validating address:', error)
+    if (error.message && error.message.includes('conectar')) {
+      modalAddressError.value = (lang.value === 'en')
+        ? 'Could not connect to address validation server. Please try again later.'
+        : 'No se pudo conectar con el servidor de validación. Intenta de nuevo más tarde.'
+    } else if (error.message && error.message.includes('ciudad')) {
+      modalAddressError.value = error.message
+    } else {
+      modalAddressError.value = (lang.value === 'en')
+        ? 'Error validating address. Please check the address and try again.'
+        : 'Error validando dirección. Verifica la dirección e intenta de nuevo.'
+    }
     modalStep.value = 2
+  } finally {
+    isCheckingModalAddress.value = false
   }
 }
 
@@ -1052,6 +1253,27 @@ function onDispatchModalParams() {
     exactAddress: modalParamAddress.value
   })
 }
+
+function onDispatchParamsDelivery() {
+  if (!canDispatchParams.value) return
+  const store = paramAssignedStore.value
+  if (!store) return
+  const ot = getExactOrderType(store.id, 3)
+  if (!ot) {
+    alert(lang.value === 'en'
+      ? 'This store does not have delivery enabled.'
+      : 'Esta sede no tiene habilitado domicilio.'
+    )
+    return
+  }
+  dispatchToSite(store, ot, {
+    mode: 'params',
+    city: selectedCityObj.value,
+    neighborhood: selectedNeighborhood.value,
+    exactAddress: paramExactAddress.value
+  })
+}
+
 
 function confirmGoogleDispatch() {
   if (!modalCoverageResult.value) return
@@ -1085,10 +1307,13 @@ async function loadPaymentConfig() {
 
 async function loadCityMapStatus() {
   try {
-    const res = await fetch(`${LOCATIONS_BASE}/data/cities_google_map_status`)
+    const res = await fetch('https://api.locations.salchimonster.com/data/cities_google_map_status')
     const data = await res.json()
-    cityMapStatus.value = data.data.cities || []
-  } catch (e) { console.error('Error loading city map status', e) }
+    cityMapStatus.value = data.data?.cities || []
+  } catch (e) { 
+    console.error('Error loading city map status', e)
+    cityMapStatus.value = []
+  }
 }
 
 async function loadCities() {
@@ -1182,10 +1407,16 @@ async function dispatchToSite(manualStore, orderTypeObj, extra = { mode: 'simple
 
     if (isDelivery && useGoogleMaps && extra?.mode === 'gmaps' && extra?.coverageData) {
       const coverageData = extra.coverageData
+      // Usar el costo de Rappi si está disponible, sino el que viene en coverageData
+      const deliveryCost = coverageData.rappi_validation?.estimated_price 
+        ? Number(coverageData.rappi_validation.estimated_price)
+        : (coverageData.delivery_cost_cop || 0)
+      
       userSiteData = {
         ...coverageData,
-        delivery_cost_cop: coverageData.delivery_cost_cop || 0,
-        formatted_address: coverageData.formatted_address
+        delivery_cost_cop: deliveryCost,
+        formatted_address: coverageData.formatted_address,
+        rappi_validation: coverageData.rappi_validation
       }
       finalAddress = coverageData.formatted_address || ''
       finalLat = coverageData.lat || 0
@@ -1287,25 +1518,6 @@ async function dispatchToSite(manualStore, orderTypeObj, extra = { mode: 'simple
   }
 }
 
-function onDispatchParamsDelivery() {
-  if (!canDispatchParams.value) return
-  const store = paramAssignedStore.value
-  if (!store) return
-  const ot = getExactOrderType(store.id, 3)
-  if (!ot) {
-    alert(lang.value === 'en'
-      ? 'This store does not have delivery enabled.'
-      : 'Esta sede no tiene habilitado domicilio.'
-    )
-    return
-  }
-  dispatchToSite(store, ot, {
-    mode: 'params',
-    city: selectedCityObj.value,
-    neighborhood: selectedNeighborhood.value,
-    exactAddress: paramExactAddress.value
-  })
-}
 
 /* =======================
    IMAGES
@@ -1367,7 +1579,6 @@ async function onCityChange() {
   selectedCityId.value = Number(selectedCityId.value || 0)
   coverageResult.value = null
   addressQuery.value = ''
-  suggestions.value = []
   neighborhoods.value = []
   selectedNeighborhood.value = null
   nbSuggestions.value = []
@@ -1426,7 +1637,7 @@ onMounted(async () => {
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap' }).addTo(map.value)
   const fireIcon = L.divIcon({
     className: 'leaflet-div-icon fire-icon',
-    html: `<img src="https://cdn.deliclever.com/viciocdn/ecommerce/icon-fire-color.gif" class="fire-img" style="width:100%;height:100%"/>`,
+    html: `<img src="https://cdn.deliclever.com/viciocdn/ecommerce/icon-fire-color.gif" class="fire-img" style="width:100%;height:100%" loading="lazy"/>`,
     iconSize: [42, 42]
   })
   dropoffIcon = L.icon({
@@ -1458,11 +1669,19 @@ onMounted(async () => {
    SEO
    ======================= */
 const pageTitle = computed(() => {
-  return 'Salchimonster Colombia'
+  return 'Salchimonster Colombia - Menú · DOMICILIOS · Sedes · PEDÍ YA'
 })
 
 const pageDescription = computed(() => {
-  return 'Elige tu Salchimonster más cercano y pide a domicilio. Encuentra la sede más cercana a tu ubicación en Colombia.'
+  return 'Salchimonster Colombia - La mejor salchipapa de Colombia. Pide a domicilio, encuentra tu sede más cercana. Menú completo, domicilios, sedes en todo Colombia. Pedidos online disponibles.'
+})
+
+const logoUrl = 'https://gestion.salchimonster.com/images/logo.png'
+const siteUrl = computed(() => {
+  if (typeof window !== 'undefined') {
+    return window.location.origin
+  }
+  return 'https://salchimonster.com'
 })
 
 useHead(() => ({
@@ -1470,12 +1689,69 @@ useHead(() => ({
   meta: [
     { name: 'description', content: pageDescription.value },
     { name: 'robots', content: 'index, follow' },
+    { name: 'keywords', content: 'salchimonster, salchipapa, domicilio, delivery, colombia, pedidos online, menú, sedes, restaurante, comida rápida, salchipapas, hamburguesas, perros calientes' },
+    // Open Graph
     { property: 'og:title', content: pageTitle.value },
     { property: 'og:description', content: pageDescription.value },
     { property: 'og:type', content: 'website' },
+    { property: 'og:url', content: `${siteUrl.value}${route.fullPath}` },
+    { property: 'og:image', content: logoUrl },
+    { property: 'og:image:width', content: '1200' },
+    { property: 'og:image:height', content: '630' },
+    { property: 'og:image:alt', content: 'Salchimonster Logo' },
+    { property: 'og:site_name', content: 'Salchimonster' },
+    { property: 'og:locale', content: 'es_CO' },
+    // Twitter Card
     { name: 'twitter:card', content: 'summary_large_image' },
     { name: 'twitter:title', content: pageTitle.value },
-    { name: 'twitter:description', content: pageDescription.value }
+    { name: 'twitter:description', content: pageDescription.value },
+    { name: 'twitter:image', content: logoUrl },
+    { name: 'twitter:image:alt', content: 'Salchimonster Logo' },
+    // Additional SEO
+    { name: 'author', content: 'Salchimonster' },
+    { name: 'language', content: 'es' },
+    { name: 'geo.region', content: 'CO' },
+    { name: 'geo.placename', content: 'Colombia' },
+    { name: 'application-name', content: 'Salchimonster' }
+  ],
+  link: [
+    { rel: 'canonical', href: `${siteUrl.value}${route.fullPath}` },
+    { rel: 'sitemap', type: 'application/xml', href: '/sitemap.xml' }
+  ],
+  script: [
+    {
+      type: 'application/ld+json',
+      children: JSON.stringify({
+        '@context': 'https://schema.org',
+        '@type': 'BreadcrumbList',
+        itemListElement: [
+          {
+            '@type': 'ListItem',
+            position: 1,
+            name: 'Inicio',
+            item: siteUrl.value
+          },
+          {
+            '@type': 'ListItem',
+            position: 2,
+            name: 'Menú',
+            item: `${siteUrl.value}/menu`
+          },
+          {
+            '@type': 'ListItem',
+            position: 3,
+            name: 'Domicilios',
+            item: `${siteUrl.value}/domicilios`
+          },
+          {
+            '@type': 'ListItem',
+            position: 4,
+            name: 'Sedes',
+            item: `${siteUrl.value}/sedes`
+          }
+        ]
+      })
+    }
   ]
 }))
 </script>
@@ -1709,6 +1985,33 @@ useHead(() => ({
 }
 .btn-action:disabled { opacity: .55; cursor: not-allowed; filter: grayscale(1); }
 .btn-action:active { transform: scale(0.97); }
+
+.btn-validate-address {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.7rem;
+  border-radius: 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  cursor: pointer;
+  border: none;
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+  transition: all 0.2s ease;
+}
+.btn-validate-address:hover {
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  box-shadow: 0 6px 15px rgba(59, 130, 246, 0.4);
+  transform: translateY(-1px);
+}
+.btn-validate-address:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
 
 /* ✅ Botón Domicilio: Naranja vibrante */
 .btn-delivery {

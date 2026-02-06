@@ -3,7 +3,7 @@ import { ref, watch } from 'vue'
 import { URI } from '../service/conection'
 
 export const useSitesStore = defineStore(
-  'site-d3sddfs422',
+  'site-d3sd32dfs422',
   () => {
     // 1. HELPER
     const emptyNeighborhood = () => ({
@@ -30,7 +30,7 @@ export const useSitesStore = defineStore(
       city: null,
       site: {
         site_id: 1,
-        site_name: 'PRINCIPAL',
+        site_name: 'SALCHIMONSTER',
         site_address: null,
         site_phone: null,
         site_business_hours: null,
@@ -49,6 +49,7 @@ export const useSitesStore = defineStore(
       lat: null,
       lng: null,
       mode: 'barrios',
+      order_type: null, // Tipo de orden (delivery, pickup, etc.)
     })
 
     const visibles = ref({
@@ -110,9 +111,18 @@ export const useSitesStore = defineStore(
         location.value.place_id = data.place_id || ''
       if (data?.lat !== undefined) location.value.lat = data.lat ?? null
       if (data?.lng !== undefined) location.value.lng = data.lng ?? null
+      if (data?.order_type !== undefined) location.value.order_type = data.order_type
 
       current_delivery.value = price ?? 0
       visibles.value.currentSite = false
+    }
+
+    function setOrderType(orderType) {
+      location.value.order_type = orderType
+    }
+
+    function clearOrderType() {
+      location.value.order_type = null
     }
 
     function setVisible(item, value) {
@@ -217,13 +227,15 @@ export const useSitesStore = defineStore(
       setNeighborhoodPriceCero,
       fetchSiteStatus,
       initStatusWatcher,
+      setOrderType,
+      clearOrderType,
     }
   },
   // 3. CONFIGURACIÓN DEL PLUGIN DE PERSISTENCIA
   {
     persist: {
       // Opcional: Para mantener el mismo nombre de key que tenías antes
-      key: 'site-session-hash', 
+      key: 'site-sess32ion-hash', 
       // IMPORTANTE: Array con los nombres de las variables que quieres guardar
       paths: ['session_hash'],
     },

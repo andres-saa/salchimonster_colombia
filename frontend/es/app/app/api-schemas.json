@@ -1,0 +1,394 @@
+{
+  "product_card": {
+    "description": "Estructura mínima para mostrar una card de producto en el menú",
+    "fields": {
+      "id": {
+        "type": "number",
+        "required": true,
+        "description": "ID del producto (producto_id)"
+      },
+      "name_es": {
+        "type": "string",
+        "required": true,
+        "description": "Nombre en español (productogeneral_descripcion o productogeneral_descripcionweb)"
+      },
+      "name_en": {
+        "type": "string",
+        "required": false,
+        "description": "Nombre en inglés (english_name)"
+      }, 
+      "description_es": {
+        "type": "string",
+        "required": false,
+        "description": "Descripción corta en español (productogeneral_descripcionadicional o productogeneral_descripcionweb)"
+      },
+      "description_en": {
+        "type": "string",
+        "required": false,
+        "description": "Descripción corta en inglés (english_description)"
+      },
+      "base_price": {
+        "type": "number",
+        "required": true,
+        "description": "Precio base (productogeneral_precio)"
+      },
+      "presentation_price": {
+        "type": "number",
+        "required": false,
+        "description": "Precio de la primera presentación (lista_presentacion[0].producto_precio) - se usa si existe, si no se usa base_price"
+      },
+      "discount_amount": {
+        "type": "number",
+        "required": false,
+        "default": 0,
+        "description": "Monto del descuento en pesos"
+      },
+      "discount_percent": {
+        "type": "number",
+        "required": false,
+        "default": 0,
+        "description": "Porcentaje de descuento (0-100)"
+      },
+      "image_url": {
+        "type": "string",
+        "required": false,
+        "description": "URL de la imagen (productogeneral_urlimagen) - puede ser relativa o absoluta"
+      },
+      "image_identifier": {
+        "type": "string",
+        "required": false,
+        "description": "Identificador de imagen para generar srcset (img_identifier)"
+      },
+      "is_combo": {
+        "type": "boolean",
+        "required": false,
+        "default": false,
+        "description": "Indica si es un combo (productogeneral_escombo === '1')"
+      },
+      "max_flavor": {
+        "type": "number",
+        "required": false,
+        "default": 0,
+        "description": "Número máximo de sabores permitidos"
+      }
+    },
+    "example": {
+      "id": 123,
+      "name_es": "Hamburguesa Clásica",
+      "name_en": "Classic Burger",
+      "description_es": "Deliciosa hamburguesa con carne 100% res",
+      "description_en": "Delicious 100% beef burger",
+      "base_price": 25000,
+      "presentation_price": 25000,
+      "discount_amount": 2500,
+      "discount_percent": 10,
+      "image_url": "https://img.restpe.com/abc123.jpg",
+      "image_identifier": "abc123",
+      "is_combo": false,
+      "max_flavor": 0
+    }
+  },
+  "category": {
+    "description": "Estructura mínima para mostrar una categoría en el menú",
+    "fields": {
+      "id": {
+        "type": "number",
+        "required": true,
+        "description": "ID de la categoría (categoria_id)"
+      },
+      "name_es": {
+        "type": "string",
+        "required": true,
+        "description": "Nombre en español (categoria_descripcion)"
+      },
+      "name_en": {
+        "type": "string",
+        "required": false,
+        "description": "Nombre en inglés (english_name)"
+      },
+      "visible": {
+        "type": "boolean",
+        "required": true,
+        "description": "Indica si la categoría es visible"
+      },
+      "thumbnail_image": {
+        "type": "string",
+        "required": false,
+        "description": "URL de la imagen del primer producto (para mostrar en la barra de categorías)"
+      }
+    },
+    "example": {
+      "id": 1,
+      "name_es": "Hamburguesas",
+      "name_en": "Burgers",
+      "visible": true,
+      "thumbnail_image": "https://img.restpe.com/thumb123.jpg"
+    }
+  },
+  "product_detail": {
+    "description": "Estructura completa para mostrar un producto en la página de detalle",
+    "fields": {
+      "id": {
+        "type": "number",
+        "required": true,
+        "description": "ID del producto (producto_id)"
+      },
+      "name_es": {
+        "type": "string",
+        "required": true,
+        "description": "Nombre en español"
+      },
+      "name_en": {
+        "type": "string",
+        "required": false,
+        "description": "Nombre en inglés"
+      },
+      "description_es": {
+        "type": "string",
+        "required": false,
+        "description": "Descripción completa en español"
+      },
+      "description_en": {
+        "type": "string",
+        "required": false,
+        "description": "Descripción completa en inglés"
+      },
+      "base_price": {
+        "type": "number",
+        "required": true,
+        "description": "Precio base"
+      },
+      "discount_amount": {
+        "type": "number",
+        "required": false,
+        "default": 0
+      },
+      "discount_percent": {
+        "type": "number",
+        "required": false,
+        "default": 0
+      },
+      "image_url": {
+        "type": "string",
+        "required": false
+      },
+      "image_identifier": {
+        "type": "string",
+        "required": false
+      },
+      "is_combo": {
+        "type": "boolean",
+        "required": false,
+        "default": false
+      },
+      "max_flavor": {
+        "type": "number",
+        "required": false,
+        "default": 0
+      },
+      "presentations": {
+        "type": "array",
+        "required": false,
+        "description": "Lista de presentaciones disponibles",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "number",
+              "description": "ID de la presentación"
+            },
+            "name_es": {
+              "type": "string",
+              "description": "Nombre de la presentación en español"
+            },
+            "name_en": {
+              "type": "string",
+              "description": "Nombre de la presentación en inglés"
+            },
+            "price": {
+              "type": "number",
+              "description": "Precio de esta presentación"
+            }
+          }
+        }
+      },
+      "base_products": {
+        "type": "array",
+        "required": false,
+        "description": "Lista de productos base (para combos o personalizaciones)",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "number"
+            },
+            "name_es": {
+              "type": "string"
+            },
+            "name_en": {
+              "type": "string"
+            },
+            "image_url": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "additionals": {
+        "type": "array",
+        "required": false,
+        "description": "Lista de adicionales disponibles para este producto",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "number"
+            },
+            "name_es": {
+              "type": "string"
+            },
+            "name_en": {
+              "type": "string"
+            },
+            "price": {
+              "type": "number"
+            }
+          }
+        }
+      }
+    },
+    "example": {
+      "id": 123,
+      "name_es": "Hamburguesa Clásica",
+      "name_en": "Classic Burger",
+      "description_es": "Deliciosa hamburguesa con carne 100% res, lechuga, tomate, cebolla y nuestra salsa especial",
+      "description_en": "Delicious 100% beef burger with lettuce, tomato, onion and our special sauce",
+      "base_price": 25000,
+      "discount_amount": 2500,
+      "discount_percent": 10,
+      "image_url": "https://img.restpe.com/abc123.jpg",
+      "image_identifier": "abc123",
+      "is_combo": false,
+      "max_flavor": 0,
+      "presentations": [
+        {
+          "id": 1,
+          "name_es": "Individual",
+          "name_en": "Single",
+          "price": 25000
+        },
+        {
+          "id": 2,
+          "name_es": "Combo",
+          "name_en": "Combo",
+          "price": 35000
+        }
+      ],
+      "base_products": [],
+      "additionals": [
+        {
+          "id": 10,
+          "name_es": "Queso extra",
+          "name_en": "Extra cheese",
+          "price": 2000
+        }
+      ]
+    }
+  },
+  "menu_structure": {
+    "description": "Estructura del menú completo con categorías y productos (para el endpoint principal)",
+    "fields": {
+      "categories": {
+        "type": "array",
+        "required": true,
+        "description": "Lista de categorías",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "number",
+              "description": "ID de la categoría"
+            },
+            "name_es": {
+              "type": "string",
+              "description": "Nombre en español"
+            },
+            "name_en": {
+              "type": "string",
+              "description": "Nombre en inglés"
+            },
+            "visible": {
+              "type": "boolean",
+              "description": "Si es visible"
+            },
+            "thumbnail_image": {
+              "type": "string",
+              "description": "Imagen thumbnail"
+            },
+            "products": {
+              "type": "array",
+              "description": "Lista de productos (usar estructura product_card)",
+              "items": {
+                "$ref": "#/product_card/example"
+              }
+            }
+          }
+        }
+      }
+    },
+    "example": {
+      "categories": [
+        {
+          "id": 1,
+          "name_es": "Hamburguesas",
+          "name_en": "Burgers",
+          "visible": true,
+          "thumbnail_image": "https://img.restpe.com/thumb123.jpg",
+          "products": [
+            {
+              "id": 123,
+              "name_es": "Hamburguesa Clásica",
+              "name_en": "Classic Burger",
+              "description_es": "Deliciosa hamburguesa con carne 100% res",
+              "description_en": "Delicious 100% beef burger",
+              "base_price": 25000,
+              "presentation_price": 25000,
+              "discount_amount": 2500,
+              "discount_percent": 10,
+              "image_url": "https://img.restpe.com/abc123.jpg",
+              "image_identifier": "abc123",
+              "is_combo": false,
+              "max_flavor": 0
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "endpoints_suggestions": {
+    "menu_list": {
+      "path": "/api/tiendas/{site_id}/menu",
+      "method": "GET",
+      "description": "Obtiene el menú completo con categorías y productos (usar estructura menu_structure)",
+      "response": "menu_structure"
+    },
+    "category_list": {
+      "path": "/api/tiendas/{site_id}/categories",
+      "method": "GET",
+      "description": "Obtiene solo la lista de categorías (usar estructura category)",
+      "response": "array de category"
+    },
+    "products_by_category": {
+      "path": "/api/tiendas/{site_id}/categories/{category_id}/products",
+      "method": "GET",
+      "description": "Obtiene los productos de una categoría específica (usar estructura product_card)",
+      "response": "array de product_card"
+    },
+    "product_detail": {
+      "path": "/api/products/{product_id}",
+      "method": "GET",
+      "description": "Obtiene los detalles completos de un producto (usar estructura product_detail)",
+      "response": "product_detail"
+    }
+  }
+}
