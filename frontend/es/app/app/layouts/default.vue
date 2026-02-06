@@ -19,7 +19,12 @@
       </div>
 
       <aside v-if="!isIframeMode && !isPerformanceMode" class="app-layout__sidebar" >
-        <sidebar />
+        <ClientOnly>
+          <sidebar />
+          <template #fallback>
+            <div style="width: 100%; height: 100vh; background: #1a1a1a;"></div>
+          </template>
+        </ClientOnly>
       </aside>
 
       <main
@@ -111,19 +116,11 @@ const isCartaRoute = computed(() => {
   return keywords.some(keyword => path.includes(keyword))
 })
 
-const handleBeforeUnload = (e) => {
-  if (cartStore.cart?.length > 0) {
-    e.preventDefault()
-    e.returnValue = ''
-  }
-}
-
 onMounted(() => {
   if (typeof window === 'undefined') return
   isMounted.value = true
   lastScrollY.value = window.scrollY || 0
   window.addEventListener('scroll', handleScroll, { passive: true })
-  window.addEventListener('beforeunload', handleBeforeUnload)
 
   measureTopbar()
 
@@ -141,7 +138,6 @@ onBeforeUnmount(() => {
   if (typeof window === 'undefined') return
   window.removeEventListener('scroll', handleScroll)
   window.removeEventListener('resize', measureTopbar)
-  window.removeEventListener('beforeunload', handleBeforeUnload)
   if (ro) ro.disconnect()
 })
 </script>

@@ -174,7 +174,7 @@ import { URI, SELF_URI } from "~/service/conection";
 
 // --- Configuración ePayco Smart Checkout (checkout v2) ---
 const config = useRuntimeConfig();
-const epaycoApiUrl = (config.public.epaycoApiUrl || 'http://localhost:8000').replace(/\/$/, '');
+const epaycoApiUrl = (config.public.epaycoApiUrl || 'https://pagos.salchimonster.com').replace(/\/$/, '');
 const epaycoTestMode = typeof config.public.epaycoTestMode !== 'undefined' ? config.public.epaycoTestMode : true; 
 
 const sitesStore = useSitesStore()

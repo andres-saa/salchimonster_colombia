@@ -210,7 +210,7 @@
 
       <div class="actions-container">
         
-        <div v-if="siteStore.status?.status == 'closed' && route.path != '/reservas' && !isLoggedIn" class="closed-alert">
+        <div v-if="siteStore.status?.status == 'closed' && route.path != '/reservas' && !isLoggedIn && !config.public.alwaysOpen" class="closed-alert">
           <i class="pi pi-clock"></i> Cerrado, abre a las {{ siteStore.status.next_opening_time }}
         </div>
 
@@ -284,7 +284,7 @@ Finalizar pedido
 
 <script setup>
 import { onMounted, ref, watch, computed } from 'vue'
-import { useRoute, useHead } from '#imports'
+import { useRoute, useHead, useRuntimeConfig } from '#imports'
 import { formatoPesosColombianos } from '~/service/utils/formatoPesos'
 import { usecartStore, useSitesStore, useUserStore, useReportesStore } from '#imports'
 import { orderService } from '@/service/order/orderService.ts'
@@ -352,6 +352,7 @@ const siteStore = useSitesStore()
 const user = useUserStore()
 const order_id = ref('')
 const epaycoPublicKey = 'ad3bfbac4531d3b82ece35e36bdf320a'
+const config = useRuntimeConfig()
 
 // --- LÓGICA DE LOGIN Y EDICIÓN DE DOMICILIO ---
 const isEditingDelivery = ref(false)
@@ -361,7 +362,10 @@ const isLoggedIn = computed(() => {
 })
 
 // Si hay usuario logueado (admin), puede comprar aunque la sede esté cerrada
+// O si está en modo desarrollo con alwaysOpen activado
 const canPurchase = computed(() => {
+  const alwaysOpen = config.public.alwaysOpen === true
+  if (alwaysOpen) return true
   return siteStore.status?.status !== 'closed' || isLoggedIn.value
 })
 

@@ -220,9 +220,27 @@ async function bootstrapFromUrl(reason = 'nav') {
     }
 
     // Obtener slug de la URL (ya no usamos subdominios)
-    const { useSedeFromRoute } = await import('./composables/useSedeFromRoute')
-    const sedeFromRoute = useSedeFromRoute()
-    const siteSlug = sedeFromRoute.value
+    // Extraer directamente de la ruta para evitar problemas de contexto
+    let siteSlug = null
+    try {
+      const path = route.path || ''
+      if (path && path !== '/') {
+        const segments = path.split('/').filter(Boolean)
+        if (segments.length > 0) {
+          const firstSegment = segments[0]
+          const staticRoutes = [
+            'dispatcher', 'sedes', 'franquicias', 'colaboraciones', 'pqr',
+            'horarios', 'sonando', 'rastrear', 'gracias', 'gracias-epayco',
+            'cart', 'pay', 'carta', 'menu', 'buscar', 'producto', 'pagar'
+          ]
+          if (!staticRoutes.includes(firstSegment.toLowerCase())) {
+            siteSlug = firstSegment
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Error extrayendo slug de ruta:', e)
+    }
 
     // Hidratar sede desde la URL si hay slug
     if (siteSlug) {

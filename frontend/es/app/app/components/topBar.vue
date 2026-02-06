@@ -27,6 +27,8 @@ const handleSearch = () => {
 
 // --- LÓGICA DE ESTADO (Abierto/Cerrado) ---
 const isOpen = computed(() => {
+  // En SSR, siempre retornar false para evitar mismatch
+  if (!isClient.value) return false
   const st = siteStore.status
   if (!st) return false
   if (typeof st === 'string') return st === 'open'
@@ -35,6 +37,8 @@ const isOpen = computed(() => {
 
 // Hora de apertura para el mensaje de cerrado
 const nextOpeningTime = computed(() => {
+  // En SSR, retornar valor por defecto para evitar mismatch
+  if (!isClient.value) return 'pronto'
   return siteStore.status?.next_opening_time || 'pronto'
 })
 
@@ -63,6 +67,8 @@ const setLang = (lang) => {
 const menusContainerRef = ref(null)
 const moreButtonRef = ref(null)
 const moreMenuRef = ref(null)
+
+const isClient = ref(false)
 
 // Inicializar con menús por defecto para SSR (asegurar que se muestren desde el inicio)
 // En móvil siempre mostramos 4 menús, así que inicializamos con 4
@@ -161,6 +167,8 @@ const toggleProfile = () => {
 // --- MENÚS DINÁMICOS ---
 // Ruta de domicilios reactiva: si hay sede, ir a /{sede}/, sino a /
 const domiciliosRoute = computed(() => {
+  // En SSR, siempre retornar '/' para evitar mismatch
+  if (!isClient.value) return '/'
   if (siteStore.location?.site?.site_id && siteStore.location?.order_type) {
     const siteName = siteStore.location.site.site_name || ''
     const slug = getSiteSlug(siteName)
@@ -170,6 +178,22 @@ const domiciliosRoute = computed(() => {
 })
 
 const menusAll = computed(() => {
+  // En SSR, siempre retornar menús públicos para evitar mismatch
+  if (!isClient.value) {
+    const langKey = 'es'
+    const t = texts[langKey]?.menus || {}
+    return [
+      { label: t.domicilios || 'Domicilios', to: '/', isSpecial: true },
+      { label: t.sedes || 'Sedes', to: `/sedes` },
+      { label: t.carta || 'Carta', to: `/carta` },
+      { label: t.rastrear || 'Rastrear', to: `/rastrear` },
+      { label: t.ayuda || 'Ayuda', to: `/pqr` },
+      { label: t.franquicias || 'Franquicias', to: `/franquicias` },
+      { label: t.colaboraciones || 'Colaboraciones', to: `/colaboraciones` },
+      { label: t.sonando || 'Sonando', to: `/sonando` }
+    ]
+  }
+
   const langKey = (user.lang?.name || 'es').toLowerCase()
   const t = texts[langKey]?.menus || {}
 
@@ -407,6 +431,7 @@ watch(
 )
 
 onMounted(() => {
+  isClient.value = true
   handleResize()
   if (typeof window !== 'undefined') window.addEventListener('resize', handleResize)
   if (typeof document !== 'undefined') {
@@ -480,20 +505,22 @@ const stayOnCurrentSite = () => {
 <template>
   <div class="app-topbar-wrapper">
 
-    <div v-if="!isOpen" class="closed-ribbon-container">
-      <div class="marquee-track">
-        <div class="marquee-content">
-          <span v-for="n in 4" :key="'A'+n">
-            🚨 ESTAMOS CERRADOS, ABRIMOS A LAS {{ nextOpeningTime }} &nbsp;&nbsp; • &nbsp;&nbsp;
-          </span>
-        </div>
-        <div class="marquee-content">
-          <span v-for="n in 4" :key="'B'+n">
-            🚨 ESTAMOS CERRADOS, ABRIMOS A LAS {{ nextOpeningTime }} &nbsp;&nbsp; • &nbsp;&nbsp;
-          </span>
+    <ClientOnly>
+      <div v-if="!isOpen" class="closed-ribbon-container">
+        <div class="marquee-track">
+          <div class="marquee-content">
+            <span v-for="n in 4" :key="'A'+n">
+              🚨 ESTAMOS CERRADOS, ABRIMOS A LAS {{ nextOpeningTime }} &nbsp;&nbsp; • &nbsp;&nbsp;
+            </span>
+          </div>
+          <div class="marquee-content">
+            <span v-for="n in 4" :key="'B'+n">
+              🚨 ESTAMOS CERRADOS, ABRIMOS A LAS {{ nextOpeningTime }} &nbsp;&nbsp; • &nbsp;&nbsp;
+            </span>
+          </div>
         </div>
       </div>
-    </div>
+    </ClientOnly>
 
     <header class="app-topbar-container">
       <div class="header-inner">

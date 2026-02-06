@@ -1,12 +1,17 @@
 <template>
   <div class="cart-wrapper">
-    
-    <div class="header-section" v-if="store.cart.length > 0">
-      <h1 class="page-title">Tu carrito</h1>
-      <p class="subtitle">{{ store.cart.length }} items agregados</p>
+    <div v-if="!isHydrated" class="loading-state">
+      <div class="loading-spinner"></div>
+      <p>Cargando carrito...</p>
     </div>
+    
+    <template v-else>
+      <div class="header-section" v-if="store.cart.length > 0">
+        <h1 class="page-title">Tu carrito</h1>
+        <p class="subtitle">{{ store.cart.length }} items agregados</p>
+      </div>
 
-    <div class="cart-container" v-if="store.cart.length > 0">
+      <div class="cart-container" v-if="store.cart.length > 0">
       
       <div class="cart-items-column">
         <TransitionGroup name="list">
@@ -136,22 +141,23 @@
       </div>
     </div>
 
-    <div v-else class="empty-state">
-      <div class="empty-icon-bg">
-        <Icon name="mdi:cart-outline" class="empty-icon" />
+      <div v-else class="empty-state">
+        <div class="empty-icon-bg">
+          <Icon name="mdi:cart-outline" class="empty-icon" />
+        </div>
+        <h2 class="empty-title">Tu carrito está vacío</h2>
+        <p class="empty-text">¡Antójate de algo delicioso y agrégalo aquí!</p>
+        <NuxtLink to="/" class="btn-primary">
+          Ir al menú
+        </NuxtLink>
       </div>
-      <h2 class="empty-title">Tu carrito está vacío</h2>
-      <p class="empty-text">¡Antójate de algo delicioso y agrégalo aquí!</p>
-      <NuxtLink to="/" class="btn-primary">
-        Ir al menú
-      </NuxtLink>
-    </div>
+    </template>
 
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, watch, onBeforeMount, computed } from 'vue'
+import { ref, onMounted, watch, computed, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { navigateTo } from '#app'
 import { usecartStore, useSitesStore, useUserStore, useHead } from '#imports'
@@ -161,6 +167,8 @@ const route = useRoute()
 const store = usecartStore()
 const siteStore = useSitesStore()
 const user = useUserStore()
+
+const isHydrated = ref(false)
 
 const siteName = computed(() => siteStore?.location?.site?.site_name || '')
 const pageTitle = computed(() => {
@@ -196,32 +204,44 @@ const formatName = (str) => {
   return lower.charAt(0).toUpperCase() + lower.slice(1)
 }
 
-onBeforeMount(async () => {
-  // Carrito vacío: no podemos estar en cart; volver a domicilios (menú)
-  const cartLength = store?.cart?.length ?? 0
-  if (cartLength === 0) {
-    const slug = route.params?.sede
-    await navigateTo(slug ? `/${slug}/` : '/', { replace: true })
-    return
-  }
-  if (!siteStore.location.site?.site_id) {
-    siteStore.visibles.currentSite = true
-  }
-})
-
 // Lógica de actualización (Manteniendo tu lógica original)
 const update = () => { /* Hook para recalcular si es necesario */ }
 
 watch(() => store.cart?.additions, () => update(), { deep: true })
 
 onMounted(async () => {
+  // Esperar a que el store se hidrate desde localStorage
+  // Dar tiempo para que pinia-plugin-persistedstate restaure el estado
+  await nextTick()
+  
+  // Esperar un tick adicional para asegurar que la persistencia se haya completado
+  if (import.meta.client) {
+    // En cliente, esperar un momento para que el store se hidrate
+    await new Promise(resolve => setTimeout(resolve, 100))
+  }
+  
+  isHydrated.value = true
 
-    if (user.user.order_type?.id === 2 || user.user.order_type?.id === 6) {
-      siteStore.location.neigborhood.delivery_price = 0
-    } else {
-      const cost = user.user.site?.delivery_cost_cop ?? siteStore?.delivery_price
-      if (cost != null) siteStore.location.neigborhood.delivery_price = cost
+  // Solo verificar si el carrito está vacío después de la hidratación
+  if (import.meta.client) {
+    const cartLength = store?.cart?.length ?? 0
+    if (cartLength === 0) {
+      const slug = route.params?.sede
+      await navigateTo(slug ? `/${slug}/` : '/', { replace: true })
+      return
     }
+  }
+
+  if (!siteStore.location.site?.site_id) {
+    siteStore.visibles.currentSite = true
+  }
+
+  if (user.user.order_type?.id === 2 || user.user.order_type?.id === 6) {
+    siteStore.location.neigborhood.delivery_price = 0
+  } else {
+    const cost = user.user.site?.delivery_cost_cop ?? siteStore?.delivery_price
+    if (cost != null) siteStore.location.neigborhood.delivery_price = cost
+  }
   if (user.user.payment_method_option?.productogeneral_id != 7) {
     siteStore.setNeighborhoodPrice()
   } else {
@@ -470,6 +490,36 @@ onMounted(async () => {
 .addition-price {
   font-size: 0.85rem;
   font-weight: 600;
+}
+
+/* --- LOADING STATE --- */
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem 1rem;
+  text-align: center;
+  min-height: 60vh;
+}
+
+.loading-spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid #f3f4f6;
+  border-top-color: var(--primary, #000000);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-bottom: 1rem;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.loading-state p {
+  color: var(--text-muted);
+  font-size: 0.95rem;
 }
 
 /* --- EMPTY STATE --- */

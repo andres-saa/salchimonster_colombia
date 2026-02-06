@@ -95,11 +95,13 @@ export default defineNuxtConfig({
       cuponeraApi: process.env.NODE_ENV === 'development' ? 'http://localhost:8000' : 'https://discounts.salchimonster.com',
       googleMapsKey: process.env.NUXT_PUBLIC_GOOGLE_MAPS_KEY || '',
       /** API FastAPI ePayco Smart Checkout (crear sesión). Ej: https://tu-dominio.com o http://localhost:8000 */
-      epaycoApiUrl: process.env.NUXT_PUBLIC_EPAYCO_API_URL || 'http://localhost:8000',
+      epaycoApiUrl: process.env.NUXT_PUBLIC_EPAYCO_API_URL || 'https://pagos.salchimonster.com',
       epaycoPublicKey: process.env.NUXT_PUBLIC_EPAYCO_PUBLIC_KEY || 'ad3bfbac4531d3b82ece35e36bdf320a',
       /** false en producción para pagos reales */
       epaycoTestMode: process.env.NUXT_PUBLIC_EPAYCO_TEST_MODE !== 'false',
       rendimiento: process.env.NUXT_PUBLIC_RENDIMIENTO === 'true' || false,
+      /** Forzar estado "abierto" siempre en desarrollo para hacer compras */
+      alwaysOpen: process.env.NUXT_PUBLIC_ALWAYS_OPEN === 'true' || process.env.NODE_ENV === 'development',
       metaPixelId: process.env.NUXT_PUBLIC_META_PIXEL_ID || '9692941457447887',
       // nuxt-meta-pixel: pixel ID 9692941457447887; PageView en todas las rutas
       metapixel: {
